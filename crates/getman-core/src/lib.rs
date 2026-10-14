@@ -4,6 +4,7 @@
 //! Getman's front ends (the browser UI, the terminal UI and the command
 //! line) are thin layers over this crate.
 
+pub mod auth;
 pub mod dynamic;
 mod error;
 pub mod http;

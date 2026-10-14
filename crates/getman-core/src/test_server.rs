@@ -6,9 +6,9 @@ use std::time::Duration;
 
 use axum::Router;
 use axum::extract::{Path, Query, Request};
-use axum::http::{StatusCode, header};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{any, get};
+use axum::routing::{any, get, post};
 use serde_json::{Value, json};
 
 /// A running test server.
@@ -32,7 +32,9 @@ pub(crate) async fn spawn() -> TestServer {
         .route("/cookies/set", get(set_cookies))
         .route("/bytes", get(bytes))
         .route("/slow", get(slow))
-        .route("/status/{code}", any(status));
+        .route("/status/{code}", any(status))
+        .route("/digest", get(digest))
+        .route("/token", post(token));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -85,4 +87,79 @@ async fn slow() -> &'static str {
 
 async fn status(Path(code): Path<u16>) -> StatusCode {
     StatusCode::from_u16(code).unwrap_or(StatusCode::BAD_REQUEST)
+}
+
+/// Requires Digest authentication as `ada` with password `lovelace`.
+async fn digest(headers: HeaderMap) -> Response {
+    const REALM: &str = "getman-test";
+    const NONCE: &str = "dcd98b7102dd2f0e8b11d0f600bfb0c093";
+    let challenge = || {
+        (
+            StatusCode::UNAUTHORIZED,
+            [(
+                header::WWW_AUTHENTICATE,
+                format!(r#"Digest realm="{REALM}", qop="auth", nonce="{NONCE}", opaque="5ccc069c403ebaf9f0171e9517f40e41""#),
+            )],
+        )
+            .into_response()
+    };
+    let Some(authorization) = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Digest "))
+    else {
+        return challenge();
+    };
+    let field = |name: &str| -> String {
+        authorization
+            .split(", ")
+            .find_map(|pair| pair.strip_prefix(&format!("{name}=")))
+            .unwrap_or_default()
+            .trim_matches('"')
+            .to_owned()
+    };
+    let md5 = |text: String| {
+        use md5::Digest as _;
+        hex::encode(md5::Md5::digest(text))
+    };
+    let ha1 = md5(format!("ada:{REALM}:lovelace"));
+    let ha2 = md5(format!("GET:{}", field("uri")));
+    let expected = md5(format!(
+        "{ha1}:{NONCE}:{}:{}:auth:{ha2}",
+        field("nc"),
+        field("cnonce")
+    ));
+    if field("response") == expected && field("username") == "ada" {
+        (StatusCode::OK, "welcome").into_response()
+    } else {
+        challenge()
+    }
+}
+
+/// An OAuth 2.0 token endpoint accepting client `app` with secret `s3cret`.
+async fn token(headers: HeaderMap, body: String) -> Response {
+    let form: BTreeMap<String, String> = url::form_urlencoded::parse(body.as_bytes())
+        .into_owned()
+        .collect();
+    let basic = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v == "Basic YXBwOnMzY3JldA==");
+    let in_body = form.get("client_id").map(String::as_str) == Some("app")
+        && form.get("client_secret").map(String::as_str) == Some("s3cret");
+    if !(basic || in_body) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            axum::Json(json!({"error": "invalid_client"})),
+        )
+            .into_response();
+    }
+    let grant = form.get("grant_type").cloned().unwrap_or_default();
+    let scope = form.get("scope").cloned().unwrap_or_default();
+    axum::Json(json!({
+        "access_token": format!("token-for-{grant}-{scope}"),
+        "token_type": "Bearer",
+        "expires_in": 3600,
+    }))
+    .into_response()
 }
