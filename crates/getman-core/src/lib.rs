@@ -11,6 +11,7 @@ pub mod dynamic;
 mod error;
 pub mod execute;
 pub mod http;
+pub mod import;
 mod lenient;
 pub mod model;
 pub mod prepare;
