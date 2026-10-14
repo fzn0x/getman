@@ -5,6 +5,7 @@ use std::process::ExitCode;
 
 use getman_core::execute::{Context, Executor, Overlay};
 use getman_core::http::Response;
+use getman_core::vars::missing_reason;
 
 use super::Outcome;
 use crate::cli::SendArgs;
@@ -41,7 +42,7 @@ pub(crate) async fn send(args: SendArgs) -> Outcome {
         style::note(&format!("[{}] {}", log.level, log.message));
     }
     for name in &execution.missing_variables {
-        style::warn(&format!("{{{{{name}}}}} is not defined"));
+        style::warn(&missing_reason(name));
     }
     if let Some(error) = &execution.error {
         style::error(error);

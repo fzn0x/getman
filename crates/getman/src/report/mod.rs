@@ -6,6 +6,7 @@ pub(crate) mod junit;
 
 use getman_core::execute::Execution;
 use getman_core::runner::{RunEvent, RunSummary};
+use getman_core::vars::missing_reason;
 
 use crate::style::{self, BOLD, CYAN, DIM, GREEN, RED, YELLOW, paint};
 
@@ -161,10 +162,7 @@ impl Pretty {
             }
         }
         for name in &execution.missing_variables {
-            anstream::println!(
-                "      {}",
-                paint(YELLOW, &format!("{{{{{name}}}}} is not defined"))
-            );
+            anstream::println!("      {}", paint(YELLOW, &missing_reason(name)));
         }
         for warning in &execution.warnings {
             anstream::println!("      {}", paint(YELLOW, warning));

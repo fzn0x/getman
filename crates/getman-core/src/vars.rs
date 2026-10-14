@@ -235,6 +235,19 @@ pub(crate) fn read_process_env(name: &str) -> Option<String> {
     std::env::var(name).ok()
 }
 
+/// Says why `{{name}}` was left as written. A `$env.` name without the
+/// [`ENV_PREFIX`] was refused rather than unset, and the message says so,
+/// since the fix is to rename the variable, not to set it.
+pub fn missing_reason(name: &str) -> String {
+    match name.strip_prefix("$env.") {
+        Some(env) if !env.starts_with(ENV_PREFIX) => format!(
+            "{{{{{name}}}}} was not read: only environment variables named {ENV_PREFIX}* can be"
+        ),
+        Some(_) => format!("{{{{{name}}}}} is not set in the environment"),
+        None => format!("{{{{{name}}}}} is not defined"),
+    }
+}
+
 /// Names of the variables `text` refers to, without dynamic values.
 pub fn references(text: &str) -> Vec<String> {
     let mut names = BTreeSet::new();
@@ -334,6 +347,15 @@ mod tests {
         assert!(stack.render("{{$env.PATH}}").contains("{{$env.PATH}}"));
         let out = stack.interpolate("{{$env.GETMAN_SURELY_UNSET_FOR_TESTS}}");
         assert_eq!(out.missing, ["$env.GETMAN_SURELY_UNSET_FOR_TESTS"]);
+        assert_eq!(
+            missing_reason("$env.GETMAN_SURELY_UNSET_FOR_TESTS"),
+            "{{$env.GETMAN_SURELY_UNSET_FOR_TESTS}} is not set in the environment"
+        );
+        assert_eq!(
+            missing_reason("$env.PATH"),
+            "{{$env.PATH}} was not read: only environment variables named GETMAN_* can be"
+        );
+        assert_eq!(missing_reason("token"), "{{token}} is not defined");
     }
 
     #[test]

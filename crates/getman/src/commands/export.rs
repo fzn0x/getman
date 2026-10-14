@@ -4,6 +4,7 @@ use std::process::ExitCode;
 
 use getman_core::execute::{Context, Executor};
 use getman_core::export::codegen;
+use getman_core::vars::missing_reason;
 
 use super::Outcome;
 use crate::cli::ExportArgs;
@@ -30,7 +31,7 @@ pub(crate) fn export(args: &ExportArgs) -> Outcome {
         .prepare(Some(&path), &request, &context)
         .map_err(|e| e.to_string())?;
     for name in &prepared.missing {
-        style::warn(&format!("{{{{{name}}}}} is not defined"));
+        style::warn(&missing_reason(name));
     }
     let mut outgoing = prepared.outgoing;
     codegen::relativize(&mut outgoing, executor.workspace.root());
