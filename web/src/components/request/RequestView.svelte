@@ -602,7 +602,7 @@
   }
 
   .send {
-    --corner: var(--field);
+    --corner: var(--ink);
     height: auto;
     min-width: 104px;
     border: 0;
@@ -702,7 +702,7 @@
   .has {
     width: 5px;
     height: 5px;
-    background: var(--accent);
+    background: var(--ink-3);
   }
 
   .stack {

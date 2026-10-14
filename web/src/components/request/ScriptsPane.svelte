@@ -130,7 +130,7 @@
   .has {
     width: 5px;
     height: 5px;
-    background: var(--accent);
+    background: var(--ink-3);
   }
 
   .split {

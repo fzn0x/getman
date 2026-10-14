@@ -138,7 +138,7 @@
 <style>
   .specimen {
     --tone: var(--ink);
-    --dot: color-mix(in srgb, var(--tone) 22%, transparent);
+    --dot: color-mix(in srgb, var(--tone) var(--dot-strength), transparent);
     position: relative;
     min-height: 132px;
     border-bottom: 1px solid var(--rule);
