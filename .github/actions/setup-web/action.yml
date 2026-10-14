@@ -1,0 +1,18 @@
+name: Set up the web UI
+description: >-
+  Installs Node.js and the browser UI's npm dependencies, cached by the
+  lockfile.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v6
+      with:
+        node-version: 22
+        cache: npm
+        cache-dependency-path: web/package-lock.json
+
+    - name: Install npm dependencies
+      shell: bash
+      working-directory: web
+      run: npm ci
