@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { overflowFade } from "../../lib/actions";
   import { untrack } from "svelte";
   import { api } from "../../lib/api";
   import { AUTH_TYPES, BODY_TYPES, METHODS, toDraft, toRequest } from "../../lib/draft";
@@ -358,7 +359,7 @@
 
   <div class="panes" bind:this={panes} class:dragging style:--split={prefs.split}>
     <section class="editor-side" aria-label="Request">
-      <div class="tablist" role="tablist" aria-label="Request parts">
+      <div class="tablist" use:overflowFade role="tablist" aria-label="Request parts">
         {#each panesList as pane (pane.id)}
           <button
             class="tab"
@@ -601,6 +602,7 @@
   }
 
   .send {
+    --corner: var(--field);
     height: auto;
     min-width: 104px;
     border: 0;

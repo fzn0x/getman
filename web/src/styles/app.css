@@ -315,16 +315,38 @@ a {
   cursor: not-allowed;
 }
 
+/* Primary controls get stepped pixel corners: each corner pixel is
+   painted in the colour behind the button (--corner). Pressing one draws
+   the specimen's double frame inside it. */
 .btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  --corner: var(--paper);
+  --fill: var(--accent);
+  border: 0;
+  padding: 0 calc(var(--s3) + 1px);
   color: var(--accent-ink);
+  background:
+    linear-gradient(var(--corner), var(--corner)) 0 0 / 2px 2px no-repeat,
+    linear-gradient(var(--corner), var(--corner)) 100% 0 / 2px 2px no-repeat,
+    linear-gradient(var(--corner), var(--corner)) 0 100% / 2px 2px no-repeat,
+    linear-gradient(var(--corner), var(--corner)) 100% 100% / 2px 2px no-repeat,
+    var(--fill);
 }
 
 .btn.primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  --fill: var(--accent-hover);
+  background:
+    linear-gradient(var(--corner), var(--corner)) 0 0 / 2px 2px no-repeat,
+    linear-gradient(var(--corner), var(--corner)) 100% 0 / 2px 2px no-repeat,
+    linear-gradient(var(--corner), var(--corner)) 0 100% / 2px 2px no-repeat,
+    linear-gradient(var(--corner), var(--corner)) 100% 100% / 2px 2px no-repeat,
+    var(--fill);
   color: var(--accent-ink);
+}
+
+.btn.primary:active:not(:disabled) {
+  box-shadow:
+    inset 0 0 0 2px var(--fill),
+    inset 0 0 0 3px var(--accent-ink);
 }
 
 .btn.quiet {
@@ -454,6 +476,25 @@ textarea.input {
 
 .tablist::-webkit-scrollbar {
   display: none;
+}
+
+/* A row that runs past its edge fades there, so the cut reads as "more". */
+.more-right {
+  mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+}
+
+.more-left {
+  mask-image: linear-gradient(to right, transparent, #000 40px);
+}
+
+.more-left.more-right {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 40px,
+    #000 calc(100% - 40px),
+    transparent
+  );
 }
 
 .tab {
