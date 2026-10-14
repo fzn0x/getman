@@ -17,9 +17,14 @@ irm https://fzn0x.github.io/getman/install.ps1 | iex
 ```
 
 Both scripts download the latest release for your system from GitHub,
-check its SHA-256 checksum, and put `getman` in `~/.local/bin` (or
-`%LOCALAPPDATA%\Programs\getman` on Windows). They print what to add to
-your `PATH` if that directory is not on it yet.
+check its SHA-256 checksum against the release's `SHA256SUMS`, and install
+`getman` for your user only. On Linux and macOS it goes in `~/.local/bin`,
+and the script tells you what to add to your `PATH` if that directory is
+not on it yet. On Windows it goes in `%LOCALAPPDATA%\Programs\getman`,
+which the script adds to your user `PATH`.
+
+Set `GETMAN_VERSION` (such as `v0.1.0`) to install a given release, or
+`GETMAN_INSTALL_DIR` to choose the directory.
 
 **By hand:** download the archive for your system from the
 [releases page](https://github.com/fzn0x/getman/releases), unpack it and
