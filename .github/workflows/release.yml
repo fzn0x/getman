@@ -18,11 +18,11 @@ jobs:
     name: Build the web UI
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-web
       - working-directory: web
         run: npm run build
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: web-dist
           path: web/dist
@@ -48,8 +48,8 @@ jobs:
             target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v6
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: web-dist
           path: web/dist
@@ -75,7 +75,7 @@ jobs:
             tar czf "$name.tar.gz" "$name"
             echo "ARCHIVE=$name.tar.gz" >> "$GITHUB_ENV"
           fi
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.target }}
           path: ${{ env.ARCHIVE }}
@@ -85,8 +85,8 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v6
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: release-*
           path: dist
