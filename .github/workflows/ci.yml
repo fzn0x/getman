@@ -20,7 +20,7 @@ jobs:
     name: Web UI
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-web
       - name: Type-check and check formatting
         working-directory: web
@@ -31,7 +31,7 @@ jobs:
       - name: Build
         working-directory: web
         run: npm run build
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: web-dist
           path: web/dist
@@ -42,8 +42,8 @@ jobs:
     needs: web
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v6
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: web-dist
           path: web/dist
@@ -63,8 +63,8 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v6
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: web-dist
           path: web/dist
@@ -82,7 +82,7 @@ jobs:
     name: Minimum supported Rust version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # The version is an input rather than the action's ref, which
       # dependabot would mistake for an action version to bump.
       - uses: dtolnay/rust-toolchain@master
