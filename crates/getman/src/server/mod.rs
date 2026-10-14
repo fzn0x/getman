@@ -145,7 +145,7 @@ async fn guard(State(state): State<Arc<AppState>>, request: Request, next: Next)
             .iter()
             .any(|a| origin.eq_ignore_ascii_case(&format!("http://{a}")));
         if !same {
-            return refuse("requests from other web pages are not allowed");
+            return refuse("Getman does not answer requests from other web pages");
         }
     }
     if request.uri().path().starts_with("/api/") {
