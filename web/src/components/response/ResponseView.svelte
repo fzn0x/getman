@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { overflowFade } from "../../lib/actions";
   import { copyText } from "../../lib/clipboard";
   import { payloadText } from "../../lib/format";
   import { openDialog, openEnvironments, type RequestTab } from "../../lib/store.svelte";
@@ -107,7 +108,7 @@
   {/if}
 
   {#if response || (execution && !tab.sending && (results.length || execution.logs.length || execution.script_errors.length || execution.request))}
-    <div class="tablist" role="tablist" aria-label="Response parts">
+    <div class="tablist" use:overflowFade role="tablist" aria-label="Response parts">
       {#each panes as pane (pane.id)}
         <button
           class="tab"

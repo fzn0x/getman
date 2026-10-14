@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { overflowFade } from "../lib/actions";
   import { methodClass, methodShort } from "../lib/format";
   import { closeTab, isDirty, newRequest, selectTab, tabs, tabTitle } from "../lib/store.svelte";
   import Icon from "./Icon.svelte";
@@ -20,7 +21,7 @@
 </script>
 
 <div class="strip">
-  <div class="list" role="tablist" aria-label="Open tabs">
+  <div class="list" role="tablist" aria-label="Open tabs" use:overflowFade>
     {#each tabs.list as tab (tab.id)}
       {@const dirty = isDirty(tab)}
       <div class="item" class:active={tab.id === tabs.active}>

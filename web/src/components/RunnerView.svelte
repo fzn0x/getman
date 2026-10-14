@@ -53,8 +53,10 @@
 <div class="runner">
   <header>
     <div>
-      <p class="bitmap kind">Run · {tab.target === "" ? "whole workspace" : tab.target}</p>
       <h2 class="bitmap">{title}</h2>
+      <p class="file mono">
+        {tab.target === "" ? "Every request in the workspace" : `Every request in ${tab.target}`}
+      </p>
     </div>
     <div class="go">
       {#if tab.running}
@@ -105,13 +107,16 @@
     <label class="data">
       <span class="bitmap">Data file</span>
       <span class="unit">
-        <input
-          type="file"
-          accept=".csv,.json,text/csv,application/json"
-          class="file"
-          onchange={loadData}
-          disabled={tab.running}
-        />
+        <label class="btn" class:disabled={tab.running}>
+          <Icon name="file" /> Choose a file
+          <input
+            type="file"
+            accept=".csv,.json,text/csv,application/json"
+            class="sr-only"
+            onchange={loadData}
+            disabled={tab.running}
+          />
+        </label>
         <span class="muted"
           >{tab.dataName
             ? `${tab.dataName}: ${rowsCount} rows`
@@ -298,10 +303,10 @@
     padding: var(--s4) var(--s4) var(--s3);
   }
 
-  .kind {
-    margin: 0 0 6px;
+  .file {
+    margin: 6px 0 0;
     color: var(--ink-3);
-    text-transform: none;
+    font-size: var(--fs-meta);
   }
 
   h2 {
@@ -339,9 +344,13 @@
     gap: var(--s2);
   }
 
-  .file {
-    max-width: 210px;
-    font-size: var(--fs-meta);
+  .config label.btn {
+    display: inline-flex;
+  }
+
+  .btn.disabled {
+    opacity: 0.45;
+    pointer-events: none;
   }
 
   .toggle {

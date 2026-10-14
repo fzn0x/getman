@@ -71,7 +71,7 @@
       {
         id: "theme",
         title: "Switch light and dark theme",
-        icon: "moon",
+        icon: "contrast",
         run: () =>
           setTheme(
             document.documentElement.dataset.theme === "dark" ||

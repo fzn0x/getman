@@ -66,12 +66,16 @@
     <label class="environment" title="Environment ({keyLabel('alt+e').join(' ')})">
       <Icon name="globe" />
       <span class="sr-only">Environment</span>
+      <!-- The native select sits invisibly over a label that truncates
+           cleanly at any width. -->
+      <span class="current select" class:none={ws.environment === ""} aria-hidden="true">
+        {ws.environments.find((e) => e.id === ws.environment)?.name ?? "No environment"}
+      </span>
       <select
-        class="select"
+        class="overlay"
         bind:this={environmentSelect}
         value={ws.environment}
         onchange={onEnvironment}
-        class:none={ws.environment === ""}
       >
         <option value="">No environment</option>
         {#each ws.environments as environment (environment.id)}
@@ -114,7 +118,7 @@
       title={dark ? "Light theme" : "Dark theme"}
       onclick={() => setTheme(dark ? "light" : "dark")}
     >
-      <Icon name={dark ? "sun" : "moon"} />
+      <Icon name="contrast" />
     </button>
   </div>
 </header>
@@ -188,6 +192,7 @@
   }
 
   .environment {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -197,16 +202,39 @@
     color: var(--ink-2);
   }
 
-  .environment .select {
+  .current {
+    display: block;
+    line-height: 26px;
     max-width: 200px;
     border-color: var(--ink);
     font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .environment .select.none {
+  .current.none {
     border-color: var(--rule-2);
     font-weight: 400;
     color: var(--ink-2);
+  }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .environment:has(.overlay:focus-visible) .current {
+    outline: 2px dotted var(--ink);
+    outline-offset: 1px;
+  }
+
+  .environment:hover .current {
+    border-color: var(--ink);
   }
 
   @media (max-width: 720px) {
@@ -221,8 +249,8 @@
       margin-left: 0;
     }
 
-    .environment .select {
-      max-width: 120px;
+    .current {
+      max-width: 116px;
     }
   }
 </style>

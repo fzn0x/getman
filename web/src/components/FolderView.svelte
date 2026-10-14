@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { overflowFade } from "../lib/actions";
   import { keyLabel } from "../lib/keys";
   import { isDirty, newRequestIn, openRunner, save, ws, type FolderTab } from "../lib/store.svelte";
   import type { Auth, Settings } from "../lib/types";
@@ -28,15 +29,15 @@
 <div class="folder">
   <header class="head">
     <div class="titles">
-      <p class="bitmap kind">
-        {root ? "Workspace" : "Folder"} · {root ? "getman.yaml" : `${tab.path}/_folder.yaml`}
-      </p>
       <input
         class="name"
         bind:value={draft.name}
         aria-label="{root ? 'Workspace' : 'Folder'} name"
         spellcheck="false"
       />
+      <p class="file mono">
+        {root ? "Workspace settings in getman.yaml" : `Folder settings in ${tab.path}/_folder.yaml`}
+      </p>
     </div>
     <div class="actions">
       {#if dirty}<span class="bitmap changed">Changed</span>{/if}
@@ -63,7 +64,12 @@
       : "Everything here applies to every request in this folder, after the workspace's. Requests can override it."}
   </p>
 
-  <div class="tablist" role="tablist" aria-label="{root ? 'Workspace' : 'Folder'} settings">
+  <div
+    class="tablist"
+    use:overflowFade
+    role="tablist"
+    aria-label="{root ? 'Workspace' : 'Folder'} settings"
+  >
     {#each panes as pane (pane.id)}
       <button
         class="tab"
@@ -152,10 +158,10 @@
     min-width: 0;
   }
 
-  .kind {
+  .file {
     margin: 0;
     color: var(--ink-3);
-    text-transform: none;
+    font-size: var(--fs-meta);
   }
 
   .name {
