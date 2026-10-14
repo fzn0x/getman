@@ -9,8 +9,10 @@ mod error;
 mod lenient;
 pub mod model;
 pub mod time;
+pub mod vars;
 pub mod workspace;
 
 pub use error::{Error, Result};
 pub use model::{Auth, Body, Environment, Folder, KeyValue, Request, Settings, Vars};
+pub use vars::{Scope, VarStack};
 pub use workspace::{Node, Workspace};

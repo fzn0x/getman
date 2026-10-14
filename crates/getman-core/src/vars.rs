@@ -225,9 +225,7 @@ pub struct Interpolated {
 
 /// Whether the text between `{{` and `}}` names a variable.
 fn is_reference(name: &str) -> bool {
-    !name.is_empty()
-        && name.len() <= 200
-        && !name.contains(['{', '}', '\n', '\r', '"'])
+    !name.is_empty() && name.len() <= 200 && !name.contains(['{', '}', '\n', '\r', '"'])
 }
 
 fn read_process_env(name: &str) -> Option<String> {
