@@ -1,0 +1,21 @@
+# Rust build output
+/target/
+
+# Web UI
+/web/node_modules/
+/web/dist/
+
+# Documentation site
+/site/node_modules/
+/site/dist/
+
+# Getman's per-workspace local state and machine-only overrides
+.getman/
+*.local.yaml
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
