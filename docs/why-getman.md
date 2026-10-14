@@ -16,10 +16,10 @@ deciding.
 | Account needed to save requests and use environments | No | Yes. Signed out, the [lightweight API Client][postman-client] can send requests and keep history, but saving to collections and using environments and variables need a workspace. |
 | People on the free plan | No limit; there are no accounts | 1 user on Free; teams start at $19 per user per month, billed annually ([pricing][postman-pricing]) |
 | Where your requests are stored | Only in your repository, as one YAML file per request | In Postman's cloud, or, since Postman v12, as YAML files in a Git repository connected to a Postman workspace ([Native Git][postman-git]) |
-| Source code | Open, under MIT or Apache-2.0 | Closed |
-| Interfaces | Browser UI, terminal UI and a command line, in one binary | Desktop and web apps, and the Postman CLI |
-| Scripts | JavaScript with the `gm` API; `pm` is an alias, so Postman scripts keep working | JavaScript with the `pm` API |
-| Assertions without code | Checks such as `status == 200` and `json.data[0].id exists` | Written in scripts |
+| Source code | Open, under MIT or Apache-2.0 | Proprietary, licensed under Postman's [terms of service][postman-terms]; Newman and some libraries are [open source][postmanlabs] |
+| Interfaces | Browser UI, terminal UI and a command line, in one binary | Desktop and web apps, and the [Postman CLI][postman-cli] |
+| Scripts | JavaScript with the `gm` API; `pm` is an alias, so Postman scripts keep working | JavaScript with the `pm` API ([examples][postman-tests]) |
+| Assertions without code | Checks such as `status == 200` and `json.data[0].id exists` | Written as JavaScript tests, which Postman's AI [Agent Mode][postman-agent] can generate |
 
 ## What you get with Getman
 
@@ -94,3 +94,8 @@ Getman is deliberately small. Choose Postman, or use both, if you need:
 [postman-client]: https://learning.postman.com/docs/getting-started/using-api-client
 [postman-pricing]: https://www.postman.com/pricing/
 [postman-git]: https://www.postman.com/product/native-git/
+[postman-terms]: https://www.postman.com/legal/terms/
+[postmanlabs]: https://github.com/postmanlabs
+[postman-cli]: https://learning.postman.com/docs/postman-cli/postman-cli-overview/
+[postman-tests]: https://learning.postman.com/docs/tests-and-scripts/write-scripts/test-examples
+[postman-agent]: https://blog.postman.com/testing-apis-with-postman-agent-mode-a-practical-guide/
