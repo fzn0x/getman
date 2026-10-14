@@ -4,9 +4,11 @@
 //! Getman's front ends (the browser UI, the terminal UI and the command
 //! line) are thin layers over this crate.
 
+pub mod dynamic;
 mod error;
 mod lenient;
 pub mod model;
+pub mod time;
 pub mod workspace;
 
 pub use error::{Error, Result};
