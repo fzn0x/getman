@@ -13,8 +13,8 @@
     "node": ">=22.12"
   },
   "devDependencies": {
-    "marked": "18.0.14",
+    "marked": "18.1.0",
     "prettier": "^3.9.10",
-    "shiki": "4.4.3"
+    "shiki": "4.5.0"
   }
 }
