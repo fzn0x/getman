@@ -71,6 +71,30 @@ fn interesting(headers: &[Header]) -> impl Iterator<Item = &Header> {
     })
 }
 
+/// Rewrites the files a request uploads relative to `root`, so code
+/// written for it works from the workspace on any machine.
+pub fn relativize(request: &mut Outgoing, root: &std::path::Path) {
+    let Ok(root) = root.canonicalize() else {
+        return;
+    };
+    let shorten = |path: &mut std::path::PathBuf| {
+        if let Ok(relative) = path.strip_prefix(&root) {
+            *path = relative.to_path_buf();
+        }
+    };
+    match &mut request.body {
+        OutgoingBody::File { path } => shorten(path),
+        OutgoingBody::Multipart { parts } => {
+            for part in parts {
+                if let Some(path) = &mut part.file {
+                    shorten(path);
+                }
+            }
+        }
+        OutgoingBody::None | OutgoingBody::Bytes { .. } => {}
+    }
+}
+
 /// Writes a request as code. Returns `None` for an unknown language.
 pub fn generate(language: &str, request: &Outgoing) -> Option<String> {
     Some(match language {

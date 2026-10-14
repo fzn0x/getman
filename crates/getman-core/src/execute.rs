@@ -14,7 +14,7 @@ use crate::checks::{TestResult, as_text, run_captures, run_checks};
 use crate::error::Result;
 use crate::http::{CookieInfo, HttpClient, Outgoing, Response};
 use crate::model::{Body, Folder, Request, Vars};
-use crate::prepare::{Effective, prepare};
+use crate::prepare::{Effective, Prepared, prepare};
 use crate::script::{
     self, ChangeScope, Event, LogEntry, NextRequest, ScriptBody, ScriptError, ScriptHost,
     ScriptInfo, ScriptInput, ScriptOutput, ScriptRequest, ScriptResponse, ScriptScopes, VarChange,
@@ -156,6 +156,31 @@ impl Executor {
             http: Arc::new(HttpClient::new()),
             authenticator: Arc::new(Authenticator::new()),
         }
+    }
+
+    /// Builds a request as it would be sent, without running its scripts or
+    /// sending it, for showing it or writing it as code. Credentials that
+    /// need a round trip (Digest, OAuth 2.0) are not included.
+    pub fn prepare(
+        &self,
+        path: Option<&str>,
+        request: &Request,
+        context: &Context,
+    ) -> Result<Prepared> {
+        let chain = match path {
+            Some(path) => self.workspace.folder_chain(path)?,
+            None => vec![self.workspace.read_folder("")?],
+        };
+        let files = self.file_vars(context.environment.as_deref())?;
+        let effective = Effective::new(&chain, request);
+        let vars = var_stack(&files, &chain, request, context);
+        prepare(
+            request,
+            &effective.headers,
+            &effective.auth,
+            &vars,
+            self.workspace.root(),
+        )
     }
 
     /// Runs a saved request.
@@ -749,6 +774,24 @@ mod tests {
         assert!(execution.skipped);
         assert!(execution.request.is_none());
         assert!(!execution.failed());
+    }
+
+    #[test]
+    fn prepare_builds_the_request_without_sending_it() {
+        let (_dir, executor) = setup();
+        let request = Request {
+            url: "https://example.com/{{a}}".into(),
+            scripts: Scripts {
+                pre_request: "throw new Error('not run');".into(),
+                post_response: String::new(),
+            },
+            variables: [("a".to_owned(), "b".to_owned())].into_iter().collect(),
+            ..Request::default()
+        };
+        let prepared = executor
+            .prepare(None, &request, &Context::default())
+            .unwrap();
+        assert_eq!(prepared.outgoing.url, "https://example.com/b");
     }
 
     #[test]
