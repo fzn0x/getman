@@ -6,14 +6,17 @@
 
   let { execution, sending }: { execution: Execution | null; sending: boolean } = $props();
 
-  let gauge: HTMLDivElement;
+  let field: HTMLDivElement;
   let width = $state(480);
+  let height = $state(132);
 
   onMount(() => {
     const observer = new ResizeObserver(([entry]) => {
-      if (entry) width = Math.floor(entry.contentRect.width);
+      if (!entry) return;
+      width = Math.floor(entry.contentRect.width);
+      height = Math.floor(entry.contentRect.height);
     });
-    observer.observe(gauge);
+    observer.observe(field);
     return () => observer.disconnect();
   });
 
@@ -25,75 +28,87 @@
   const passed = $derived(results.filter((r) => r.passed && !r.skipped).length);
   const failed = $derived(results.filter((r) => !r.passed).length);
 
-  // The gauge spans 1 ms to 10 s on a log scale; dots grow towards the
-  // measured time, so a slow answer reads dark from across the room.
-  const STEP = 4;
-  const ROWS = 5;
-  const position = (ms: number) => Math.min(1, Math.max(0, Math.log10(Math.max(ms, 1)) / 4));
-  const ticks = [
-    { label: "10 ms", at: position(10) },
-    { label: "100 ms", at: position(100) },
-    { label: "1 s", at: position(1000) },
-    { label: "10 s", at: position(10_000) },
-  ];
+  // The field behind the numeral is a halftone whose dots grow with the
+  // response time, on a log scale from 1 ms (a pale screen) to 10 s (near
+  // solid). Dots are densest under the numeral and thin out to the right,
+  // like a printed halftone tile.
+  const STEP = 6;
+  const darkness = $derived(
+    response ? Math.min(1, Math.max(0, Math.log10(Math.max(response.time_ms, 1)) / 4)) : 0.12,
+  );
 
   const dots = $derived.by(() => {
-    const columns = Math.max(1, Math.floor(width / STEP));
-    const reach = response ? position(response.time_ms) : 0;
-    const list: { x: number; y: number; r: number; on: boolean }[] = [];
+    const columns = Math.ceil(width / STEP);
+    const rows = Math.ceil(height / STEP);
+    const list: { x: number; y: number; r: number }[] = [];
     for (let c = 0; c < columns; c++) {
-      const at = (c + 0.5) / columns;
-      const on = at <= reach;
-      const weight = on ? 0.45 + 0.55 * (at / Math.max(reach, 0.0001)) : 0;
-      for (let row = 0; row < ROWS; row++) {
-        list.push({
-          x: c * STEP + STEP / 2,
-          y: row * STEP + STEP / 2,
-          r: on ? 0.55 + weight * 1.2 : 0.45,
-          on,
-        });
+      const across = c / Math.max(columns - 1, 1);
+      for (let row = 0; row < rows; row++) {
+        const down = row / Math.max(rows - 1, 1);
+        const falloff = 1 - 0.75 * across + 0.15 * (down - 0.5);
+        const r = Math.max(0.35, (0.4 + 2.4 * darkness) * Math.max(falloff, 0.12));
+        list.push({ x: c * STEP + STEP / 2, y: row * STEP + STEP / 2, r: Math.min(r, STEP / 2) });
       }
     }
     return list;
   });
-
-  const firstByte = $derived(response ? position(response.headers_ms) : null);
 </script>
 
-<div class="specimen {kind}" class:sending class:idle={!execution && !sending}>
-  <div class="numeral bitmap" aria-live="polite">
-    {#if sending}
-      <span class="dots" aria-label="Sending"></span>
-    {:else if response}
-      {response.status}
-    {:else if execution?.skipped}
-      SKIP
-    {:else if execution}
-      ERR
-    {:else}
-      ---
-    {/if}
+<div
+  class="specimen {kind}"
+  class:sending
+  class:idle={!execution && !sending}
+  title={response
+    ? `The dots darken with the response time: ${millis(response.time_ms)}`
+    : undefined}
+>
+  <div class="field" bind:this={field} aria-hidden="true">
+    <svg {width} {height} viewBox="0 0 {width} {height}">
+      {#each dots as dot, i (i)}
+        <circle cx={dot.x} cy={dot.y} r={dot.r} />
+      {/each}
+    </svg>
   </div>
 
-  <div class="facts">
-    <p class="reason bitmap">
-      {#if sending}
-        Sending
-      {:else if response}
-        {response.status_text || "Status"}
-      {:else if execution?.skipped}
-        Skipped by a script
-      {:else if execution}
-        No response
-      {:else}
-        Not sent yet
-      {/if}
-    </p>
+  <div class="setting">
+    <div class="line">
+      <span class="numeral bitmap" aria-live="polite">
+        {#if sending}
+          <span class="dots" aria-label="Sending"></span>
+        {:else if response}
+          {response.status}
+        {:else if execution?.skipped}
+          SKIP
+        {:else if execution}
+          ERR
+        {:else}
+          ---
+        {/if}
+      </span>
+      <span class="reason bitmap">
+        {#if sending}
+          Sending
+        {:else if response}
+          {response.status_text || "Status"}
+        {:else if execution?.skipped}
+          Skipped by a script
+        {:else if execution}
+          No response
+        {:else}
+          Not sent yet
+        {/if}
+      </span>
+    </div>
+
     {#if response}
-      <dl class="stats">
+      <dl class="sizes">
         <div>
           <dt>Time</dt>
           <dd class="num">{millis(response.time_ms)}</dd>
+        </div>
+        <div>
+          <dt>First byte</dt>
+          <dd class="num">{millis(response.headers_ms)}</dd>
         </div>
         <div>
           <dt>Size</dt>
@@ -118,44 +133,16 @@
       </p>
     {/if}
   </div>
-
-  <div class="gauge" bind:this={gauge} aria-hidden="true">
-    <svg {width} height={ROWS * STEP} viewBox="0 0 {width} {ROWS * STEP}">
-      {#each dots as dot, i (i)}
-        <circle cx={dot.x} cy={dot.y} r={dot.r} class:on={dot.on} />
-      {/each}
-      {#if firstByte !== null}
-        <rect class="ttfb" x={Math.round(firstByte * width)} y="0" width="1" height={ROWS * STEP} />
-      {/if}
-    </svg>
-    <div class="ticks bitmap">
-      {#each ticks as tick (tick.label)}
-        <span style:left="{tick.at * 100}%">{tick.label}</span>
-      {/each}
-    </div>
-  </div>
-  {#if response}
-    <p class="sr-only">
-      Answered {response.status}
-      {response.status_text} in {millis(response.time_ms)}, first byte after {millis(
-        response.headers_ms,
-      )}.
-    </p>
-  {/if}
 </div>
 
 <style>
   .specimen {
     --tone: var(--ink);
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas:
-      "numeral facts"
-      "gauge gauge";
-    align-items: end;
-    gap: 6px var(--s4);
-    padding: var(--s3) var(--s4) var(--s2);
+    --dot: color-mix(in srgb, var(--tone) 22%, transparent);
+    position: relative;
+    min-height: 132px;
     border-bottom: 1px solid var(--rule);
+    overflow: hidden;
   }
 
   .specimen.ok {
@@ -176,12 +163,48 @@
     --tone: var(--ink-3);
   }
 
+  .field {
+    position: absolute;
+    inset: 0;
+  }
+
+  .field svg {
+    display: block;
+  }
+
+  circle {
+    fill: var(--dot);
+  }
+
+  .sending circle {
+    animation: scan 1.2s steps(4) infinite;
+  }
+
+  @keyframes scan {
+    50% {
+      fill: color-mix(in srgb, var(--ink) 30%, transparent);
+    }
+  }
+
+  .setting {
+    position: relative;
+    display: grid;
+    gap: 10px;
+    padding: var(--s3) var(--s4);
+  }
+
+  .line {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--s3);
+    min-width: 0;
+  }
+
   .numeral {
-    grid-area: numeral;
     font-size: var(--b8);
     line-height: 0.82;
     color: var(--tone);
-    min-width: 2ch;
+    padding: 2px 6px 0 0;
   }
 
   .server .numeral {
@@ -191,7 +214,22 @@
   }
 
   .idle .numeral {
-    color: var(--t3);
+    color: var(--t4);
+  }
+
+  .reason {
+    padding: 2px 6px;
+    background: var(--paper);
+    font-size: var(--b2);
+    line-height: 1;
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .idle .reason {
+    color: var(--ink-3);
   }
 
   .dots {
@@ -212,117 +250,57 @@
     }
   }
 
-  .facts {
-    grid-area: facts;
-    display: grid;
-    gap: 8px;
-    min-width: 0;
-    padding-bottom: 2px;
-  }
-
-  .reason {
-    margin: 0;
-    font-size: var(--b2);
-    line-height: 1;
-    color: var(--ink);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .idle .reason {
-    color: var(--ink-3);
-  }
-
-  .stats {
+  .sizes {
     display: flex;
     flex-wrap: wrap;
-    gap: 2px var(--s4);
+    gap: 2px 0;
     margin: 0;
+    width: max-content;
+    max-width: 100%;
   }
 
-  .stats div {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
+  .sizes div {
+    display: grid;
+    gap: 4px;
+    padding: 6px 10px 6px 8px;
+    background: var(--paper);
+    border-left: 1px solid var(--rule-2);
   }
 
-  .stats dt {
+  .sizes div:first-child {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .sizes dt {
     font-family: var(--font-bitmap);
     font-size: var(--b1);
+    line-height: 1;
     text-transform: uppercase;
     color: var(--ink-3);
     -webkit-font-smoothing: none;
   }
 
-  .stats dd {
+  .sizes dd {
     margin: 0;
-    font-weight: 600;
+    font-weight: 650;
+    line-height: 1.1;
   }
 
-  .stats dd.good {
+  .sizes dd.good {
     color: var(--ok);
   }
 
-  .stats dd.bad {
+  .sizes dd.bad {
     color: var(--error);
   }
 
   .hint {
     margin: 0;
+    padding: 4px 6px 4px 0;
+    width: max-content;
+    background: var(--paper);
     color: var(--ink-3);
-  }
-
-  .gauge {
-    grid-area: gauge;
-    position: relative;
-    min-width: 0;
-    padding-bottom: 14px;
-  }
-
-  .gauge svg {
-    display: block;
-  }
-
-  circle {
-    fill: var(--t3);
-  }
-
-  circle.on {
-    fill: var(--tone);
-  }
-
-  .sending circle {
-    animation: scan 1.2s steps(6) infinite;
-  }
-
-  @keyframes scan {
-    50% {
-      fill: var(--ink-2);
-    }
-  }
-
-  .ttfb {
-    fill: var(--ink);
-  }
-
-  .ticks {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 11px;
-    color: var(--ink-3);
-  }
-
-  .ticks span {
-    position: absolute;
-    transform: translateX(-50%);
-    white-space: nowrap;
-  }
-
-  .ticks span:last-child {
-    transform: translateX(-100%);
   }
 
   @media (max-width: 520px) {
