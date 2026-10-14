@@ -19,3 +19,7 @@
 *.swp
 .DS_Store
 Thumbs.db
+
+# Design-tool workspace: decision pages, review captures and downloaded
+# reference images. Not part of the product.
+.impeccable/
