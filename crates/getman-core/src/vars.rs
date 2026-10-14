@@ -241,7 +241,7 @@ pub(crate) fn read_process_env(name: &str) -> Option<String> {
 pub fn missing_reason(name: &str) -> String {
     match name.strip_prefix("$env.") {
         Some(env) if !env.starts_with(ENV_PREFIX) => format!(
-            "{{{{{name}}}}} was not read: only environment variables named {ENV_PREFIX}* can be"
+            "{{{{{name}}}}} was not read: only environment variables named {ENV_PREFIX}* can be read"
         ),
         Some(_) => format!("{{{{{name}}}}} is not set in the environment"),
         None => format!("{{{{{name}}}}} is not defined"),
@@ -353,7 +353,7 @@ mod tests {
         );
         assert_eq!(
             missing_reason("$env.PATH"),
-            "{{$env.PATH}} was not read: only environment variables named GETMAN_* can be"
+            "{{$env.PATH}} was not read: only environment variables named GETMAN_* can be read"
         );
         assert_eq!(missing_reason("token"), "{{token}} is not defined");
     }
