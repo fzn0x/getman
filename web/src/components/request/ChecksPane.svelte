@@ -194,7 +194,7 @@
 
   .grid {
     display: grid;
-    grid-template-columns: 18px minmax(120px, 2fr) 120px minmax(120px, 2fr) 28px;
+    grid-template-columns: 18px minmax(140px, 3fr) 112px minmax(96px, 2fr) 28px;
     border-top: 1px solid var(--rule);
   }
 
