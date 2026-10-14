@@ -1,0 +1,69 @@
+name: Docs
+
+# Builds the documentation site from docs/ and site/ and publishes it to
+# GitHub Pages from main. Pull requests that touch the documentation build
+# it too, so a broken link to a page or a bad heading fails before merge.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - site/**
+      - web/public/fonts/**
+      - web/public/favicon.svg
+      - .github/workflows/pages.yml
+  pull_request:
+    paths:
+      - docs/**
+      - site/**
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Install npm dependencies
+        working-directory: site
+        run: npm ci
+      - name: Check formatting
+        working-directory: site
+        run: npm run check
+      - name: Check the install scripts
+        run: sh -n site/static/install.sh
+      - name: Build
+        working-directory: site
+        run: npm run build
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/dist
+
+  deploy:
+    name: Deploy
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
