@@ -6,6 +6,7 @@
 
 pub mod auth;
 pub mod checks;
+pub mod data;
 pub mod dynamic;
 mod error;
 pub mod execute;
@@ -13,6 +14,7 @@ pub mod http;
 mod lenient;
 pub mod model;
 pub mod prepare;
+pub mod runner;
 pub mod script;
 #[cfg(test)]
 mod test_server;
