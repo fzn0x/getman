@@ -1,8 +1,9 @@
 //! Getman: a local-first API client.
 //!
-//! One binary over a workspace of plain YAML files: the browser UI served
-//! on 127.0.0.1 (`getman`), and a command line for scripts and CI
-//! (`getman run`, `getman send`, `getman import`, `getman export`).
+//! One binary with three front ends over a workspace of plain YAML files:
+//! the browser UI served on 127.0.0.1 (`getman`), a terminal UI
+//! (`getman tui`), and a command line for scripts and CI (`getman run`,
+//! `getman send`, `getman import`, `getman export`).
 
 mod cli;
 mod commands;
@@ -10,6 +11,7 @@ mod examples;
 mod report;
 mod server;
 mod style;
+mod tui;
 mod workspaces;
 
 use std::process::ExitCode;

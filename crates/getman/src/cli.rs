@@ -29,6 +29,8 @@ pub(crate) struct Cli {
 pub(crate) enum Command {
     /// Open the browser UI (the default).
     Open(OpenArgs),
+    /// Open the terminal UI.
+    Tui(TuiArgs),
     /// Run a folder or the whole workspace and report the results, for CI.
     Run(RunArgs),
     /// Send one request and print the response body.
@@ -56,6 +58,13 @@ pub(crate) struct OpenArgs {
     /// Print the address instead of opening a browser.
     #[arg(long)]
     pub(crate) no_open: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct TuiArgs {
+    /// Workspace directory. Defaults to the workspace containing the current
+    /// directory, or your personal workspace.
+    pub(crate) dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
