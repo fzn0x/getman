@@ -9,9 +9,7 @@ mod send;
 use std::process::ExitCode;
 use std::time::Duration;
 
-use clap::CommandFactory;
-
-use crate::cli::{Cli, Command, VarArgs};
+use crate::cli::{Cli, Command, OpenArgs, VarArgs};
 
 pub(crate) type Outcome = Result<ExitCode, String>;
 
@@ -22,11 +20,15 @@ pub(crate) async fn dispatch(cli: Cli) -> Outcome {
         Some(Command::Init(args)) => init::init(&args),
         Some(Command::Import(args)) => import::import(&args),
         Some(Command::Export(args)) => export::export(&args),
-        None => {
-            Cli::command().print_help().map_err(|e| e.to_string())?;
-            Ok(ExitCode::SUCCESS)
-        }
+        Some(Command::Open(args)) => open(&args).await,
+        None => open(&cli.open).await,
     }
+}
+
+async fn open(args: &OpenArgs) -> Outcome {
+    let workspace = crate::workspaces::find_or_personal(args.dir.as_deref())?;
+    crate::server::serve(workspace, args.port, !args.no_open).await?;
+    Ok(ExitCode::SUCCESS)
 }
 
 /// How long a script may run, from `--script-timeout`.

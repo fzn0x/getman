@@ -7,6 +7,9 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 /// A local-first API client. Requests are plain YAML files in your
 /// repository; no account, no cloud.
 ///
+/// Without a command, Getman opens its browser UI on the workspace that
+/// contains the current directory.
+///
 #[derive(Debug, Parser)]
 #[command(
     name = "getman",
@@ -17,10 +20,15 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 pub(crate) struct Cli {
     #[command(subcommand)]
     pub(crate) command: Option<Command>,
+
+    #[command(flatten)]
+    pub(crate) open: OpenArgs,
 }
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
+    /// Open the browser UI (the default).
+    Open(OpenArgs),
     /// Run a folder or the whole workspace and report the results, for CI.
     Run(RunArgs),
     /// Send one request and print the response body.
@@ -33,6 +41,21 @@ pub(crate) enum Command {
     /// Print a request as code: cURL, HTTPie, PowerShell, fetch, Python,
     /// Go, Rust or Java.
     Export(ExportArgs),
+}
+
+#[derive(Debug, Args, Default)]
+pub(crate) struct OpenArgs {
+    /// Workspace directory. Defaults to the workspace containing the current
+    /// directory, or your personal workspace.
+    pub(crate) dir: Option<PathBuf>,
+
+    /// Port to serve the UI on. Defaults to 7878, or the next free port.
+    #[arg(long, short)]
+    pub(crate) port: Option<u16>,
+
+    /// Print the address instead of opening a browser.
+    #[arg(long)]
+    pub(crate) no_open: bool,
 }
 
 #[derive(Debug, Args)]
@@ -232,6 +255,18 @@ mod tests {
         assert!(parse_reporter("html").is_err());
         assert_eq!(parse_var("a=b=c").unwrap(), ("a".into(), "b=c".into()));
         assert!(parse_var("novalue").is_err());
+    }
+
+    #[test]
+    fn the_default_command_opens_the_ui() {
+        let cli = Cli::try_parse_from(["getman", "--port", "9000"]).unwrap();
+        assert!(cli.command.is_none());
+        assert_eq!(cli.open.port, Some(9000));
+        let cli = Cli::try_parse_from(["getman", "open", "api", "--no-open"]).unwrap();
+        let Some(Command::Open(args)) = cli.command else {
+            panic!()
+        };
+        assert!(args.no_open);
     }
 
     #[test]

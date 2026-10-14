@@ -17,6 +17,7 @@ anstyle = "1"
 axum = "0.8"
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }
 dirs = "6"
+futures-util = { version = "0.3", default-features = false }
 getman-core.workspace = true
 getrandom = "0.3"
 mime_guess = "2"
@@ -28,3 +29,7 @@ tokio = { version = "1", features = ["full"] }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+tower = { version = "0.5", features = ["util"] }

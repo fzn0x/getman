@@ -21,6 +21,43 @@ pub(crate) fn find(dir: Option<&Path>) -> Result<Workspace, String> {
     Workspace::open(root).map_err(|e| e.to_string())
 }
 
+/// The workspace to open the UI on: the one containing `dir` or the
+/// current directory, else the personal workspace, created on first use.
+pub(crate) fn find_or_personal(dir: Option<&Path>) -> Result<Workspace, String> {
+    if let Some(dir) = dir {
+        let dir = absolute(dir);
+        if let Some(root) = Workspace::discover(&dir) {
+            return Workspace::open(root).map_err(|e| e.to_string());
+        }
+        let name = dir
+            .file_name()
+            .map_or_else(|| "My API".to_owned(), |n| n.to_string_lossy().into_owned());
+        let workspace = Workspace::init(&dir, &name).map_err(|e| e.to_string())?;
+        crate::style::note(&format!("Created a workspace in {}", dir.display()));
+        return Ok(workspace);
+    }
+    if let Ok(workspace) = find(None) {
+        return Ok(workspace);
+    }
+    let personal =
+        personal_dir().ok_or("cannot find your data directory for the personal workspace")?;
+    if Workspace::discover(&personal).is_some() {
+        return Workspace::open(&personal).map_err(|e| e.to_string());
+    }
+    let workspace = Workspace::init(&personal, "My workspace").map_err(|e| e.to_string())?;
+    crate::examples::add(&workspace).map_err(|e| e.to_string())?;
+    crate::style::note(&format!(
+        "Created your personal workspace in {}",
+        personal.display()
+    ));
+    Ok(workspace)
+}
+
+/// Where the personal workspace lives.
+pub(crate) fn personal_dir() -> Option<PathBuf> {
+    dirs::data_dir().map(|dir| dir.join("getman").join("workspace"))
+}
+
 /// Turns an item given on the command line, as a path in the workspace or
 /// a file or directory on disk, into its path in the workspace.
 pub(crate) fn item_path(workspace: &Workspace, given: &str) -> Result<String, String> {

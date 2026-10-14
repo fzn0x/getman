@@ -1,13 +1,14 @@
 //! Getman: a local-first API client.
 //!
-//! The command line works on a workspace of plain YAML files: `getman run`
-//! runs it in CI, `getman send` sends one request, and `getman import` and
-//! `getman export` move requests in and out of other tools.
+//! One binary over a workspace of plain YAML files: the browser UI served
+//! on 127.0.0.1 (`getman`), and a command line for scripts and CI
+//! (`getman run`, `getman send`, `getman import`, `getman export`).
 
 mod cli;
 mod commands;
 mod examples;
 mod report;
+mod server;
 mod style;
 mod workspaces;
 

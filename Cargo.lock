@@ -698,6 +698,7 @@ dependencies = [
  "axum",
  "clap",
  "dirs",
+ "futures-util",
  "getman-core",
  "getrandom 0.3.4",
  "mime_guess",
@@ -705,7 +706,9 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
+ "tower",
 ]
 
 [[package]]
