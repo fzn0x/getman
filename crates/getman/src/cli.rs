@@ -23,6 +23,16 @@ pub(crate) struct Cli {
 pub(crate) enum Command {
     /// Run a folder or the whole workspace and report the results, for CI.
     Run(RunArgs),
+    /// Send one request and print the response body.
+    Send(SendArgs),
+    /// Create a workspace.
+    Init(InitArgs),
+    /// Import a Postman collection, environment or globals file, or a cURL
+    /// command.
+    Import(ImportArgs),
+    /// Print a request as code: cURL, HTTPie, PowerShell, fetch, Python,
+    /// Go, Rust or Java.
+    Export(ExportArgs),
 }
 
 #[derive(Debug, Args)]
@@ -103,6 +113,81 @@ pub(crate) enum ReporterKind {
     Cli,
     Json,
     Junit,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct SendArgs {
+    /// The request: a path in the workspace or a path on disk.
+    pub(crate) request: String,
+
+    #[command(flatten)]
+    pub(crate) workspace: WorkspaceArgs,
+
+    #[command(flatten)]
+    pub(crate) vars: VarArgs,
+
+    /// Print the status line and headers before the body.
+    #[arg(long, short = 'i')]
+    pub(crate) include: bool,
+
+    /// Print everything that happened as JSON instead of the body.
+    #[arg(long)]
+    pub(crate) json: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct InitArgs {
+    /// Directory to create the workspace in. Defaults to the current one.
+    pub(crate) dir: Option<PathBuf>,
+
+    /// Workspace name. Defaults to the directory's name.
+    #[arg(long)]
+    pub(crate) name: Option<String>,
+
+    /// Add example requests against a public test API.
+    #[arg(long)]
+    pub(crate) example: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct ImportArgs {
+    /// File to import, or `-` to read standard input. A cURL command can
+    /// be given directly with --curl instead.
+    #[arg(required_unless_present = "curl")]
+    pub(crate) file: Option<PathBuf>,
+
+    /// A cURL command to import as a request.
+    #[arg(long, conflicts_with = "file")]
+    pub(crate) curl: Option<String>,
+
+    #[command(flatten)]
+    pub(crate) workspace: WorkspaceArgs,
+
+    /// Folder of the workspace to import into.
+    #[arg(long, default_value = "")]
+    pub(crate) folder: String,
+
+    /// Make a collection the workspace itself instead of a folder in it.
+    #[arg(long)]
+    pub(crate) root: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct ExportArgs {
+    /// The request: a path in the workspace or a path on disk.
+    pub(crate) request: String,
+
+    /// Language or tool to write.
+    #[arg(long = "to", short = 't', default_value = "curl", value_parser = clap::builder::PossibleValuesParser::new(
+        getman_core::export::codegen::LANGUAGES.iter().map(|l| l.id)
+    ))]
+    pub(crate) language: String,
+
+    #[command(flatten)]
+    pub(crate) workspace: WorkspaceArgs,
+
+    #[command(flatten)]
+    pub(crate) vars: VarArgs,
 }
 
 fn parse_var(text: &str) -> Result<(String, String), String> {

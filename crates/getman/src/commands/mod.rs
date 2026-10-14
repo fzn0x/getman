@@ -1,6 +1,10 @@
 //! What each command does.
 
+mod export;
+mod import;
+mod init;
 mod run;
+mod send;
 
 use std::process::ExitCode;
 use std::time::Duration;
@@ -14,6 +18,10 @@ pub(crate) type Outcome = Result<ExitCode, String>;
 pub(crate) async fn dispatch(cli: Cli) -> Outcome {
     match cli.command {
         Some(Command::Run(args)) => run::run(args).await,
+        Some(Command::Send(args)) => send::send(args).await,
+        Some(Command::Init(args)) => init::init(&args),
+        Some(Command::Import(args)) => import::import(&args),
+        Some(Command::Export(args)) => export::export(&args),
         None => {
             Cli::command().print_help().map_err(|e| e.to_string())?;
             Ok(ExitCode::SUCCESS)
