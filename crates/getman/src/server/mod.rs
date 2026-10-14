@@ -81,7 +81,9 @@ pub(crate) async fn serve(
         );
     }
     if open_browser && open::that_detached(&with_token).is_ok() {
-        style::note("Opened in your browser. Press Ctrl+C to stop.");
+        style::note(&format!(
+            "Opened {with_token} in your browser. Press Ctrl+C to stop."
+        ));
     } else {
         style::note(&format!(
             "Open {with_token} in your browser. Press Ctrl+C to stop."
