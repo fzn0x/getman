@@ -11,6 +11,7 @@ homepage.workspace = true
 [dependencies]
 base64 = "0.22"
 cookie_store = "0.22"
+csv = "1"
 fastrand = "2"
 hex = "0.4"
 hmac = "0.12"
