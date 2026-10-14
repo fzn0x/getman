@@ -1,0 +1,124 @@
+# Checks and captures
+
+Most API tests are one line: the status is 200, the body has an id, it
+answered quickly. Getman lets you write those as **checks**, without a
+script, and copy values out of the response as **captures**.
+
+```yaml
+checks:
+  - status == 200
+  - time < 500
+  - header.content-type contains json
+  - json.data.length > 0
+  - json.data[0].email matches ^[^@]+@example\.com$
+  - json.data[0].role is string
+captures:
+  firstUserId: json.data[0].id
+  etag: header.etag
+```
+
+Checks run after the response arrives, after the post-response scripts.
+In the UI they appear in the Checks tab of the request, with their last
+result next to each one, and under Tests in the response. In a run, a
+failed check fails the request, and `getman run` exits with status 1.
+
+## Writing a check
+
+A check is a **target**, an **operator** and usually a **value**,
+separated by spaces.
+
+### Targets
+
+| Target | Is |
+| --- | --- |
+| `status` | The status code |
+| `time` | Milliseconds from sending to the end of the body |
+| `size` | The body's size in bytes |
+| `url` | The final URL, after redirects |
+| `body` | The body as text |
+| `header.<name>` | A response header, any case: `header.content-type` |
+| `cookie.<name>` | A cookie the response set |
+| `json` | The whole body, parsed as JSON |
+| `json.<path>` | Part of it |
+
+A JSON path is made of `.name`, `[index]` (negative counts from the end),
+`["a key with spaces"]` and `.length` for arrays and strings:
+`json.data[0].id`, `json.items[-1].price`, `json["full name"]`,
+`json.tags.length`.
+
+### Operators
+
+| Operator | Passes when the target |
+| --- | --- |
+| `==` `!=` | equals, or does not equal, the value |
+| `<` `<=` `>` `>=` | compares that way, as numbers |
+| `contains` `!contains` | has the value as part of its text, as an element of an array, or as a key of an object |
+| `startsWith` `endsWith` | begins or ends with the value |
+| `matches` `!matches` | matches a regular expression |
+| `exists` `!exists` | is there at all (`null` exists); takes no value |
+| `is` | has a type: `string`, `number`, `integer`, `boolean`, `array`, `object` or `null` |
+
+### Values
+
+A value that is valid JSON is compared as JSON: `== 42` is a number,
+`== "42"` a string, `== true` a boolean, `== null` null, and
+`contains {"id": 1}` an object. Anything else is text, so
+`== Ada Lovelace` needs no quotes. Numbers and numeric strings compare
+equal (`"3" == 3`), which suits headers and query values.
+
+Lines starting with `#` are ignored, so you can keep a check without
+running it.
+
+### When a check fails
+
+The message says what was found and what was expected:
+
+```text
+✗ status == 200
+  status is 404; expected == 200
+✗ json.data[0].id exists
+  json.data[0].id does not exist
+```
+
+## Captures
+
+A capture copies part of the response into a variable, using the same
+targets as checks:
+
+```yaml
+captures:
+  token: json.access_token
+  sessionId: cookie.session
+  location: header.location
+```
+
+Captured values go into the selected environment, or into the workspace's
+variables when no environment is selected. In the UI they are saved to
+the git-ignored local file; in `getman run` they last for the run (or are
+saved with `--persist`). Strings are copied as they are; numbers,
+booleans, arrays and objects as JSON text.
+
+A typical login flow needs no script at all:
+
+```yaml
+# auth/login.yaml
+name: Log in
+method: POST
+url: "{{baseUrl}}/login"
+body:
+  type: json
+  content: '{ "user": "{{user}}", "password": "{{password}}" }'
+checks:
+  - status == 200
+captures:
+  token: json.token
+```
+
+```yaml
+# getman.yaml
+auth:
+  type: bearer
+  token: "{{token}}"
+```
+
+For anything checks cannot express, use [scripts](scripts.md).
