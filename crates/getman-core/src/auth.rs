@@ -180,6 +180,17 @@ async fn fetch_token(http: &HttpClient, s: &OAuth2, transport: Transport) -> Res
     if s.token_url.is_empty() {
         return Err(Error::Invalid("OAuth 2.0 needs a token URL".into()));
     }
+    let request = token_request(s);
+    let response = http
+        .send(&request, transport)
+        .await
+        .map_err(|e| Error::Http(format!("Could not get an OAuth 2.0 token: {e}")))?;
+    read_token(&response)
+}
+
+/// The token request. Built outside the async function: the form encoder
+/// is not `Send`, so it must not live across an await.
+fn token_request(s: &OAuth2) -> Outgoing {
     let mut form = url::form_urlencoded::Serializer::new(String::new());
     match s.grant {
         OAuth2Grant::ClientCredentials => {
@@ -220,18 +231,17 @@ async fn fetch_token(http: &HttpClient, s: &OAuth2, transport: Transport) -> Res
             }
         }
     }
-    let request = Outgoing {
+    Outgoing {
         method: "POST".into(),
         url: s.token_url.clone(),
         headers,
         body: OutgoingBody::Bytes {
             data: Payload(form.finish().into_bytes()),
         },
-    };
-    let response = http
-        .send(&request, transport)
-        .await
-        .map_err(|e| Error::Http(format!("Could not get an OAuth 2.0 token: {e}")))?;
+    }
+}
+
+fn read_token(response: &Response) -> Result<Token> {
     let json = response.json().unwrap_or_default();
     if !(200..300).contains(&response.status) {
         let reason = [json["error"].as_str(), json["error_description"].as_str()]
