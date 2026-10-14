@@ -1,0 +1,30 @@
+[package]
+name = "getman"
+description = "A local-first API client: send requests, test APIs and run collections from plain files in your repository"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "../../README.md"
+keywords = ["api", "http", "rest", "client", "testing"]
+categories = ["command-line-utilities", "development-tools::testing", "web-programming::http-client"]
+
+[dependencies]
+anstream = "0.6"
+anstyle = "1"
+axum = "0.8"
+clap = { version = "4", features = ["derive", "env", "wrap_help"] }
+dirs = "6"
+getman-core.workspace = true
+getrandom = "0.3"
+mime_guess = "2"
+open = "5"
+rust-embed = "8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+
+[lints]
+workspace = true
