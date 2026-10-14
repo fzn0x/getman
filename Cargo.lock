@@ -428,6 +428,7 @@ dependencies = [
  "fastrand",
  "indexmap",
  "mime_guess",
+ "percent-encoding",
  "reqwest",
  "reqwest_cookie_store",
  "rustls",

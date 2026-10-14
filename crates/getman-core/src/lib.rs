@@ -9,6 +9,7 @@ mod error;
 pub mod http;
 mod lenient;
 pub mod model;
+pub mod prepare;
 #[cfg(test)]
 mod test_server;
 pub mod time;
