@@ -13,6 +13,7 @@ base64 = "0.22"
 cookie_store = "0.22"
 fastrand = "2"
 hex = "0.4"
+hmac = "0.12"
 indexmap = { version = "2", features = ["serde"] }
 md-5 = "0.10"
 mime_guess = "2"
@@ -20,10 +21,12 @@ percent-encoding = "2"
 regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "cookies", "gzip", "brotli", "deflate", "multipart", "system-proxy", "socks", "stream"] }
 reqwest_cookie_store = "0.10"
+rquickjs = "0.14"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 serde_yaml_ng = "0.10"
+sha1 = "0.10"
 sha2 = "0.10"
 thiserror = "2"
 tokio = { version = "1", features = ["rt", "macros", "time", "fs", "sync"] }

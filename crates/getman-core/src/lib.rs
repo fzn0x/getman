@@ -12,6 +12,7 @@ pub mod http;
 mod lenient;
 pub mod model;
 pub mod prepare;
+pub mod script;
 #[cfg(test)]
 mod test_server;
 pub mod time;

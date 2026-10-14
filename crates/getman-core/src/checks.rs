@@ -38,6 +38,9 @@ pub struct TestResult {
     /// Why it failed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+    /// Whether the test was skipped.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub skipped: bool,
 }
 
 impl TestResult {
@@ -46,6 +49,7 @@ impl TestResult {
             name: name.to_owned(),
             passed: true,
             message: None,
+            skipped: false,
         }
     }
 
@@ -54,6 +58,7 @@ impl TestResult {
             name: name.to_owned(),
             passed: false,
             message: Some(message.into()),
+            skipped: false,
         }
     }
 }

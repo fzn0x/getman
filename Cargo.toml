@@ -20,6 +20,7 @@ unsafe_code = "deny"
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
+assert_is_empty = "allow"
 assigning_clones = "allow"
 format_collect = "allow"
 format_push_string = "allow"

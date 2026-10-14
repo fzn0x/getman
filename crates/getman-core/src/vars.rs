@@ -228,7 +228,7 @@ fn is_reference(name: &str) -> bool {
     !name.is_empty() && name.len() <= 200 && !name.contains(['{', '}', '\n', '\r', '"'])
 }
 
-fn read_process_env(name: &str) -> Option<String> {
+pub(crate) fn read_process_env(name: &str) -> Option<String> {
     if !name.starts_with(ENV_PREFIX) {
         return None;
     }
