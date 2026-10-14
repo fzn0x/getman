@@ -24,6 +24,8 @@ pub(crate) struct Pretty {
     environment: Option<String>,
     iterations: usize,
     name_width: usize,
+    /// Methods of the planned requests, for requests that were not sent.
+    methods: Vec<String>,
 }
 
 impl Pretty {
@@ -34,6 +36,7 @@ impl Pretty {
             environment,
             iterations: 1,
             name_width: 0,
+            methods: Vec::new(),
         }
     }
 
@@ -44,16 +47,28 @@ impl Pretty {
                 iterations,
             } => {
                 self.iterations = *iterations;
+                self.methods = requests.iter().map(|r| r.method.clone()).collect();
+                self.name_width = requests
+                    .iter()
+                    .map(|r| r.name.chars().count())
+                    .max()
+                    .unwrap_or(0)
+                    .min(40);
                 let env = self
                     .environment
                     .as_ref()
                     .map(|e| format!(" with the {} environment", paint(BOLD, e)))
                     .unwrap_or_default();
                 anstream::println!(
-                    "{} {}{env}: {} requests{}",
+                    "{} {}{env}: {} {}{}",
                     paint(CYAN.bold(), "getman"),
                     paint(BOLD, &self.workspace),
                     requests.len(),
+                    if requests.len() == 1 {
+                        "request"
+                    } else {
+                        "requests"
+                    },
                     if *iterations > 1 {
                         format!(" × {iterations} iterations")
                     } else {
@@ -74,16 +89,20 @@ impl Pretty {
                     println!();
                 }
             }
-            RunEvent::Request { execution, .. } => self.request(execution),
+            RunEvent::Request {
+                index, execution, ..
+            } => self.request(*index, execution),
             RunEvent::Finish { summary } => print_summary(summary),
         }
     }
 
-    fn request(&self, execution: &Execution) {
+    fn request(&self, index: usize, execution: &Execution) {
         let method = execution
             .request
             .as_ref()
-            .map_or("", |r| r.method.as_str())
+            .map(|r| r.method.as_str())
+            .or_else(|| self.methods.get(index).map(String::as_str))
+            .unwrap_or_default()
             .to_owned();
         let mark = if execution.skipped {
             paint(YELLOW, "–")
