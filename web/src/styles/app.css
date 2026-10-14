@@ -92,7 +92,6 @@
   --control: 28px;
   --bar: 40px;
 
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @media (prefers-color-scheme: dark) {

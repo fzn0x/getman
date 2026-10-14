@@ -217,9 +217,11 @@
           <button class="btn quiet" onclick={rename}><Icon name="pencil" /> Rename</button>
           <button class="btn quiet danger" onclick={remove}><Icon name="trash" /> Delete</button>
         {/if}
-        <button class="btn primary" onclick={saveRows} disabled={!dirty}
-          ><Icon name="save" /> Save</button
-        >
+        {#if isGlobals || ws.environments.length > 0}
+          <button class="btn primary" onclick={saveRows} disabled={!dirty}
+            ><Icon name="save" /> Save</button
+          >
+        {/if}
       </div>
     </header>
 

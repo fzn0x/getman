@@ -151,7 +151,7 @@
         <div class="starter">
           <p class="bitmap big">No requests yet</p>
           <p>Requests are YAML files in <code>{ws.root}</code>. Start one, or bring yours in.</p>
-          <button class="btn primary" onclick={() => newRequest()}>
+          <button class="btn" onclick={() => newRequest()}>
             <Icon name="plus" /> New request
           </button>
           <button class="btn" onclick={() => openDialog({ kind: "import", folder: "" })}>
