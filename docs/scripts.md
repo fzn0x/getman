@@ -64,8 +64,9 @@ gm.request.body.update({ sku: "BOOK-42" }); // objects become JSON
 gm.request.body.raw; // the body text
 ```
 
-Header and query lists have `get`, `has`, `add`, `upsert`, `remove`,
-`all`, `each`, `toObject` and `count`.
+Header and query lists have `get`, `has`, `one`, `add`, `upsert`,
+`remove`, `clear`, `all`, `each`, `map`, `filter`, `find`, `toObject` and
+`count`.
 
 ## The response
 
@@ -129,14 +130,14 @@ gm.expect(order.created).to.match(/^\d{4}-/);
 gm.expect(order.status).to.be.oneOf(["paid", "pending"]);
 gm.expect(order.note).to.not.exist;
 gm.expect(() => JSON.parse("{")).to.throw(SyntaxError);
-gm.expect(order).to.be.jsonSchema; // see jsonSchema() below
+gm.expect(order).to.have.jsonSchema({ required: ["id", "items"] });
 gm.expect(order).to.satisfy((o) => o.items.length > 0);
 ```
 
 Also: `ok`, `true`, `false`, `null`, `undefined`, `NaN`, `empty`,
 `finite`, `eql`, `least`, `most`, `below`, `above` (and `gt`, `gte`, `lt`,
-`lte`), `closeTo`, `instanceOf`, `string`, `keys` with `any` or `all`,
-and `jsonSchema(schema)`.
+`lte`), `closeTo`, `instanceOf`, `string`, and `keys` with `any` or
+`all`.
 
 The JSON Schema support covers `type` (with `integer`), `enum`, `const`,
 `required`, `properties`, `additionalProperties`, `items`, `minItems`,
