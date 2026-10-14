@@ -6,8 +6,11 @@
 
 pub mod dynamic;
 mod error;
+pub mod http;
 mod lenient;
 pub mod model;
+#[cfg(test)]
+mod test_server;
 pub mod time;
 pub mod vars;
 pub mod workspace;
