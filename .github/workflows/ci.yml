@@ -76,7 +76,7 @@ jobs:
         run: |
           cargo run --quiet --locked -- init "$RUNNER_TEMP/smoke" --name Smoke
           cargo run --quiet --locked -- import -w "$RUNNER_TEMP/smoke" --curl "curl http://127.0.0.1:9/never"
-          cargo run --quiet --locked -- export -w "$RUNNER_TEMP/smoke" never.yaml --to python
+          cargo run --quiet --locked -- export -w "$RUNNER_TEMP/smoke" get-never.yaml --to python
 
   msrv:
     name: Minimum supported Rust version
