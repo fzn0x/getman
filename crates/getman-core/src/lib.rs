@@ -3,3 +3,8 @@
 //!
 //! Getman's front ends (the browser UI, the terminal UI and the command
 //! line) are thin layers over this crate.
+
+mod lenient;
+pub mod model;
+
+pub use model::{Auth, Body, Environment, Folder, KeyValue, Request, Settings, Vars};
