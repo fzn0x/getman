@@ -1,0 +1,20 @@
+{
+  "name": "getman-site",
+  "private": true,
+  "version": "0.0.0",
+  "description": "The Getman documentation site, built from docs/ for GitHub Pages",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "preview": "node build.mjs && node serve.mjs",
+    "check": "prettier --check ."
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "devDependencies": {
+    "marked": "18.0.14",
+    "prettier": "^3.9.10",
+    "shiki": "4.4.3"
+  }
+}
