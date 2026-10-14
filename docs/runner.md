@@ -15,10 +15,10 @@ getman run -e staging          # with an environment
 ```text
 Orders API with the staging environment: 3 requests
 
-  ✓ POST    Create order  201 Created 182 ms · 96 B
+  ✓ POST    Create order   201 Created 182 ms · 96 B
       ✓ status == 201
       ✓ json.id exists
-  ✗ GET     Get order  404 Not Found 41 ms · 23 B
+  ✗ GET     Get order      404 Not Found 41 ms · 23 B
       ✗ status == 200
         status is 404; expected == 200
   ✓ DELETE  Archive order  204 No Content 37 ms · 0 B

@@ -203,11 +203,11 @@ down.
 ## Limits
 
 A script may run for 10 seconds (`--script-timeout` changes it for runs)
-and use 256 MiB of memory. A script that fails is reported with its line
-number:
+and use 256 MiB of memory. A script that fails is reported with where it
+came from and its line number:
 
 ```text
-script in folder "Orders" failed: ReferenceError: tokn is not defined (line 3)
+script in folder "Orders": ReferenceError: tokn is not defined (line 3)
 ```
 
 A failing pre-request script stops the request from being sent, and the
