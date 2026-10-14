@@ -1,0 +1,601 @@
+/* Getman — a type specimen for API work.
+   Newsprint paper and rich ink, one synthetic red, a bitmap face at whole
+   pixel multiples for captions and the few numbers worth a glance, and
+   smooth faces for everything people read and type. */
+
+@font-face {
+  font-family: "Departure Mono";
+  src: url("/fonts/DepartureMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+:root {
+  color-scheme: light;
+
+  /* The ramp from paper to ink. Every neutral comes from it. */
+  --t0: #f2f0eb;
+  --t1: #e8e5de;
+  --t2: #dcd8cf;
+  --t3: #c9c5bb;
+  --t4: #aeaaa0;
+  --t5: #8d8a82;
+  --t6: #6b6862;
+  --t7: #4f4d48;
+  --t8: #363531;
+  --t9: #1f1e1c;
+  --t10: #0a0a0a;
+
+  --paper: var(--t0);
+  --field: #fbfaf7;
+  --sunken: var(--t1);
+  --ink: var(--t10);
+  --ink-2: var(--t7);
+  --ink-3: var(--t6);
+  --rule: var(--t10);
+  --rule-2: var(--t3);
+  --rule-3: var(--t2);
+
+  --accent: #e5011a;
+  --accent-hover: #c00016;
+  --accent-ink: #ffffff;
+  --accent-text: #c4001a;
+  --accent-wash: #fbe3e5;
+
+  --ok: #0e7a3d;
+  --redirect: #1e4fd0;
+  --error: #c4001a;
+  --warn: #a35a00;
+  --ok-wash: #e2f0e6;
+  --warn-wash: #f7ead6;
+
+  --m-get: #0e7a3d;
+  --m-post: #a35a00;
+  --m-put: #1e4fd0;
+  --m-patch: #7b3fb3;
+  --m-delete: #c4001a;
+  --m-other: var(--t6);
+
+  --var-ink: #7b3fb3;
+  --var-wash: #efe6f8;
+  --var-missing: #c4001a;
+
+  --font-bitmap: "Departure Mono", ui-monospace, monospace;
+  --font-ui:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-code:
+    ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* The bitmap face only at whole multiples of its pixel grid. */
+  --b1: 11px;
+  --b2: 22px;
+  --b3: 33px;
+  --b4: 44px;
+  --b8: 88px;
+
+  /* The smooth faces in five steps. */
+  --fs-meta: 12px;
+  --fs-ui: 13px;
+  --fs-code: 13px;
+  --fs-title: 15px;
+  --fs-lead: 18px;
+
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+
+  --control: 28px;
+  --bar: 40px;
+
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --t0: #0e0e0d;
+    --t1: #181816;
+    --t2: #23221f;
+    --t3: #33322e;
+    --t4: #4d4b46;
+    --t5: #6d6a64;
+    --t6: #918e86;
+    --t7: #b4b1a8;
+    --t8: #d2cfc6;
+    --t9: #e6e3da;
+    --t10: #f2f0eb;
+    --field: #141412;
+    --rule: #8a877f;
+    --accent: #ff2a3d;
+    --accent-hover: #ff4a5a;
+    --accent-ink: #0e0e0d;
+    --accent-text: #ff5a68;
+    --accent-wash: #3a1418;
+    --ok: #45c47a;
+    --redirect: #7aa2ff;
+    --error: #ff5a68;
+    --warn: #f0a33a;
+    --ok-wash: #12301d;
+    --warn-wash: #33240f;
+    --m-get: #4cc27e;
+    --m-post: #f0a33a;
+    --m-put: #7aa2ff;
+    --m-patch: #c58cff;
+    --m-delete: #ff5a68;
+    --var-ink: #c58cff;
+    --var-wash: #2a1d38;
+    --var-missing: #ff5a68;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --t0: #0e0e0d;
+  --t1: #181816;
+  --t2: #23221f;
+  --t3: #33322e;
+  --t4: #4d4b46;
+  --t5: #6d6a64;
+  --t6: #918e86;
+  --t7: #b4b1a8;
+  --t8: #d2cfc6;
+  --t9: #e6e3da;
+  --t10: #f2f0eb;
+  --field: #141412;
+  --rule: #8a877f;
+  --accent: #ff2a3d;
+  --accent-hover: #ff4a5a;
+  --accent-ink: #0e0e0d;
+  --accent-text: #ff5a68;
+  --accent-wash: #3a1418;
+  --ok: #45c47a;
+  --redirect: #7aa2ff;
+  --error: #ff5a68;
+  --warn: #f0a33a;
+  --ok-wash: #12301d;
+  --warn-wash: #33240f;
+  --m-get: #4cc27e;
+  --m-post: #f0a33a;
+  --m-put: #7aa2ff;
+  --m-patch: #c58cff;
+  --m-delete: #ff5a68;
+  --var-ink: #c58cff;
+  --var-wash: #2a1d38;
+  --var-missing: #ff5a68;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: var(--fs-ui) / 1.45 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+::selection {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+  color: inherit;
+  caret-color: var(--accent);
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: var(--accent-text);
+  text-underline-offset: 3px;
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px dotted var(--ink);
+  outline-offset: 1px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--t4) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--t4);
+  border: 3px solid var(--paper);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--t6);
+}
+
+/* ---- The bitmap face ----------------------------------------------------- */
+
+.bitmap {
+  font-family: var(--font-bitmap);
+  font-size: var(--b1);
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+  font-weight: 400;
+}
+
+.mono {
+  font-family: var(--font-code);
+  font-size: var(--fs-code);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--ink-3);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---- Controls ---------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  height: var(--control);
+  padding: 0 var(--s3);
+  border: 1px solid var(--rule);
+  background: var(--field);
+  color: var(--ink);
+  font-family: var(--font-bitmap);
+  font-size: var(--b1);
+  line-height: 1;
+  text-transform: uppercase;
+  -webkit-font-smoothing: none;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--accent-ink);
+}
+
+.btn.quiet {
+  border-color: transparent;
+  background: transparent;
+}
+
+.btn.quiet:hover:not(:disabled) {
+  background: var(--sunken);
+  color: var(--ink);
+}
+
+.btn.danger:hover:not(:disabled) {
+  background: var(--error);
+  border-color: var(--error);
+  color: var(--paper);
+}
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-2);
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.input,
+.select {
+  height: var(--control);
+  min-width: 0;
+  padding: 0 var(--s2);
+  border: 1px solid var(--rule-2);
+  background: var(--field);
+  color: var(--ink);
+  font-size: var(--fs-ui);
+}
+
+.input::placeholder,
+textarea::placeholder {
+  color: var(--ink-3);
+  opacity: 1;
+}
+
+.input:hover,
+.select:hover {
+  border-color: var(--t5);
+}
+
+.input:focus,
+.select:focus,
+textarea:focus {
+  border-color: var(--ink);
+}
+
+.input.mono {
+  font-family: var(--font-code);
+}
+
+.select {
+  appearance: none;
+  padding-right: 22px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),
+    linear-gradient(-45deg, transparent 50%, var(--ink-2) 50%);
+  background-position:
+    calc(100% - 12px) 12px,
+    calc(100% - 8px) 12px;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+}
+
+textarea.input {
+  height: auto;
+  padding: var(--s2);
+  resize: vertical;
+}
+
+.check {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border: 1px solid var(--ink-2);
+  background: var(--field);
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+  flex: none;
+}
+
+.check::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  background: var(--ink);
+  transform: scale(0);
+}
+
+.check:checked::after {
+  transform: scale(1);
+}
+
+/* ---- Tabs ------------------------------------------------------------------- */
+
+.tablist {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-height: 32px;
+  border-bottom: 1px solid var(--rule-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tablist::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font-family: var(--font-bitmap);
+  font-size: var(--b1);
+  text-transform: uppercase;
+  -webkit-font-smoothing: none;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tab[aria-selected="true"] {
+  color: var(--ink);
+}
+
+.tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: var(--s2);
+  right: var(--s2);
+  bottom: -1px;
+  height: 3px;
+  background: var(--ink);
+}
+
+.tab .count {
+  color: var(--ink-3);
+}
+
+.tab .count.bad {
+  color: var(--error);
+}
+
+/* ---- Method and status marks ----------------------------------------------- */
+
+.method {
+  font-family: var(--font-bitmap);
+  font-size: var(--b1);
+  text-transform: uppercase;
+  -webkit-font-smoothing: none;
+  color: var(--m-other);
+}
+
+.method.get {
+  color: var(--m-get);
+}
+.method.post {
+  color: var(--m-post);
+}
+.method.put {
+  color: var(--m-put);
+}
+.method.patch {
+  color: var(--m-patch);
+}
+.method.delete {
+  color: var(--m-delete);
+}
+
+.status-ok {
+  color: var(--ok);
+}
+.status-redirect {
+  color: var(--redirect);
+}
+.status-client,
+.status-server {
+  color: var(--error);
+}
+
+/* ---- Halftone surfaces ---------------------------------------------------- */
+
+.halftone {
+  background-image: radial-gradient(circle, var(--ink) 0.8px, transparent 1.2px);
+  background-size: 4px 4px;
+}
+
+.halftone-soft {
+  background-image: radial-gradient(circle, var(--t4) 0.8px, transparent 1.2px);
+  background-size: 4px 4px;
+}
+
+/* ---- Empty states ------------------------------------------------------------ */
+
+.empty {
+  display: grid;
+  place-content: center;
+  justify-items: start;
+  gap: var(--s3);
+  height: 100%;
+  padding: var(--s6);
+  color: var(--ink-2);
+}
+
+.empty h2 {
+  margin: 0;
+  font-family: var(--font-bitmap);
+  font-size: var(--b3);
+  font-weight: 400;
+  line-height: 1;
+  text-transform: uppercase;
+  color: var(--ink);
+  -webkit-font-smoothing: none;
+}
+
+.empty p {
+  margin: 0;
+  max-width: 52ch;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 2px 4px;
+  border: 1px solid var(--rule-2);
+  border-bottom-width: 2px;
+  background: var(--field);
+  color: var(--ink-2);
+  font-family: var(--font-bitmap);
+  font-size: var(--b1);
+  line-height: 1;
+  text-align: center;
+  -webkit-font-smoothing: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
