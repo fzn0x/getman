@@ -17,6 +17,7 @@ indexmap = { version = "2", features = ["serde"] }
 md-5 = "0.10"
 mime_guess = "2"
 percent-encoding = "2"
+regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "cookies", "gzip", "brotli", "deflate", "multipart", "system-proxy", "socks", "stream"] }
 reqwest_cookie_store = "0.10"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }

@@ -5,6 +5,7 @@
 //! line) are thin layers over this crate.
 
 pub mod auth;
+pub mod checks;
 pub mod dynamic;
 mod error;
 pub mod http;
