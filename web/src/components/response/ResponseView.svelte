@@ -15,6 +15,12 @@
   const failing = $derived(
     results.filter((r) => !r.passed).length + (execution?.script_errors.length ?? 0),
   );
+  // `{{$env.NAME}}` without the GETMAN_ prefix is refused, not unset.
+  const refusedEnv = $derived(
+    (execution?.missing_variables ?? []).some(
+      (name) => name.startsWith("$env.") && !name.startsWith("$env.GETMAN_"),
+    ),
+  );
 
   const cookies = $derived.by(() => {
     if (!response) return [];
@@ -95,6 +101,8 @@
             execution.missing_variables.length - 1
               ? ", "
               : ""}{/each}. They were sent as written.
+          {#if refusedEnv}Only environment variables named <code>GETMAN_*</code> can be read with
+            <code>{"{{$env.NAME}}"}</code>.{/if}
         </p>
         <button class="btn quiet" onclick={() => openEnvironments()}>Environments</button>
       </div>
