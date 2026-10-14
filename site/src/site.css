@@ -238,7 +238,7 @@ a {
 }
 
 a:hover {
-  text-decoration-color: var(--accent);
+  text-decoration-color: var(--ink);
 }
 
 :focus {
@@ -303,7 +303,7 @@ pre {
 kbd {
   display: inline-block;
   min-width: 20px;
-  padding: 3px 5px;
+  padding: 2px 4px;
   border: 1px solid var(--rule-2);
   border-bottom-width: 2px;
   background: var(--field);
@@ -422,7 +422,7 @@ kbd {
 .foot-mark {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--s2);
   color: var(--ink);
   font-size: var(--b2);
   line-height: 1;
@@ -1066,8 +1066,8 @@ kbd {
 }
 
 .more a:hover {
-  color: var(--accent-text);
-  border-color: var(--accent);
+  background: var(--ink);
+  color: var(--paper);
 }
 
 .tree {
@@ -1659,10 +1659,13 @@ h3:hover .anchor {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: inherit;
+  color: var(--ink-3);
   font-size: var(--b1);
   line-height: 1;
-  opacity: 0.75;
+}
+
+.pager a:hover .bitmap {
+  color: var(--t3);
 }
 
 .pager .next {
@@ -1747,13 +1750,15 @@ h3:hover .anchor {
   animation: rise 160ms steps(3) both;
 }
 
+/* The app's dialog backdrop: a paper wash under an ink dot screen. */
 .palette::backdrop {
-  background: radial-gradient(
-      circle,
-      color-mix(in srgb, #0a0a0a 32%, transparent) 1px,
-      transparent 1.6px
-    )
-    0 0 / 4px 4px;
+  background: color-mix(in srgb, var(--t0) 40%, transparent);
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--t10) 22%, transparent) 0.8px,
+    transparent 1.2px
+  );
+  background-size: 4px 4px;
 }
 
 @keyframes rise {
@@ -1768,7 +1773,11 @@ h3:hover .anchor {
   align-items: center;
   gap: var(--s3);
   padding: 0 var(--s4);
-  border-bottom: 2px solid var(--accent);
+  border-bottom: 1px solid var(--rule);
+}
+
+.palette-input:focus-within {
+  border-bottom-color: var(--accent);
 }
 
 .palette-input input {
