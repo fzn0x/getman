@@ -12,15 +12,15 @@ keywords = ["api", "http", "rest", "client", "testing"]
 categories = ["command-line-utilities", "development-tools::testing", "web-programming::http-client"]
 
 [dependencies]
-anstream = "0.6"
+anstream = "1.0"
 anstyle = "1"
 axum = "0.8"
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }
 crossterm = { version = "0.29", features = ["event-stream"] }
-dirs = "6"
+dirs = "7"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 getman-core.workspace = true
-getrandom = "0.3"
+getrandom = "0.4"
 mime_guess = "2"
 open = "5"
 ratatui = "0.30"

@@ -9,14 +9,14 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-base64 = "0.22"
+base64 = "0.23"
 cookie_store = "0.22"
 csv = "1"
 fastrand = "2"
 hex = "0.4"
-hmac = "0.12"
+hmac = "0.13"
 indexmap = { version = "2", features = ["serde"] }
-md-5 = "0.10"
+md-5 = "0.11"
 mime_guess = "2"
 percent-encoding = "2"
 regex = "1"
@@ -27,8 +27,8 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 serde_yaml_ng = "0.10"
-sha1 = "0.10"
-sha2 = "0.10"
+sha1 = "0.11"
+sha2 = "0.11"
 thiserror = "2"
 tokio = { version = "1", features = ["rt", "macros", "time", "fs", "sync"] }
 url = "2"
