@@ -46,6 +46,9 @@ pub(crate) enum Command {
     /// Serve the saved examples of the workspace or a folder as a mock API
     /// on 127.0.0.1.
     Mock(MockArgs),
+    /// Let AI agents use the workspace: a Model Context Protocol server on
+    /// standard input and output.
+    Mcp(McpArgs),
 }
 
 #[derive(Debug, Args, Default)]
@@ -268,6 +271,13 @@ pub(crate) struct MockArgs {
     /// Milliseconds to wait before each answer.
     #[arg(long, value_name = "MS", default_value_t = 0)]
     pub(crate) delay: u64,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct McpArgs {
+    /// Workspace directory. Defaults to the workspace containing the
+    /// current directory.
+    pub(crate) dir: Option<PathBuf>,
 }
 
 fn parse_var(text: &str) -> Result<(String, String), String> {

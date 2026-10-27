@@ -3,11 +3,13 @@
 //! One binary with three front ends over a workspace of plain YAML files:
 //! the browser UI served on 127.0.0.1 (`getman`), a terminal UI
 //! (`getman tui`), and a command line for scripts and CI (`getman run`,
-//! `getman send`, `getman import`, `getman export`).
+//! `getman send`, `getman import`, `getman export`), with a mock server
+//! (`getman mock`) and a server for AI agents (`getman mcp`).
 
 mod cli;
 mod commands;
 mod examples;
+mod mcp;
 mod mock;
 mod report;
 mod runs;

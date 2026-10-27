@@ -22,6 +22,11 @@ pub(crate) async fn dispatch(cli: Cli) -> Outcome {
         Some(Command::Import(args)) => import::import(&args),
         Some(Command::Export(args)) => export::export(&args),
         Some(Command::Mock(args)) => mock::mock(args).await,
+        Some(Command::Mcp(args)) => {
+            let workspace = crate::workspaces::find(args.dir.as_deref())?;
+            crate::mcp::serve(workspace).await?;
+            Ok(ExitCode::SUCCESS)
+        }
         Some(Command::Open(args)) => open(&args).await,
         Some(Command::Tui(args)) => {
             let workspace = crate::workspaces::find_or_personal(args.dir.as_deref())?;
