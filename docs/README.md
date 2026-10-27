@@ -6,6 +6,7 @@ These pages are also published at <https://fzn0x.github.io/getman/>.
 
 - [Getting started](getting-started.md): install, first requests, keyboard
 - [Why Getman](why-getman.md): how it compares with Postman, and moving over
+- [Desktop app](desktop.md): install on Windows, macOS and Linux, updates
 
 **Guides**
 
