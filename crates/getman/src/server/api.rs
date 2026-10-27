@@ -77,6 +77,9 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/example/body", post(example_body))
         .route("/example/rename", post(rename_example))
         .route("/example/delete", post(delete_example))
+        .route("/mocks", get(list_mocks))
+        .route("/mock/start", post(start_mock))
+        .route("/mock/stop", post(stop_mock))
 }
 
 /// An error answered as `{"error": "..."}` with a fitting status.
@@ -733,6 +736,86 @@ async fn rename_example(State(state): Shared, Json(arg): Json<RenameExample>) ->
 async fn delete_example(State(state): Shared, Json(arg): Json<ExampleName>) -> ApiResult {
     getman_core::examples::delete(state.workspace(), &arg.path, &arg.name)?;
     examples_of(&state, &arg.path)
+}
+
+// ---- Mock servers -----------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct StartMock {
+    #[serde(default)]
+    folder: String,
+    #[serde(default)]
+    port: Option<u16>,
+    #[serde(default)]
+    delay_ms: u64,
+}
+
+#[derive(Deserialize)]
+struct FolderArg {
+    #[serde(default)]
+    folder: String,
+}
+
+fn describe_mock(mock: &crate::mock::Mock) -> Value {
+    json!({
+        "folder": mock.folder,
+        "url": mock.url(),
+        "port": mock.port,
+        "delay_ms": mock.delay_ms,
+        "mocked": mock.mocked(),
+        "hits": mock.hits(),
+    })
+}
+
+async fn list_mocks(State(state): Shared) -> Json<Value> {
+    let mocks = state.mocks.lock().expect("mocks lock");
+    let mut list: Vec<Value> = mocks.values().map(describe_mock).collect();
+    list.sort_by(|a, b| a["folder"].as_str().cmp(&b["folder"].as_str()));
+    Json(json!(list))
+}
+
+async fn start_mock(State(state): Shared, Json(arg): Json<StartMock>) -> ApiResult {
+    let folder = arg.folder.trim_matches('/').to_owned();
+    if let Some(running) = state.mocks.lock().expect("mocks lock").get(&folder) {
+        return Ok(Json(describe_mock(running)));
+    }
+    let listener = crate::mock::bind(arg.port).await.map_err(bad)?;
+    let label = if folder.is_empty() {
+        state.workspace().name()
+    } else {
+        folder.clone()
+    };
+    let mock = crate::mock::start(
+        state.workspace().clone(),
+        &folder,
+        listener,
+        Duration::from_millis(arg.delay_ms),
+        Box::new(move |hit: &crate::mock::Hit| {
+            crate::style::note(&format!(
+                "mock {label}: {} {} -> {}{}",
+                hit.method,
+                hit.path,
+                hit.status,
+                hit.example
+                    .as_ref()
+                    .map(|name| format!(" ({name})"))
+                    .unwrap_or_default()
+            ));
+        }),
+    )
+    .map_err(|e| ApiError(StatusCode::NOT_FOUND, e))?;
+    let described = describe_mock(&mock);
+    state.mocks.lock().expect("mocks lock").insert(folder, mock);
+    Ok(Json(described))
+}
+
+async fn stop_mock(State(state): Shared, Json(arg): Json<FolderArg>) -> ApiResult {
+    let folder = arg.folder.trim_matches('/');
+    let mock = state.mocks.lock().expect("mocks lock").remove(folder);
+    if let Some(mock) = mock {
+        mock.stop();
+    }
+    Ok(done())
 }
 
 // ---- Import -------------------------------------------------------------------

@@ -37,6 +37,8 @@ pub(crate) struct AppState {
     pub(crate) port: u16,
     pub(crate) runs: Mutex<HashMap<String, Arc<AtomicBool>>>,
     pub(crate) history: history::History,
+    /// Mock servers started from the UI, by folder.
+    pub(crate) mocks: Mutex<HashMap<String, crate::mock::Mock>>,
 }
 
 impl AppState {
@@ -60,6 +62,7 @@ pub(crate) async fn serve(
         token,
         port,
         runs: Mutex::new(HashMap::new()),
+        mocks: Mutex::new(HashMap::new()),
     });
     let app = router(Arc::clone(&state));
 
@@ -206,6 +209,7 @@ mod tests {
             token: "secret-token".into(),
             port: 7878,
             runs: Mutex::new(HashMap::new()),
+            mocks: Mutex::new(HashMap::new()),
         });
         (dir, router(state))
     }
@@ -451,5 +455,80 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn mock_servers_start_and_stop_per_folder() {
+        use getman_core::http::{HttpClient, Outgoing, OutgoingBody, Transport};
+        use getman_core::model::{Example, Request};
+        use serde_json::json;
+
+        let (dir, app) = app();
+        let workspace = Workspace::open(dir.path()).unwrap();
+        let folder = workspace.create_folder("", "Users").unwrap();
+        workspace
+            .create_request(
+                &folder,
+                "Me",
+                &Request {
+                    url: "{{baseUrl}}/me".into(),
+                    examples: vec![Example {
+                        name: "Ada".into(),
+                        body: "ada".into(),
+                        ..Example::default()
+                    }],
+                    ..Request::default()
+                },
+            )
+            .unwrap();
+
+        let (status, started) = read(
+            app.clone()
+                .oneshot(api(
+                    "/api/mock/start",
+                    Some(json!({ "folder": folder, "port": 0 })),
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{started}");
+        assert_eq!(started["mocked"][0]["path"], "/me");
+        let url = started["url"].as_str().unwrap().to_owned();
+
+        let outgoing = Outgoing {
+            method: "GET".into(),
+            url: format!("{url}/me"),
+            headers: Vec::new(),
+            body: OutgoingBody::None,
+        };
+        let answer = HttpClient::new()
+            .send(&outgoing, Transport::default())
+            .await
+            .unwrap();
+        assert_eq!(answer.text(), "ada");
+
+        let (_, list) = read(app.clone().oneshot(api("/api/mocks", None)).await.unwrap()).await;
+        assert_eq!(list[0]["folder"], "users");
+        assert_eq!(list[0]["hits"][0]["path"], "/me");
+
+        let (status, _) = read(
+            app.clone()
+                .oneshot(api("/api/mock/start", Some(json!({ "folder": "nope" }))))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+
+        read(
+            app.clone()
+                .oneshot(api("/api/mock/stop", Some(json!({ "folder": "users" }))))
+                .await
+                .unwrap(),
+        )
+        .await;
+        let (_, list) = read(app.clone().oneshot(api("/api/mocks", None)).await.unwrap()).await;
+        assert_eq!(list, json!([]));
     }
 }
