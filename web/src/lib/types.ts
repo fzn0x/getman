@@ -30,17 +30,130 @@ export type Body =
 
 export type BodyType = Body["type"];
 
+export type OAuth2Grant = "client_credentials" | "password" | "authorization_code" | "implicit";
+
 export interface OAuth2 {
   type: "oauth2";
-  grant: "client_credentials" | "password";
+  grant: OAuth2Grant;
+  auth_url?: string;
   token_url: string;
   client_id: string;
   client_secret?: string;
+  callback_url?: string;
+  pkce?: "off" | "s256" | "plain";
   scope?: string;
   audience?: string;
+  resource?: string;
   username?: string;
   password?: string;
   client_auth: "basic" | "body";
+  auth_params?: KeyValue[];
+  token_params?: KeyValue[];
+  prefix?: string;
+  token_in?: "header" | "query";
+}
+
+export interface AwsSigV4 {
+  type: "aws_sigv4";
+  access_key: string;
+  secret_key: string;
+  session_token?: string;
+  region: string;
+  service: string;
+  in?: "header" | "query";
+  expires_in?: number | null;
+  unsigned_payload?: boolean;
+}
+
+export type JwtAlgorithm =
+  | "HS256"
+  | "HS384"
+  | "HS512"
+  | "RS256"
+  | "RS384"
+  | "RS512"
+  | "PS256"
+  | "PS384"
+  | "PS512"
+  | "ES256"
+  | "ES384";
+
+export interface Jwt {
+  type: "jwt";
+  algorithm?: JwtAlgorithm;
+  secret?: string;
+  secret_base64?: boolean;
+  private_key?: string;
+  private_key_file?: string;
+  header?: string;
+  payload?: string;
+  issued_at?: boolean;
+  expires_in?: number | null;
+  in?: "header" | "query";
+  prefix?: string;
+  param?: string;
+}
+
+export interface Asap {
+  type: "asap";
+  algorithm?: JwtAlgorithm | null;
+  issuer: string;
+  subject?: string;
+  audience: string;
+  key_id: string;
+  private_key?: string;
+  private_key_file?: string;
+  claims?: string;
+  expires_in?: number | null;
+}
+
+export type OAuth1Method =
+  | "HMAC-SHA1"
+  | "HMAC-SHA256"
+  | "HMAC-SHA512"
+  | "PLAINTEXT"
+  | "RSA-SHA1"
+  | "RSA-SHA256"
+  | "RSA-SHA512";
+
+export interface OAuth1 {
+  type: "oauth1";
+  signature_method?: OAuth1Method;
+  consumer_key: string;
+  consumer_secret?: string;
+  token?: string;
+  token_secret?: string;
+  private_key?: string;
+  private_key_file?: string;
+  realm?: string;
+  callback?: string;
+  verifier?: string;
+  version?: string;
+  timestamp?: string;
+  nonce?: string;
+  body_hash?: boolean;
+  in?: "header" | "query" | "body";
+}
+
+export interface Hawk {
+  type: "hawk";
+  id: string;
+  key: string;
+  algorithm?: "sha256" | "sha1";
+  ext?: string;
+  app?: string;
+  dlg?: string;
+  payload_hash?: boolean;
+}
+
+export interface EdgeGrid {
+  type: "edgegrid";
+  client_token: string;
+  client_secret: string;
+  access_token: string;
+  base_url?: string;
+  headers_to_sign?: string[];
+  max_body?: number | null;
 }
 
 export type Auth =
@@ -50,7 +163,13 @@ export type Auth =
   | { type: "bearer"; token: string; prefix?: string }
   | { type: "api_key"; key: string; value: string; in: "header" | "query" }
   | { type: "digest"; username: string; password: string }
-  | OAuth2;
+  | OAuth2
+  | AwsSigV4
+  | Jwt
+  | OAuth1
+  | Hawk
+  | EdgeGrid
+  | Asap;
 
 export type AuthType = Auth["type"];
 
@@ -301,4 +420,17 @@ export interface Token {
   token_type: string;
   expires_in: number | null;
   scope: string | null;
+  /** Milliseconds since the Unix epoch. */
+  expires_at?: number;
+  refreshable?: boolean;
+}
+
+/** A browser sign-in Getman started. */
+export interface Authorization {
+  id: string;
+  url: string;
+  redirect_uri: string;
+  notes: string[];
+  /** Whether Getman could open the system's browser. */
+  opened: boolean;
 }

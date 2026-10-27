@@ -19,6 +19,7 @@ import type {
   ResolvedVar,
   RunEvent,
   Token,
+  Authorization,
   WorkspaceInfo,
 } from "./types";
 
@@ -107,6 +108,13 @@ export interface SendArgs {
   persist?: boolean;
 }
 
+/** OAuth 2.0 settings, and where they are, for resolving variables. */
+export interface OAuthArgs {
+  path?: string | null;
+  auth: Auth;
+  environment?: string | null;
+}
+
 export interface RunArgs {
   target: string;
   environment?: string | null;
@@ -155,8 +163,12 @@ export const api = {
   languages: () => call<Language[]>("GET", "/languages"),
   variables: (args: SendArgs) => post<ResolvedVar[]>("/variables", args),
   dynamic: () => call<DynamicVar[]>("GET", "/dynamic"),
-  oauthToken: (args: { path?: string | null; auth: Auth; environment?: string | null }) =>
-    post<Token>("/oauth2/token", args),
+  oauthToken: (args: OAuthArgs) => post<Token>("/oauth2/token", args),
+  oauthAuthorize: (args: OAuthArgs) => post<Authorization>("/oauth2/authorize", args),
+  oauthWait: (id: string) => post<Token>("/oauth2/wait", { id }),
+  oauthCancel: (id: string) => post("/oauth2/cancel", { id }),
+  oauthStatus: (args: OAuthArgs) => post<{ token: Token | null }>("/oauth2/status", args),
+  oauthClear: (args: OAuthArgs) => post<{ cleared: boolean }>("/oauth2/clear", args),
 
   importText: (text: string, folder = "", root = false) =>
     post<ImportReport>("/import", { text, folder, root }),
