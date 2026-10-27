@@ -9,6 +9,7 @@
 mod api;
 mod assets;
 mod history;
+mod presets;
 mod token;
 
 use std::collections::HashMap;

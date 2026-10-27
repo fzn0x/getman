@@ -24,6 +24,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::AppState;
+use super::presets::{self, Preset};
 
 type Shared = State<Arc<AppState>>;
 
@@ -70,6 +71,10 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/history/read", post(read_history))
         .route("/history/clear", post(clear_history))
         .route("/oauth2/token", post(oauth2_token))
+        .route(
+            "/header-presets",
+            get(read_header_presets).put(write_header_presets),
+        )
 }
 
 /// An error answered as `{"error": "..."}` with a fitting status.
@@ -697,5 +702,16 @@ async fn read_history(State(state): Shared, Json(arg): Json<HistoryId>) -> ApiRe
 
 async fn clear_history(State(state): Shared) -> ApiResult {
     state.history.clear();
+    Ok(done())
+}
+
+// ---- Header presets -------------------------------------------------------------
+
+async fn read_header_presets(State(state): Shared) -> ApiResult {
+    Ok(Json(json!(presets::read(state.workspace())?)))
+}
+
+async fn write_header_presets(State(state): Shared, Json(list): Json<Vec<Preset>>) -> ApiResult {
+    presets::write(state.workspace(), &list)?;
     Ok(done())
 }
