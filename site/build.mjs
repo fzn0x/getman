@@ -37,6 +37,7 @@ export const sections = [
       "scripts",
       "runner",
       "examples-and-mocks",
+      "mcp",
       "import-export",
       "terminal",
     ],
