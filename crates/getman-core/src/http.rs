@@ -1246,6 +1246,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn ci_builds_include_http3() {
         // A RUSTFLAGS variable in a workflow would replace the cfg that
         // .cargo/config.toml sets, and releases would lose HTTP/3.
