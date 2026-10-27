@@ -40,6 +40,7 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
+import { trimUrl, URL_PATTERN } from "./bytes";
 import { iconRects, type IconName } from "./icons";
 
 /** A pixel icon as a DOM node, for places outside Svelte. */
@@ -147,6 +148,13 @@ export const theme = EditorView.theme({
     backgroundColor: "var(--var-wash)",
     borderRadius: "0",
   },
+  ".cm-gm-link": {
+    textDecoration: "underline",
+    textDecorationColor: "color-mix(in srgb, currentColor 50%, transparent)",
+    textUnderlineOffset: "3px",
+    cursor: "pointer",
+  },
+  ".cm-gm-link:hover": { textDecorationColor: "currentColor" },
   ".cm-gm-var-missing": {
     color: "var(--var-missing)",
     textDecoration: "underline dotted",
@@ -208,6 +216,49 @@ export function variableMarks(known: Set<string> | null): Extension {
     },
     { decorations: (plugin) => plugin.decorations },
   );
+}
+
+/** Underlines web addresses and opens one in a new tab when clicked. */
+export function linkMarks(): Extension {
+  const decorator = new MatchDecorator({
+    regexp: new RegExp(URL_PATTERN.source, "g"),
+    decorate: (add, from, _to, match) => {
+      const url = trimUrl(match[0]);
+      if (url.length <= "https://".length) return;
+      add(
+        from,
+        from + url.length,
+        Decoration.mark({
+          class: "cm-gm-link",
+          attributes: { "data-url": url, title: `${url}\nClick to open it in a new tab` },
+        }),
+      );
+    },
+  });
+  return [
+    ViewPlugin.fromClass(
+      class {
+        decorations: DecorationSet;
+        constructor(view: EditorView) {
+          this.decorations = decorator.createDeco(view);
+        }
+        update(update: ViewUpdate) {
+          this.decorations = decorator.updateDeco(update, this.decorations);
+        }
+      },
+      { decorations: (plugin) => plugin.decorations },
+    ),
+    EditorView.domEventHandlers({
+      click: (event, view) => {
+        const link = (event.target as HTMLElement | null)?.closest<HTMLElement>(".cm-gm-link");
+        const url = link?.dataset.url;
+        // A drag that selects text is not a click on the link.
+        if (!url || event.button !== 0 || !view.state.selection.main.empty) return false;
+        window.open(url, "_blank", "noopener,noreferrer");
+        return true;
+      },
+    }),
+  ];
 }
 
 export interface VariableSource {
