@@ -241,10 +241,7 @@ for (const name of ["README", ...order]) {
 }
 
 // The landing page and the rest.
-writeFileSync(
-  join(out, "index.html"),
-  landing({ root: "./", assets, site, repo, highlight, codeBlock }),
-);
+writeFileSync(join(out, "index.html"), landing({ root: "./", assets, site, repo, pages: order }));
 writeFileSync(join(out, "404.html"), notFound({ root: site, assets, site }));
 writeFileSync(join(out, "search.json"), JSON.stringify(index));
 writeFileSync(

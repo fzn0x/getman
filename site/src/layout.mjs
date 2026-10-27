@@ -40,6 +40,15 @@ export function head({ root, assets, title, description, canonical, site }) {
     if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
   } catch (e) {}
   document.documentElement.classList.add("js");
+  // The visitor's system, so downloads and install commands match it.
+  var platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+  // Phones, tablets (iPadOS says Mac) and ChromeOS (which says Linux) get the general links.
+  var other = /Android|iPhone|iPad|iPod|CrOS/.test(navigator.userAgent) || (/Mac/.test(platform) && navigator.maxTouchPoints > 1);
+  document.documentElement.dataset.system = other ? "other"
+    : /Win/.test(platform) ? "windows"
+    : /Mac/.test(platform) ? "macos"
+    : /Linux/.test(platform) ? "linux"
+    : "other";
 </script>
 <script src="${root}${assets.js}" defer></script>
 </head>`;

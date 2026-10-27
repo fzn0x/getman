@@ -1,6 +1,6 @@
 /* Getman's site: the app's specimen world, set for reading.
    Tokens are the app's (web/src/styles/app.css); the site adds reading
-   sizes for the smooth faces and the plates on the landing page. */
+   sizes for the smooth faces and the landing page. */
 
 @font-face {
   font-family: "Departure Mono";
@@ -45,14 +45,6 @@
   --redirect: #1e4fd0;
   --error: #c4001a;
   --warn: #a35a00;
-  --ok-wash: #e2f0e6;
-  --error-wash: #fbe3e5;
-
-  --m-get: #0e7a3d;
-  --m-post: #a35a00;
-  --m-put: #1e4fd0;
-  --m-patch: #7b3fb3;
-  --m-delete: #c4001a;
 
   --var-ink: #7b3fb3;
   --var-wash: #efe6f8;
@@ -101,7 +93,7 @@
   --sh-token-string-expression: var(--ok);
   --sh-token-constant: var(--redirect);
   --sh-token-comment: var(--ink-3);
-  --sh-token-function: var(--m-post);
+  --sh-token-function: var(--warn);
   --sh-token-parameter: var(--ink-2);
   --sh-token-punctuation: var(--ink-3);
   --sh-token-link: var(--redirect);
@@ -132,13 +124,6 @@
     --redirect: #7aa2ff;
     --error: #ff5a68;
     --warn: #f0a33a;
-    --ok-wash: #12301d;
-    --error-wash: #3a1418;
-    --m-get: #4cc27e;
-    --m-post: #f0a33a;
-    --m-put: #7aa2ff;
-    --m-patch: #c58cff;
-    --m-delete: #ff5a68;
     --var-ink: #c58cff;
     --var-wash: #2a1d38;
     --dot-strength: 30%;
@@ -169,13 +154,6 @@
   --redirect: #7aa2ff;
   --error: #ff5a68;
   --warn: #f0a33a;
-  --ok-wash: #12301d;
-  --error-wash: #3a1418;
-  --m-get: #4cc27e;
-  --m-post: #f0a33a;
-  --m-put: #7aa2ff;
-  --m-patch: #c58cff;
-  --m-delete: #ff5a68;
   --var-ink: #c58cff;
   --var-wash: #2a1d38;
   --dot-strength: 30%;
@@ -501,240 +479,196 @@ kbd {
   gap: 2px;
 }
 
-/* ---- Landing: the opening ---------------------------------------------------- */
+/* ---- Landing ------------------------------------------------------------------ */
 
 .home main {
-  padding: 0 var(--gutter);
-}
-
-.hero {
-  max-width: 1360px;
+  max-width: calc(1040px + 2 * var(--gutter));
   margin: 0 auto;
-  padding-top: var(--s8);
+  padding: var(--s9) var(--gutter);
 }
 
-.hook {
+.intro h1 {
   margin: 0;
   font-size: var(--b4);
   line-height: 1;
-  text-wrap: balance;
 }
 
 .lead {
-  max-width: 62ch;
-  margin: var(--s5) 0 var(--s6);
-  color: var(--ink-2);
+  margin: var(--s4) 0 0;
   font-size: var(--fs-lead);
   line-height: 1.5;
+  text-wrap: pretty;
 }
 
-.install {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: stretch;
-  max-width: 920px;
-  height: 52px;
-  border: 2px solid var(--ink);
-  background: var(--field);
+.lead span {
+  display: block;
+  color: var(--ink-2);
 }
 
-.install .os {
-  display: flex;
-  border-right: 2px solid var(--ink);
-}
-
-.install select {
-  appearance: none;
-  height: 100%;
-  padding: 0 34px 0 var(--s4);
-  border: 0;
-  background-color: transparent;
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),
-    linear-gradient(-45deg, transparent 50%, var(--ink-2) 50%);
-  background-position:
-    calc(100% - 18px) 21px,
-    calc(100% - 14px) 21px;
-  background-size: 4px 4px;
-  background-repeat: no-repeat;
-  color: var(--ink);
-  font-family: var(--font-bitmap);
-  font-size: var(--b1);
-  line-height: 1;
-  text-transform: uppercase;
-  -webkit-font-smoothing: none;
-}
-
-.install select:hover {
-  background-color: var(--sunken);
-}
-
-.install option {
-  background: var(--field);
-  color: var(--ink);
-  font-family: var(--font-ui);
-  text-transform: none;
-}
-
-.command {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  padding: 0 var(--s4);
-  overflow-x: auto;
-  color: var(--ink);
-  font-size: 16px;
-  white-space: nowrap;
-  scrollbar-width: none;
-}
-
-.command::-webkit-scrollbar {
+/* Downloads and commands for other systems than the visitor's, which the
+   head script names; without script, the general download and the shell. */
+:root:not([data-system]) [data-for]:not([data-for~="other"]),
+:root[data-system="windows"] [data-for]:not([data-for~="windows"]),
+:root[data-system="macos"] [data-for]:not([data-for~="macos"]),
+:root[data-system="linux"] [data-for]:not([data-for~="linux"]),
+:root[data-system="other"] [data-for]:not([data-for~="other"]) {
   display: none;
 }
 
-.copy-command {
-  --corner: var(--field);
-  height: 100%;
-  min-width: 112px;
+.get {
+  display: grid;
+  gap: var(--s4);
+  margin-top: var(--s6);
+}
+
+.get .btn {
+  height: 44px;
   padding: 0 var(--s5);
-  border-left: 2px solid var(--ink);
 }
 
-.copy-command.btn.primary {
-  border-left: 2px solid var(--ink);
-}
-
-.copy-command.btn:not(.primary) {
-  border: 0;
-  border-left: 2px solid var(--ink);
-}
-
-.after-install {
-  margin: var(--s3) 0 0;
-  color: var(--ink-3);
-  font-size: var(--fs-ui);
-}
-
-.after-install code,
-.lead code {
-  color: var(--ink);
-}
-
-.after-install a {
-  color: var(--ink-2);
-}
-
-/* ---- Landing: the specimen plate --------------------------------------------- */
-
-.plate {
-  margin: var(--s7) 0 0;
-}
-
-.plate-tabs {
+.download {
   display: flex;
-  overflow-x: auto;
-  border: 1px solid var(--rule);
-  border-bottom: 0;
-  background: var(--sunken);
-  scrollbar-width: none;
-}
-
-/* Overflowing tab rows fade at the cut edge, as in the app. */
-.plate-tabs.fade-end {
-  mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
-}
-
-.plate-tabs.fade-start {
-  mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent);
-}
-
-.plate-tabs.fade-start.fade-end {
-  mask-image: linear-gradient(
-    to right,
-    transparent,
-    #000 40px,
-    #000 calc(100% - 40px),
-    transparent
-  );
-}
-
-.plate-tabs button {
-  position: relative;
-  display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--s2);
-  height: 40px;
-  padding: 0 var(--s4);
-  border: 0;
-  border-right: 1px solid var(--rule-2);
-  background: transparent;
-  color: var(--ink-2);
+  gap: var(--s3) var(--s5);
+}
+
+.download-note {
+  display: grid;
+  gap: 2px;
+  margin: 0;
   font-size: var(--fs-ui);
-  white-space: nowrap;
+  line-height: 1.4;
 }
 
-.plate-tabs button:hover {
-  color: var(--ink);
-  background: var(--t2);
+.download-note code,
+.download-note span[data-for] {
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
 }
 
-.plate-tabs button[aria-selected="true"] {
-  background: var(--paper);
-  color: var(--ink);
+.download-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--s4);
 }
 
-.plate-tabs button[aria-selected="true"]::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 3px;
-  background: var(--accent);
+.download-links a {
+  color: var(--ink-2);
 }
 
-.m {
-  font-family: var(--font-bitmap);
+.cli {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+}
+
+/* The install command, framed like the app's request line. */
+.command {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--rule);
+  background: var(--field);
+}
+
+.command-label {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--s3);
+  border-right: 1px solid var(--rule-2);
+  color: var(--ink-3);
   font-size: var(--b1);
   line-height: 1;
-  -webkit-font-smoothing: none;
 }
 
-.m.get {
-  color: var(--m-get);
+.command code {
+  flex: 1;
+  align-self: center;
+  min-width: 0;
+  padding: var(--s2) var(--s4);
+  font-size: var(--fs-code);
+  line-height: 1.5;
 }
 
-.m.post {
-  color: var(--m-post);
+.get .command .btn {
+  height: auto;
+  padding: 0 var(--s4);
+  border: 0;
+  border-left: 1px solid var(--rule);
 }
 
-.plate-body {
-  --tone: var(--ok);
-  --dot: color-mix(in srgb, var(--tone) var(--dot-strength), transparent);
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
-  gap: var(--s6);
-  min-height: 420px;
-  padding: var(--s6);
+.shot {
+  margin: var(--s8) 0 0;
+}
+
+.shot img {
+  display: block;
+  width: 100%;
   border: 1px solid var(--rule);
-  overflow: hidden;
-  /* Without script, a plain screen of dots. */
-  background: radial-gradient(circle, var(--dot) 1.4px, transparent 1.9px) 0 0 / 6px 6px;
 }
 
-.js .plate-body {
-  background: none;
+/* The screenshot follows the site's theme, toggle included. */
+.shot img.dark {
+  display: none;
 }
 
-.plate-body.tone-client,
-.plate-body.tone-server {
-  --tone: var(--error);
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .shot img.light {
+    display: none;
+  }
+
+  :root:not([data-theme="light"]) .shot img.dark {
+    display: block;
+  }
 }
 
-.plate-body.tone-redirect {
-  --tone: var(--redirect);
+:root[data-theme="dark"] .shot img.light {
+  display: none;
 }
+
+:root[data-theme="dark"] .shot img.dark {
+  display: block;
+}
+
+/* A few facts, ruled like the app's tables. */
+.facts {
+  margin-top: var(--s8);
+}
+
+.facts dl {
+  margin: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.facts div {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: var(--s4);
+  align-items: baseline;
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--rule-3);
+}
+
+.facts dt {
+  color: var(--ink-3);
+  font-size: var(--b1);
+  line-height: 1;
+}
+
+.facts dd {
+  margin: 0;
+}
+
+.facts code {
+  font-size: 0.88em;
+}
+
+.home .foot-inner {
+  max-width: 1040px;
+}
+
+/* ---- Response specimen, on the not-found page ------------------------------------ */
 
 .halftone {
   position: absolute;
@@ -745,48 +679,6 @@ kbd {
 
 .halftone circle {
   fill: var(--dot);
-}
-
-.plate-content {
-  display: contents;
-}
-
-.sheet,
-.result {
-  position: relative;
-}
-
-.sheet {
-  align-self: start;
-  border: 1px solid var(--rule);
-  background: var(--field);
-}
-
-.sheet-path {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  margin: 0;
-  padding: var(--s2) var(--s3);
-  border-bottom: 1px solid var(--rule-2);
-  color: var(--ink-2);
-  font-family: var(--font-code);
-  font-size: var(--fs-meta);
-}
-
-.sheet pre {
-  margin: 0;
-  padding: var(--s3) var(--s4) var(--s4);
-  overflow-x: auto;
-  font-size: var(--fs-code);
-  line-height: 1.6;
-}
-
-.result {
-  align-self: start;
-  display: grid;
-  gap: var(--s4);
-  justify-items: start;
 }
 
 .status {
@@ -803,13 +695,6 @@ kbd {
   line-height: 0.82;
 }
 
-/* Only a 5xx is reversed out of a red block, as in the app. */
-.tone-server .numeral {
-  padding: 4px 8px 0;
-  background: var(--error);
-  color: var(--paper);
-}
-
 .reason {
   padding: 4px 8px;
   background: var(--paper);
@@ -817,319 +702,8 @@ kbd {
   line-height: 1;
 }
 
-.sizes {
-  display: flex;
-  flex-wrap: wrap;
-  margin: 0;
-}
+/* ---- Tables ------------------------------------------------------------------- */
 
-.sizes div {
-  display: grid;
-  gap: var(--s1);
-  padding: var(--s2) var(--s4) var(--s2) var(--s3);
-  background: var(--paper);
-  border-left: 1px solid var(--rule-2);
-}
-
-.sizes div:first-child {
-  border-left: 0;
-}
-
-.sizes dt {
-  color: var(--ink-3);
-  font-family: var(--font-bitmap);
-  font-size: var(--b1);
-  line-height: 1;
-  text-transform: uppercase;
-  -webkit-font-smoothing: none;
-}
-
-.sizes dd {
-  margin: 0;
-  font-size: var(--fs-ui);
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-}
-
-.sizes dd.good {
-  color: var(--ok);
-}
-
-.sizes dd.bad {
-  color: var(--error);
-}
-
-.checks {
-  display: grid;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  max-width: 100%;
-}
-
-.checks li {
-  display: grid;
-  grid-template-columns: 20px auto;
-  column-gap: var(--s2);
-  align-items: center;
-  width: max-content;
-  max-width: 100%;
-  padding: var(--s1) var(--s3);
-  background: var(--paper);
-}
-
-.checks code {
-  font-size: var(--fs-ui);
-  overflow-wrap: anywhere;
-}
-
-.tick {
-  display: grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  color: var(--paper);
-}
-
-.pass .tick {
-  background: var(--ok);
-}
-
-.fail .tick {
-  background: var(--error);
-}
-
-.why {
-  grid-column: 2;
-  color: var(--error);
-  font-size: var(--fs-meta);
-}
-
-.caption {
-  margin: var(--s3) 0 0;
-  max-width: 72ch;
-  text-wrap: pretty;
-  color: var(--ink-3);
-  font-size: var(--fs-meta);
-  line-height: 1.5;
-}
-
-.plate > .caption {
-  max-width: none;
-  margin: 0;
-  padding: var(--s2) 0;
-  border-bottom: 1px solid var(--rule);
-}
-
-/* The plate sends: dots scan in four steps, a row of dots types on. */
-.plate-body.sending {
-  --tone: var(--ink-3);
-}
-
-.plate-body.sending .halftone circle {
-  animation: scan 0.6s steps(4) infinite;
-}
-
-.plate-body.sending .result {
-  visibility: hidden;
-}
-
-.plate-body.sending::after {
-  content: "";
-  position: absolute;
-  left: calc(5 / 11 * (100% - 3 * var(--s6)) + 2 * var(--s6));
-  top: var(--s6);
-  width: 3ch;
-  height: 66px;
-  font-size: var(--b8);
-  background-image: radial-gradient(circle, var(--ink-2) 4px, transparent 5px);
-  background-size: 22px 22px;
-  background-position: 0 44px;
-  background-repeat: repeat-x;
-  animation: type-on 0.6s steps(4) both;
-}
-
-@keyframes scan {
-  50% {
-    fill: color-mix(in srgb, var(--ink) 30%, transparent);
-  }
-}
-
-@keyframes type-on {
-  from {
-    clip-path: inset(0 100% 0 0);
-  }
-  to {
-    clip-path: inset(0 0 0 0);
-  }
-}
-
-/* ---- Landing: bands ----------------------------------------------------------- */
-
-.band {
-  max-width: 1360px;
-  margin: 0 auto;
-  padding: var(--s9) 0 0;
-}
-
-.band-head {
-  display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
-  gap: var(--s6);
-  align-items: start;
-  padding-bottom: var(--s5);
-  margin-bottom: var(--s6);
-  border-bottom: 1px solid var(--rule);
-}
-
-.band-head h2 {
-  margin: 0;
-  font-size: var(--b3);
-  line-height: 1;
-  text-wrap: balance;
-}
-
-.band-head p {
-  margin: 0;
-  max-width: 62ch;
-  color: var(--ink-2);
-}
-
-.band figure {
-  margin: 0;
-}
-
-.band h3 {
-  margin: 0 0 var(--s3);
-  font-size: var(--b1);
-  line-height: 1;
-}
-
-.pair {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--s6);
-  align-items: start;
-}
-
-.screen {
-  margin-bottom: var(--s7) !important;
-}
-
-.screen img {
-  display: block;
-  width: 100%;
-  border: 2px solid var(--ink);
-}
-
-/* The screenshot follows the site's theme, toggle included. */
-.screen img.dark {
-  display: none;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .screen img.light {
-    display: none;
-  }
-
-  :root:not([data-theme="light"]) .screen img.dark {
-    display: block;
-  }
-}
-
-:root[data-theme="dark"] .screen img.light {
-  display: none;
-}
-
-:root[data-theme="dark"] .screen img.dark {
-  display: block;
-}
-
-.more {
-  margin: var(--s5) 0 0;
-}
-
-.more a {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s2);
-  font-family: var(--font-bitmap);
-  font-size: var(--b1);
-  line-height: 1;
-  text-decoration: none;
-  text-transform: uppercase;
-  -webkit-font-smoothing: none;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--ink);
-}
-
-.more a:hover {
-  background: var(--ink);
-  color: var(--paper);
-}
-
-.tree {
-  margin: 0;
-  padding: var(--s4) var(--s5);
-  border: 1px solid var(--rule);
-  background: var(--field);
-  overflow-x: auto;
-  font-size: var(--fs-code);
-  line-height: 1.75;
-}
-
-.tree .commit,
-.tree .local {
-  padding: 1px 6px;
-  font-family: var(--font-bitmap);
-  font-size: var(--b1);
-  text-transform: uppercase;
-  -webkit-font-smoothing: none;
-}
-
-.tree .commit {
-  background: var(--ok-wash);
-  color: var(--ok);
-}
-
-.tree .local {
-  background: var(--ink);
-  color: var(--paper);
-}
-
-/* Check specimens, set like a type specimen's lines. */
-.specimens {
-  margin: 0;
-}
-
-.specimens div {
-  display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(0, 4fr);
-  gap: var(--s5);
-  align-items: baseline;
-  padding: var(--s4) 0;
-  border-bottom: 1px solid var(--rule-3);
-}
-
-.specimens dt code {
-  font-size: clamp(18px, 2.2vw, 28px);
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-}
-
-.specimens dd {
-  margin: 0;
-  color: var(--ink-2);
-  font-size: var(--fs-ui);
-}
-
-.specimens .capture dt code {
-  color: var(--var-ink);
-}
-
-/* The comparison ledger. */
 .table {
   overflow-x: auto;
 }
@@ -1162,123 +736,9 @@ thead th {
   -webkit-font-smoothing: none;
 }
 
-.ledger table {
-  font-size: 15px;
-}
-
-.ledger th[scope="row"] {
-  width: 26%;
-  font-weight: 650;
-}
-
-.ledger td:nth-child(2) {
-  width: 30%;
-  font-weight: 650;
-}
-
-.ledger td:nth-child(3) {
-  color: var(--ink-2);
-}
-
-.mark-getman {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--ink);
-}
-
-.mark-getman .square {
-  width: 7px;
-  height: 7px;
-}
-
-.stay {
-  margin-top: var(--s6);
-  max-width: 82ch;
-}
-
-.stay ul,
 .prose ul,
 .prose ol {
   padding-left: 1.2em;
-}
-
-.stay li {
-  margin: var(--s2) 0;
-  color: var(--ink-2);
-}
-
-.stay strong {
-  color: var(--ink);
-}
-
-.steps {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  max-width: 920px;
-}
-
-.steps li {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  gap: var(--s4);
-  padding: var(--s5) 0;
-  border-bottom: 1px solid var(--rule-3);
-}
-
-.steps li:first-child {
-  padding-top: 0;
-}
-
-.steps .n {
-  font-size: var(--b4);
-  line-height: 1;
-}
-
-.steps p {
-  margin: 0 0 var(--s3);
-}
-
-.guides {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: var(--s6);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.guides a {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
-  gap: var(--s4);
-  padding: var(--s3) var(--s2);
-  border-bottom: 1px solid var(--rule-3);
-  text-decoration: none;
-}
-
-.guides a:hover {
-  background: var(--ink);
-  color: var(--paper);
-}
-
-.guides a:hover .g-line {
-  color: var(--t3);
-}
-
-.g-title {
-  font-weight: 650;
-}
-
-.g-line {
-  color: var(--ink-3);
-  font-size: var(--fs-ui);
-  line-height: 1.6;
-}
-
-.index {
-  padding-bottom: var(--s9);
 }
 
 /* ---- Code --------------------------------------------------------------------- */
@@ -1333,10 +793,6 @@ figure.code.wrap .line {
   text-indent: -4ch;
 }
 
-.band figure.code {
-  margin: 0;
-}
-
 .copy {
   height: 22px;
   padding: 0 var(--s2);
@@ -1355,9 +811,8 @@ figure.code.wrap .line {
   color: var(--paper);
 }
 
-.no-js .copy,
 html:not(.js) .copy,
-html:not(.js) .copy-command {
+html:not(.js) [data-copy-command] {
   display: none;
 }
 
@@ -1369,53 +824,6 @@ html:not(.js) .copy-command {
 
 .v span {
   color: var(--var-ink) !important;
-}
-
-.diff .line {
-  display: block;
-  margin: 0 calc(-1 * var(--s4));
-  padding: 0 var(--s4) 0 var(--s2);
-}
-
-.diff .sign {
-  display: inline-block;
-  width: 1.4em;
-  color: var(--ink-3);
-  user-select: none;
-}
-
-.diff .add {
-  background: var(--ok-wash);
-}
-
-.diff .add .sign {
-  color: var(--ok);
-}
-
-.diff .del {
-  background: var(--error-wash);
-}
-
-.diff .del .sign {
-  color: var(--error);
-}
-
-.diff pre {
-  padding-left: var(--s4);
-}
-
-.diffstat {
-  display: inline-flex;
-  gap: var(--s2);
-  padding-right: var(--s2);
-}
-
-.diffstat .plus {
-  color: var(--ok);
-}
-
-.diffstat .minus {
-  color: var(--error);
 }
 
 /* ---- Documentation ------------------------------------------------------------ */
@@ -1907,35 +1315,6 @@ h3:hover .anchor {
     display: none;
   }
 
-  .plate-body,
-  .band-head,
-  .pair {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .plate-body {
-    gap: var(--s5);
-    padding: var(--s5);
-  }
-
-  .plate-body.sending::after {
-    left: var(--s5);
-    top: auto;
-    bottom: var(--s5);
-  }
-
-  .band {
-    padding-top: var(--s8);
-  }
-
-  .band-head {
-    gap: var(--s4);
-  }
-
-  .guides {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .docs {
     display: block;
   }
@@ -2015,108 +1394,22 @@ h3:hover .anchor {
     display: none;
   }
 
-  .hero {
+  .home main {
     padding-top: var(--s7);
+    padding-bottom: var(--s8);
   }
 
-  .hook {
-    font-size: var(--b3);
+  .download .btn {
+    flex: 1 1 100%;
   }
 
-  .install {
-    grid-template-columns: minmax(0, 1fr) auto;
-    height: auto;
-  }
-
-  .install .os {
-    grid-column: 1 / -1;
-    height: 40px;
-    border-right: 0;
-    border-bottom: 2px solid var(--ink);
-  }
-
-  .install select {
-    width: 100%;
-    background-position:
-      calc(100% - 18px) 17px,
-      calc(100% - 14px) 17px;
-  }
-
-  .command {
-    min-height: 52px;
-    padding: var(--s3) var(--s4);
-    font-size: 14px;
-    line-height: 1.5;
-    white-space: normal;
-  }
-
-  .copy-command {
-    min-width: 0;
-    padding: 0 var(--s4);
+  .facts div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s2);
   }
 
   .numeral {
     font-size: var(--b4);
-  }
-
-  .band-head h2 {
-    font-size: var(--b2);
-  }
-
-  .specimens div {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--s1);
-  }
-
-  .guides a {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-  }
-
-  /* The ledger stacks: each question, then each side's answer. */
-  .ledger thead {
-    display: none;
-  }
-
-  .ledger tr,
-  .ledger th[scope="row"],
-  .ledger td {
-    display: block;
-    width: auto;
-  }
-
-  .ledger td:nth-child(2) {
-    width: auto;
-  }
-
-  .ledger tr {
-    padding: var(--s3) 0;
-    border-bottom: 1px solid var(--rule-3);
-  }
-
-  .ledger th[scope="row"] {
-    padding: 0 0 var(--s2);
-    border: 0;
-  }
-
-  .ledger td {
-    display: grid;
-    grid-template-columns: 76px minmax(0, 1fr);
-    gap: var(--s3);
-    padding: var(--s1) 0;
-    border: 0;
-  }
-
-  .ledger td::before {
-    content: attr(data-label);
-    padding-top: 4px;
-    color: var(--ink-3);
-    font-family: var(--font-bitmap);
-    font-size: var(--b1);
-    font-weight: 400;
-    line-height: 1;
-    text-transform: uppercase;
-    -webkit-font-smoothing: none;
   }
 
   .pager {

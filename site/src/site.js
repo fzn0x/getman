@@ -4,7 +4,6 @@
 
   const root = document.documentElement;
   const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-  const reduced = matchMedia("(prefers-reduced-motion: reduce)");
   const base = new URL(document.querySelector('link[rel="stylesheet"]').href).href.replace(
     /site\.css.*$/,
     "",
@@ -75,35 +74,13 @@
     }
     const command = event.target.closest("[data-copy-command]");
     if (command) {
-      const text = command.closest("[data-install]").querySelector("[data-command]").textContent;
-      copy(text, command, "Copy");
+      // Only the command for the visitor's system is shown.
+      const shown = [...command.parentElement.querySelectorAll("[data-command]")].find(
+        (code) => code.getClientRects().length,
+      );
+      if (shown) copy(shown.textContent, command, "Copy");
     }
   });
-
-  // ---- The install command for this system ----------------------------------------
-
-  const installs = [...document.querySelectorAll("[data-install]")];
-  function setSystem(system) {
-    for (const install of installs) {
-      const select = install.querySelector("[data-os]");
-      const command = install.querySelector("[data-command]");
-      select.value = system;
-      // Narrow screens may wrap the command, but only after a slash.
-      command.replaceChildren();
-      command.dataset[system].split("/").forEach((part, i, parts) => {
-        command.append(part + (i < parts.length - 1 ? "/" : ""));
-        if (i < parts.length - 1) command.append(document.createElement("wbr"));
-      });
-    }
-  }
-  if (installs.length) {
-    if (/Win/.test(navigator.platform || navigator.userAgent)) setSystem("windows");
-    for (const install of installs) {
-      install
-        .querySelector("[data-os]")
-        .addEventListener("change", (event) => setSystem(event.target.value));
-    }
-  }
 
   // ---- Keys say Cmd on a Mac -----------------------------------------------------
 
@@ -148,57 +125,6 @@
     drawAll();
     const observer = new ResizeObserver(() => drawAll());
     fields.forEach((svg) => observer.observe(svg.parentElement));
-  }
-
-  // ---- The plate: pick a request, watch it send -----------------------------------
-
-  const tabs = [...document.querySelectorAll('.plate-tabs [role="tab"]')];
-  const panel = document.getElementById("example-panel");
-  function show(index, focus) {
-    const template = document.querySelector(`template[data-example="${index}"]`);
-    if (!template || !panel) return;
-    tabs.forEach((tab, i) => {
-      tab.setAttribute("aria-selected", String(i === index));
-      tab.tabIndex = i === index ? 0 : -1;
-    });
-    if (focus) tabs[index].focus();
-    panel.setAttribute("aria-labelledby", tabs[index].id);
-    const finish = () => {
-      panel.querySelector(".plate-content").replaceChildren(template.content.cloneNode(true));
-      panel.className = `plate-body tone-${template.dataset.tone}`;
-      panel.dataset.time = template.dataset.time;
-      draw(panel.querySelector(".halftone"));
-    };
-    if (reduced.matches) {
-      finish();
-      return;
-    }
-    panel.className = "plate-body sending";
-    panel.dataset.time = "200";
-    draw(panel.querySelector(".halftone"));
-    clearTimeout(panel._timer);
-    panel._timer = setTimeout(finish, 600);
-  }
-  tabs.forEach((tab, i) => {
-    tab.addEventListener("click", () => show(i, false));
-    tab.addEventListener("keydown", (event) => {
-      const moves = { ArrowRight: 1, ArrowLeft: -1, Home: -i, End: tabs.length - 1 - i };
-      if (!(event.key in moves)) return;
-      event.preventDefault();
-      show((i + moves[event.key] + tabs.length) % tabs.length, true);
-    });
-  });
-
-  // ---- Tab rows that overflow fade at the cut edge, as in the app ----------------------
-
-  for (const row of document.querySelectorAll(".plate-tabs")) {
-    const update = () => {
-      row.classList.toggle("fade-start", row.scrollLeft > 1);
-      row.classList.toggle("fade-end", row.scrollLeft + row.clientWidth < row.scrollWidth - 1);
-    };
-    row.addEventListener("scroll", update, { passive: true });
-    new ResizeObserver(update).observe(row);
-    update();
   }
 
   // ---- The documentation menu on small screens -------------------------------------
