@@ -7,6 +7,7 @@
 //! [`import_text`] takes any of them.
 
 pub mod curl;
+pub mod har;
 pub mod openapi;
 pub mod postman;
 
@@ -14,7 +15,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::error::{Error, Result};
-use crate::model::{Folder, Request, Vars};
+use crate::model::{Body, Folder, Request, Vars};
 use crate::workspace::{EnvironmentFiles, Workspace, slugify};
 use crate::{Environment, KeyValue};
 
@@ -32,6 +33,8 @@ pub enum Format {
     Openapi,
     /// A Swagger 2.0 document, in JSON or YAML.
     Swagger,
+    /// An HTTP Archive (HAR 1.2), as saved by browsers.
+    Har,
 }
 
 impl Format {
@@ -42,6 +45,7 @@ impl Format {
             Self::Postman => "Postman export",
             Self::Openapi => "OpenAPI document",
             Self::Swagger => "Swagger 2.0 document",
+            Self::Har => "HAR file",
         }
     }
 }
@@ -140,6 +144,9 @@ fn detect_value(value: &Value) -> Option<Format> {
     {
         return Some(Format::Swagger);
     }
+    if value["log"]["entries"].is_array() {
+        return Some(Format::Har);
+    }
     if (value.get("info").is_some() && value.get("item").is_some())
         || value["values"].is_array()
         || value["collection"].get("item").is_some()
@@ -171,7 +178,7 @@ pub fn import_text(
             .map(|e| format!(" ({e})"))
             .unwrap_or_default();
         return Err(Error::Invalid(format!(
-            "this is not a format Getman imports{reason}; use a Postman export, an OpenAPI or Swagger document or a cURL command"
+            "this is not a format Getman imports{reason}; use a Postman export, an OpenAPI or Swagger document, a HAR file or a cURL command"
         )));
     };
     let import = match format {
@@ -189,6 +196,7 @@ pub fn import_text(
         }
         Format::Postman => return postman::import(workspace, parent, text, into_root),
         Format::Openapi | Format::Swagger => openapi::parse(&parse_document(text)?)?,
+        Format::Har => har::parse(&parse_document(text)?)?,
     };
     save(workspace, parent, import, into_root, format)
 }
@@ -443,12 +451,80 @@ pub(crate) fn text(value: &Value) -> Option<String> {
     }
 }
 
+/// A scalar as text, or the empty string.
+pub(crate) fn text_or_empty(value: &Value) -> String {
+    text(value).unwrap_or_default()
+}
+
 /// JSON text, pretty-printed when it parses.
 pub(crate) fn pretty_json(text: &str) -> String {
     serde_json::from_str::<Value>(text)
         .ok()
         .and_then(|value| serde_json::to_string_pretty(&value).ok())
         .unwrap_or_else(|| text.to_owned())
+}
+
+/// A body for text sent with a content type.
+pub(crate) fn text_body(content_type: &str, content: String) -> Body {
+    let essence = content_type
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    if essence.contains("json") {
+        Body::Json {
+            content: pretty_json(&content),
+        }
+    } else if essence.ends_with("/xml") || essence.ends_with("+xml") {
+        Body::Xml { content }
+    } else {
+        Body::Text {
+            content,
+            content_type: (!essence.is_empty() && essence != "text/plain")
+                .then(|| content_type.trim().to_owned()),
+        }
+    }
+}
+
+/// Removes a `Content-Type` header that only repeats what the body sends
+/// anyway, so imported requests stay short.
+pub(crate) fn drop_implied_content_type(request: &mut Request) {
+    let implied = match &request.body {
+        Body::Json { .. } | Body::Graphql { .. } => Some("application/json"),
+        Body::Xml { .. } => Some("application/xml"),
+        Body::Form { .. } => Some("application/x-www-form-urlencoded"),
+        // The boundary is written when sending; a copied one would be wrong.
+        Body::Multipart { .. } => Some("multipart/form-data"),
+        _ => None,
+    };
+    let Some(implied) = implied else { return };
+    request.headers.retain(|h| {
+        if !h.name.eq_ignore_ascii_case("content-type") {
+            return true;
+        }
+        let essence = h.value.split(';').next().unwrap_or_default().trim();
+        let multipart = implied == "multipart/form-data";
+        !(multipart || essence.eq_ignore_ascii_case(implied) && !h.value.contains(';'))
+    });
+}
+
+/// A name for a request: its method and its URL's path.
+pub(crate) fn name_from_url(method: &str, url: &str) -> String {
+    let without_scheme = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let path = without_scheme
+        .split_once('/')
+        .map_or("", |(_, path)| path)
+        .split(['?', '#'])
+        .next()
+        .unwrap_or_default()
+        .trim_matches('/');
+    if path.is_empty() {
+        let host = without_scheme.split(['/', '?', '#']).next().unwrap_or(url);
+        format!("{method} {host}")
+    } else {
+        format!("{method} /{path}")
+    }
 }
 
 /// Builds a URL from a base and the enabled query parameters; disabled
@@ -502,6 +578,11 @@ mod tests {
                 "",
                 r#"{"swagger": "2.0", "paths": {}}"#,
                 Some(Format::Swagger),
+            ),
+            (
+                "",
+                r#"{"log": {"version": "1.2", "entries": []}}"#,
+                Some(Format::Har),
             ),
             (
                 "",
@@ -584,5 +665,31 @@ mod tests {
         let env = ws.read_environment("live").unwrap();
         assert_eq!(env.shared.variables["token"], "");
         assert_eq!(env.local["token"], "s3cret");
+    }
+
+    #[test]
+    fn implied_content_types_are_dropped() {
+        let mut request = Request {
+            headers: vec![
+                KeyValue::new("Content-Type", "application/json"),
+                KeyValue::new("Accept", "application/json"),
+            ],
+            body: Body::Json {
+                content: "{}".into(),
+            },
+            ..Request::default()
+        };
+        drop_implied_content_type(&mut request);
+        assert_eq!(request.headers.len(), 1);
+        let mut multipart = Request {
+            headers: vec![KeyValue::new(
+                "content-type",
+                "multipart/form-data; boundary=x",
+            )],
+            body: Body::Multipart { fields: vec![] },
+            ..Request::default()
+        };
+        drop_implied_content_type(&mut multipart);
+        assert!(multipart.headers.is_empty());
     }
 }
