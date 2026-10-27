@@ -148,6 +148,17 @@
     });
   }
 
+  async function duplicate(): Promise<void> {
+    try {
+      const { id } = await api.duplicateEnvironment(selected);
+      await refreshTree();
+      tab.selected = id;
+      notify(`Duplicated as environments/${id}.yaml`, "ok");
+    } catch (error) {
+      notify(message(error), "error");
+    }
+  }
+
   function remove(): void {
     confirmDialog({
       title: `Delete ${displayName}?`,
@@ -215,6 +226,14 @@
             <button class="btn" onclick={() => selectEnvironment(selected)}>Use</button>
           {/if}
           <button class="btn quiet" onclick={rename}><Icon name="pencil" /> Rename</button>
+          <button
+            class="btn quiet"
+            onclick={duplicate}
+            disabled={dirty}
+            title={dirty
+              ? "Save first: Duplicate copies the saved environment"
+              : "Copy it, local values included"}><Icon name="copy" /> Duplicate</button
+          >
           <button class="btn quiet danger" onclick={remove}><Icon name="trash" /> Delete</button>
         {/if}
         {#if isGlobals || ws.environments.length > 0}
