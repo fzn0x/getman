@@ -98,11 +98,17 @@ type implies.
 | `basic` | `username`, `password` |
 | `bearer` | `token`, and `prefix` (default `Bearer`) |
 | `api_key` | `key`, `value`, and `in`: `header` (default) or `query` |
-| `digest` | `username`, `password`; MD5, SHA-256 and their `-sess` forms |
-| `oauth2` | `grant` (`client_credentials` or `password`), `token_url`, `client_id`, `client_secret`, `scope`, `audience`, `username`, `password`, `client_auth` (`basic` or `body`) |
+| `digest` | `username`, `password`; MD5, SHA-256, SHA-512-256 and their `-sess` forms |
+| `oauth2` | `grant` (`client_credentials`, `password`, `authorization_code` or `implicit`), `token_url`, `client_id`, `client_secret`, `scope`, and more |
+| `oauth1` | `consumer_key`, `consumer_secret`, `token`, `token_secret`, `signature_method` |
+| `jwt` | `algorithm`, `secret` or `private_key`, `payload` |
+| `aws_sigv4` | `access_key`, `secret_key`, `region`, `service` |
+| `hawk` | `id`, `key` |
+| `edgegrid` | `client_token`, `client_secret`, `access_token` |
+| `asap` | `issuer`, `audience`, `key_id`, `private_key` |
 
-OAuth 2.0 tokens are fetched when a request needs one and reused until 30
-seconds before they expire.
+[Authentication](auth.md) lists every field, and how OAuth 2.0 signs in
+with a browser.
 
 ### Settings
 

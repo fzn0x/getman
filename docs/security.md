@@ -50,6 +50,24 @@ A workspace is a folder you chose. Getman reads and writes only inside it:
   or in CI.
 - History, in `.getman/history.json`, is git-ignored and keeps the last 200
   requests.
+- OAuth 2.0 tokens from a browser sign-in are kept in
+  `.getman/oauth2-tokens.json`, readable only by you on macOS and Linux,
+  so `getman run` can use them. Getman also writes a `.gitignore` inside
+  `.getman/`, in case your repository's does not cover it. Client
+  credentials and password tokens stay in memory.
+- Private keys for JWT, ASAP and OAuth 1.0 come from a variable or a file
+  inside the workspace, like uploads.
+
+## OAuth 2.0 sign-in
+
+Signing in with a browser makes Getman listen on a port of 127.0.0.1 for
+a few minutes, where anything on your machine can connect. The listener
+reads at most 16 KiB from each connection and gives each 10 seconds,
+answers only `GET` on the callback path, and finishes only for an answer
+that carries the random `state` it sent; others get an error page. The
+`state` and the PKCE verifier come from the operating system's random
+number generator. Getman opens only `http` and `https` authorization URLs,
+so a shared collection cannot make it launch another program.
 
 ## Scripts
 

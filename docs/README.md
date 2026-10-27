@@ -11,6 +11,7 @@ These pages are also published at <https://fzn0x.github.io/getman/>.
 
 - [Workspaces](workspaces.md): the files, and what to commit
 - [Variables and environments](variables.md)
+- [Authentication](auth.md): OAuth 2.0, AWS Signature, JWT and more
 - [Checks and captures](checks.md): tests without code
 - [Scripts](scripts.md): the `gm` JavaScript API
 - [Running in CI](runner.md): `getman run`, reports, GitHub Actions, GitLab
