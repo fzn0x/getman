@@ -1,4 +1,4 @@
-//! `getman run`: run a folder or the whole workspace.
+//! `getman run`: run folders, requests or the whole workspace.
 
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -16,10 +16,11 @@ use crate::workspaces;
 
 pub(crate) async fn run(args: RunArgs) -> Outcome {
     let workspace = workspaces::find(args.workspace.workspace.as_deref())?;
-    let target = match &args.target {
-        Some(target) => workspaces::item_path(&workspace, target)?,
-        None => String::new(),
-    };
+    let targets = args
+        .targets
+        .iter()
+        .map(|target| workspaces::item_path(&workspace, target))
+        .collect::<Result<Vec<_>, _>>()?;
     let environment = workspaces::environment(&workspace, args.vars.env.as_deref())?;
     let data = match &args.data {
         Some(path) => getman_core::data::read(path).map_err(|e| e.to_string())?,
@@ -36,7 +37,7 @@ pub(crate) async fn run(args: RunArgs) -> Outcome {
     let show_cli = reporters.iter().any(|r| r.kind == ReporterKind::Cli);
 
     let options = RunOptions {
-        target,
+        targets,
         environment: environment.clone(),
         iterations: args.iterations,
         data,
@@ -44,6 +45,7 @@ pub(crate) async fn run(args: RunArgs) -> Outcome {
         bail: args.bail,
         vars: args.vars.vars.iter().cloned().collect(),
         script_timeout: super::script_timeout(&args.vars),
+        ..RunOptions::default()
     };
     let executor = Executor::new(workspace.clone());
     let environment_name = environment.as_ref().map(|id| {

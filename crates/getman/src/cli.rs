@@ -93,9 +93,11 @@ pub(crate) struct VarArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct RunArgs {
-    /// Folder or request to run, as a path in the workspace or a path on
-    /// disk. Runs the whole workspace when left out.
-    pub(crate) target: Option<String>,
+    /// Folders or requests to run, as paths in the workspace or on disk.
+    /// Several run one after another, in the order given. Runs the whole
+    /// workspace when left out.
+    #[arg(value_name = "TARGET")]
+    pub(crate) targets: Vec<String>,
 
     #[command(flatten)]
     pub(crate) workspace: WorkspaceArgs,
@@ -293,8 +295,14 @@ mod tests {
         let Some(Command::Run(args)) = cli.command else {
             panic!()
         };
-        assert_eq!(args.target.as_deref(), Some("users"));
+        assert_eq!(args.targets, ["users"]);
         assert_eq!(args.vars.env.as_deref(), Some("staging"));
         assert_eq!(args.reporters[0].kind, ReporterKind::Junit);
+
+        let cli = Cli::try_parse_from(["getman", "run", "login.yaml", "orders"]).unwrap();
+        let Some(Command::Run(args)) = cli.command else {
+            panic!()
+        };
+        assert_eq!(args.targets, ["login.yaml", "orders"]);
     }
 }
