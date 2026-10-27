@@ -18,6 +18,7 @@ mod style;
 mod tui;
 pub mod workspaces;
 
+use std::ffi::OsString;
 use std::process::ExitCode;
 
 use clap::Parser;
@@ -25,7 +26,16 @@ use clap::Parser;
 /// Runs the command line with this process's arguments, exactly as the
 /// `getman` binary does, and returns its exit code.
 pub fn main() -> ExitCode {
-    let cli = cli::Cli::parse();
+    run(std::env::args_os())
+}
+
+/// Runs the command line with `args`, the first being the program's name.
+pub fn run<I, T>(args: I) -> ExitCode
+where
+    I: IntoIterator<Item = T>,
+    T: Into<OsString> + Clone,
+{
+    let cli = cli::Cli::parse_from(args);
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
