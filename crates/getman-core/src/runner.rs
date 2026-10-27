@@ -4,7 +4,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::data::Row;
 use crate::error::{Error, Result};
@@ -83,7 +83,7 @@ pub enum RunEvent {
 }
 
 /// A request in a run.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunItem {
     /// Path in the workspace.
     pub path: String,
@@ -94,7 +94,8 @@ pub struct RunItem {
 }
 
 /// Totals of a run.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct RunSummary {
     /// Iterations started.
     pub iterations: usize,

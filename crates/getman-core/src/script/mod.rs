@@ -202,7 +202,7 @@ pub struct EditedRequest {
 }
 
 /// A script that failed.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScriptError {
     /// The script, such as `request` or `folder "Users"`.
     pub origin: String,
@@ -234,7 +234,7 @@ pub struct ScriptOutput {
 
 /// Where a run goes after a request, as set by
 /// `gm.execution.setNextRequest`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "name", rename_all = "snake_case")]
 pub enum NextRequest {
     /// End the run.

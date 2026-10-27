@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use indexmap::IndexMap;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::auth::Authenticator;
@@ -96,7 +96,8 @@ impl Default for Context {
 }
 
 /// Everything that happened when a request ran.
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Execution {
     /// Path of the request in the workspace, if it is saved.
     pub path: Option<String>,
