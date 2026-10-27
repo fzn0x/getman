@@ -5,11 +5,17 @@
 //! from other origins are refused, and API calls must carry a token that
 //! only the UI opened from the terminal knows. Without these checks any
 //! website could use the server to send requests or read files.
+//!
+//! `getman` runs it in the foreground with `serve`; the desktop app runs
+//! it in the background of its own process with [`Server`].
 
 mod api;
 mod assets;
+mod background;
 mod history;
 mod token;
+
+pub use background::{Options, Server};
 
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr};
@@ -54,13 +60,7 @@ pub(crate) async fn serve(
     let token = token::load_or_create()?;
     let listener = bind(port).await?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
-    let state = Arc::new(AppState {
-        history: history::History::open(&workspace),
-        executor: Executor::new(workspace),
-        token,
-        port,
-        runs: Mutex::new(HashMap::new()),
-    });
+    let state = state(workspace, token, port);
     let app = router(Arc::clone(&state));
 
     let address = format!("http://127.0.0.1:{port}/");
@@ -96,6 +96,17 @@ pub(crate) async fn serve(
         })
         .await
         .map_err(|e| e.to_string())
+}
+
+/// The state of a server on `port` for `workspace`.
+fn state(workspace: Workspace, token: String, port: u16) -> Arc<AppState> {
+    Arc::new(AppState {
+        history: history::History::open(&workspace),
+        executor: Executor::new(workspace),
+        token,
+        port,
+        runs: Mutex::new(HashMap::new()),
+    })
 }
 
 async fn bind(port: Option<u16>) -> Result<tokio::net::TcpListener, String> {
