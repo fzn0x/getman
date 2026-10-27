@@ -245,6 +245,14 @@ impl Executor {
         context: &mut Context,
         execution: &mut Execution,
     ) -> Result<()> {
+        if request.kind.is_realtime() {
+            execution.skipped = true;
+            execution.warnings.push(format!(
+                "{} requests stay open, so they are skipped here; connect to them with `getman send` or in the browser UI",
+                request.kind.label()
+            ));
+            return Ok(());
+        }
         let chain = match path {
             Some(path) => self.workspace.folder_chain(path)?,
             None => vec![self.workspace.read_folder("")?],
@@ -774,6 +782,28 @@ mod tests {
         );
         assert_eq!(execution.missing_variables, ["nope"]);
         assert!(execution.request.is_some());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn realtime_requests_are_skipped_with_a_reason() {
+        let (_dir, executor) = setup();
+        let request = Request {
+            kind: crate::model::RequestKind::Websocket,
+            url: "ws://127.0.0.1:9/".into(),
+            checks: vec!["status == 101".into()],
+            ..Request::default()
+        };
+        let execution = executor
+            .execute(None, &request, &mut Context::default())
+            .await;
+        assert!(execution.skipped);
+        assert!(execution.request.is_none());
+        assert!(!execution.failed());
+        assert!(
+            execution.warnings[0].starts_with("WebSocket requests stay open"),
+            "{:?}",
+            execution.warnings
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
