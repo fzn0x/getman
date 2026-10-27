@@ -13,8 +13,9 @@ use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use getman_core::Error;
-use getman_core::execute::{Context, persist_changes, resolved_variables};
+use getman_core::execute::{Cancel, Context, persist_changes, resolved_variables};
 use getman_core::export::codegen;
+use getman_core::http::CookieInfo;
 use getman_core::import::{curl, postman};
 use getman_core::model::{Auth, Folder, Request};
 use getman_core::runner::{self, RunEvent, RunOptions};
@@ -50,6 +51,7 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/environment/delete", post(delete_environment))
         .route("/globals", get(read_globals).put(write_globals))
         .route("/send", post(send))
+        .route("/send/cancel", post(cancel_send))
         .route("/prepare", post(prepare))
         .route("/codegen", post(code))
         .route("/languages", get(languages))
@@ -60,6 +62,7 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/import", post(import))
         .route("/parse-curl", post(parse_curl))
         .route("/cookies", get(cookies))
+        .route("/cookies/set", post(set_cookie))
         .route("/cookies/delete", post(delete_cookie))
         .route("/cookies/clear", post(clear_cookies))
         .route("/history", get(history))
@@ -317,10 +320,28 @@ struct SendArg {
     /// Save variables the request sets to the local files.
     #[serde(default = "yes")]
     persist: bool,
+    /// An id the UI chose, to cancel the request with while it is sent.
+    #[serde(default)]
+    id: Option<String>,
 }
 
 fn yes() -> bool {
     true
+}
+
+/// Unregisters a request's cancel switch when its send ends, however it
+/// ends.
+struct SendGuard<'a> {
+    state: &'a AppState,
+    id: Option<String>,
+}
+
+impl Drop for SendGuard<'_> {
+    fn drop(&mut self) {
+        if let Some(id) = &self.id {
+            self.state.sends.lock().expect("sends lock").remove(id);
+        }
+    }
 }
 
 fn context(environment: Option<&str>) -> Context {
@@ -332,6 +353,17 @@ fn context(environment: Option<&str>) -> Context {
 
 async fn send(State(state): Shared, Json(arg): Json<SendArg>) -> ApiResult {
     let mut context = context(arg.environment.as_deref());
+    let id = arg.id.clone().filter(|id| !id.is_empty());
+    if let Some(id) = &id {
+        let cancel = Cancel::new();
+        state
+            .sends
+            .lock()
+            .expect("sends lock")
+            .insert(id.clone(), cancel.clone());
+        context.cancel = Some(cancel);
+    }
+    let _guard = SendGuard { state: &state, id };
     let path = arg.path.as_deref().filter(|p| !p.is_empty());
     let execution = state
         .executor
@@ -355,6 +387,20 @@ async fn send(State(state): Shared, Json(arg): Json<SendArg>) -> ApiResult {
         list.extend(warnings.into_iter().map(Value::from));
     }
     Ok(Json(value))
+}
+
+#[derive(Deserialize)]
+struct SendId {
+    id: String,
+}
+
+/// Stops a request the UI is sending. Unknown ids are ignored: the
+/// request may have finished already.
+async fn cancel_send(State(state): Shared, Json(arg): Json<SendId>) -> ApiResult {
+    if let Some(cancel) = state.sends.lock().expect("sends lock").get(&arg.id) {
+        cancel.cancel();
+    }
+    Ok(done())
 }
 
 #[derive(Deserialize)]
@@ -435,9 +481,10 @@ async fn oauth2_token(State(state): Shared, Json(arg): Json<OAuthArg>) -> ApiRes
         auth: arg.auth.clone(),
         ..Request::default()
     };
+    let path = arg.path.as_deref().filter(|p| !p.is_empty());
     let resolved = resolved_variables(
         state.workspace(),
-        arg.path.as_deref().filter(|p| !p.is_empty()),
+        path,
         &request,
         arg.environment.as_deref().filter(|e| !e.is_empty()),
     )?;
@@ -446,16 +493,16 @@ async fn oauth2_token(State(state): Shared, Json(arg): Json<OAuthArg>) -> ApiRes
         getman_core::Scope::Request,
         resolved.into_iter().map(|v| (v.name, v.value)).collect(),
     );
+    // The token request goes the way the requests in that folder go:
+    // through the same proxy, with the same certificates.
+    let transport =
+        state
+            .executor
+            .transport(path, &request, &context(arg.environment.as_deref()))?;
     let token = state
         .executor
         .authenticator
-        .token(
-            &state.executor.http,
-            settings,
-            &vars,
-            getman_core::http::Transport::default(),
-            true,
-        )
+        .token(&state.executor.http, settings, &vars, transport, true)
         .await?;
     Ok(Json(json!(token)))
 }
@@ -626,6 +673,28 @@ struct CookieArg {
 
 async fn cookies(State(state): Shared) -> Json<Value> {
     Json(json!(state.executor.http.cookies()))
+}
+
+#[derive(Deserialize)]
+struct SetCookie {
+    cookie: CookieInfo,
+    /// The cookie being edited, when its domain, path or name changes.
+    #[serde(default)]
+    previous: Option<CookieArg>,
+}
+
+async fn set_cookie(State(state): Shared, Json(arg): Json<SetCookie>) -> ApiResult {
+    let http = &state.executor.http;
+    http.set_cookie(&arg.cookie)?;
+    if let Some(previous) = &arg.previous {
+        let same = previous.domain == arg.cookie.domain
+            && previous.path == arg.cookie.path
+            && previous.name == arg.cookie.name;
+        if !same {
+            http.remove_cookie(&previous.domain, &previous.path, &previous.name);
+        }
+    }
+    Ok(done())
 }
 
 async fn delete_cookie(State(state): Shared, Json(arg): Json<CookieArg>) -> ApiResult {
