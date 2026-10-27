@@ -64,6 +64,31 @@ export interface Settings {
   follow_redirects?: boolean | null;
   max_redirects?: number | null;
   verify_tls?: boolean | null;
+  http_version?: HttpVersion | null;
+  title_case_headers?: boolean | null;
+  /** Written as just the URL (`"off"`, `"system"`, a proxy URL) when that is all it has. */
+  proxy?: ProxySetting | string | null;
+  /** An empty one stops a folder's certificate from being used. */
+  client_cert?: ClientCert | null;
+  ca_certs?: string[] | null;
+  cookies?: boolean | null;
+  max_response_mb?: number | null;
+}
+
+export type HttpVersion = "auto" | "http1" | "http2" | "http3";
+
+export interface ProxySetting {
+  url: string;
+  username?: string;
+  password?: string;
+  bypass?: string;
+}
+
+export interface ClientCert {
+  cert?: string;
+  key?: string;
+  pkcs12?: string;
+  passphrase?: string;
 }
 
 export interface Request {
@@ -180,6 +205,33 @@ export interface Response {
   headers_ms: number;
   size: { headers: number; body: number };
   remote_addr?: string;
+  timings?: Timings;
+  tls?: TlsDetails;
+  /** The server offered HTTP/3 in Alt-Svc while the request used auto. */
+  http3_available?: boolean;
+}
+
+/** Where a response's time went, in milliseconds. */
+export interface Timings {
+  dns_ms: number;
+  /** `null` over HTTP/3, where the QUIC handshake is part of the first byte. */
+  connect_ms: number | null;
+  first_byte_ms: number;
+  download_ms: number;
+  reused: boolean;
+}
+
+export interface TlsDetails {
+  version?: string;
+  certificate?: CertificateInfo;
+}
+
+export interface CertificateInfo {
+  subject: string;
+  issuer: string;
+  names?: string[];
+  not_before: number;
+  not_after: number;
 }
 
 export interface TestResult {
@@ -216,6 +268,7 @@ export interface Execution {
   warnings: string[];
   skipped: boolean;
   next_request: unknown;
+  cancelled?: boolean;
 }
 
 export interface ResolvedVar {
@@ -243,6 +296,8 @@ export interface Cookie {
   expires: number | null;
   secure: boolean;
   http_only: boolean;
+  /** Sent to the domain only, not its subdomains. */
+  host_only: boolean;
 }
 
 export interface HistoryEntry {

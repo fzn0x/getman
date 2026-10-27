@@ -105,6 +105,8 @@ export interface SendArgs {
   request: Request;
   environment?: string | null;
   persist?: boolean;
+  /** Names the send, so `cancelSend` can stop it. */
+  id?: string;
 }
 
 export interface RunArgs {
@@ -149,6 +151,7 @@ export const api = {
   writeGlobals: (state: LocalState) => call("PUT", "/globals", state),
 
   send: (args: SendArgs) => post<Execution>("/send", args),
+  cancelSend: (id: string) => post("/send/cancel", { id }),
   prepare: (args: SendArgs) => post<{ request: Outgoing; missing: string[] }>("/prepare", args),
   codegen: (args: SendArgs & { language: string }) =>
     post<{ code: string; missing: string[] }>("/codegen", args),
@@ -163,6 +166,9 @@ export const api = {
   parseCurl: (text: string) => post<Request>("/parse-curl", { text }),
 
   cookies: () => call<Cookie[]>("GET", "/cookies"),
+  /** Adds a cookie, or edits `previous` into it. */
+  setCookie: (cookie: Cookie, previous?: Pick<Cookie, "domain" | "path" | "name">) =>
+    post("/cookies/set", { cookie, previous }),
   deleteCookie: (cookie: Pick<Cookie, "domain" | "path" | "name">) =>
     post("/cookies/delete", cookie),
   clearCookies: () => post("/cookies/clear"),
