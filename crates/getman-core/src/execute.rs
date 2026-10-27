@@ -183,6 +183,25 @@ impl Executor {
         )
     }
 
+    /// What a request inherits from its folders and the variables it sees,
+    /// for requests that are connected to rather than sent once (see
+    /// [`crate::realtime`]). Scripts are not run.
+    pub fn resolve(
+        &self,
+        path: Option<&str>,
+        request: &Request,
+        context: &Context,
+    ) -> Result<(Effective, VarStack)> {
+        let chain = match path {
+            Some(path) => self.workspace.folder_chain(path)?,
+            None => vec![self.workspace.read_folder("")?],
+        };
+        let files = self.file_vars(context.environment.as_deref())?;
+        let effective = Effective::new(&chain, request);
+        let vars = var_stack(&files, &chain, request, context);
+        Ok((effective, vars))
+    }
+
     /// Runs a saved request.
     pub async fn execute_path(&self, path: &str, context: &mut Context) -> Execution {
         match self.workspace.read_request(path) {

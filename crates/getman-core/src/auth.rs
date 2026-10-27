@@ -275,6 +275,23 @@ fn read_token(response: &Response) -> Result<Token> {
     })
 }
 
+/// The `Authorization` header that answers the Digest challenge in these
+/// response headers, for requests that read their response as a stream
+/// and so cannot go through [`Authenticator::send`]. `None` when the
+/// headers hold no Digest challenge.
+pub(crate) fn answer_digest(
+    headers: &[Header],
+    username: &str,
+    password: &str,
+    outgoing: &Outgoing,
+) -> Option<Result<String>> {
+    let challenge = headers
+        .iter()
+        .filter(|h| h.name.eq_ignore_ascii_case("www-authenticate"))
+        .find_map(|h| parse_challenge(&h.value))?;
+    Some(digest_header(&challenge, username, password, outgoing))
+}
+
 /// The parameters of a `Digest` challenge, with lowercase names.
 fn parse_challenge(header: &str) -> Option<HashMap<String, String>> {
     let header = header.trim_start();
