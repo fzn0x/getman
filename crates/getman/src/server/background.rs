@@ -15,13 +15,16 @@ use tokio::task::JoinHandle;
 use tower::ServiceExt as _;
 
 /// How to start a [`Server`].
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Options {
     /// Port to listen on; 0 takes any free port. `None` takes 7878 or the
     /// next free port, as `getman` does.
     pub port: Option<u16>,
     /// Opens the UI in the browser once the server listens.
     pub open_browser: bool,
+    /// Routes of the program running the server, served under `/api/app/`
+    /// behind the same guards and token as Getman's own API.
+    pub app_routes: Option<Router>,
 }
 
 /// A server for the UI, running on the current Tokio runtime until it is
@@ -29,6 +32,7 @@ pub struct Options {
 pub struct Server {
     address: SocketAddr,
     token: String,
+    app_routes: Option<Router>,
     current: Arc<RwLock<Router>>,
     stop: oneshot::Sender<()>,
     task: JoinHandle<()>,
@@ -41,11 +45,10 @@ impl Server {
         let token = super::token::load_or_create()?;
         let listener = super::bind(options.port).await?;
         let port = listener.local_addr().map_err(|e| e.to_string())?.port();
-        let current = Arc::new(RwLock::new(super::router(super::state(
-            workspace,
-            token.clone(),
-            port,
-        ))));
+        let current = Arc::new(RwLock::new(super::router_with(
+            super::state(workspace, token.clone(), port),
+            options.app_routes.as_ref(),
+        )));
         // Every request goes to the router of the workspace open at the
         // time, so switching workspaces keeps the address, and with it the
         // page's own storage, and lets requests under way finish.
@@ -68,6 +71,7 @@ impl Server {
         let server = Self {
             address: SocketAddr::from((Ipv4Addr::LOCALHOST, port)),
             token,
+            app_routes: options.app_routes,
             current,
             stop,
             task,
@@ -99,11 +103,10 @@ impl Server {
 
     /// Serves `workspace` from now on, at the same address.
     pub fn open(&self, workspace: Workspace) {
-        let router = super::router(super::state(
-            workspace,
-            self.token.clone(),
-            self.address.port(),
-        ));
+        let router = super::router_with(
+            super::state(workspace, self.token.clone(), self.address.port()),
+            self.app_routes.as_ref(),
+        );
         *self
             .current
             .write()
@@ -146,11 +149,13 @@ mod tests {
     async fn serves_a_workspace_on_any_port_and_switches_to_another() {
         let first = tempfile::tempdir().unwrap();
         let second = tempfile::tempdir().unwrap();
+        let app_routes = Router::new().route("/hello", axum::routing::get(|| async { "hi" }));
         let server = Server::start(
             Workspace::init(first.path(), "First").unwrap(),
             Options {
                 port: Some(0),
                 open_browser: false,
+                app_routes: Some(app_routes),
             },
         )
         .await
@@ -172,6 +177,15 @@ mod tests {
         server.open(Workspace::init(second.path(), "Second").unwrap());
         let response = get(&server, "/api/workspace", &token).await;
         assert!(response.contains("\"Second\""), "{response}");
+
+        // The program's own routes keep the guard and the token.
+        let response = get(&server, "/api/app/hello", &token).await;
+        assert!(response.ends_with("hi"), "{response}");
+        assert!(
+            get(&server, "/api/app/hello", "wrong")
+                .await
+                .starts_with("HTTP/1.1 401")
+        );
 
         let address = server.address();
         server.stop().await;

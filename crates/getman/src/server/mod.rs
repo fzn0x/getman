@@ -127,8 +127,17 @@ async fn bind(port: Option<u16>) -> Result<tokio::net::TcpListener, String> {
 }
 
 pub(crate) fn router(state: Arc<AppState>) -> Router {
-    Router::new()
-        .nest("/api", api::routes())
+    router_with(state, None)
+}
+
+/// The router, with the routes of a program that embeds the server served
+/// under `/api/app/`, behind the same guard and token as the rest.
+fn router_with(state: Arc<AppState>, app: Option<&Router>) -> Router {
+    let mut router = Router::new().nest("/api", api::routes());
+    if let Some(app) = app {
+        router = router.nest_service("/api/app", app.clone());
+    }
+    router
         .fallback(assets::serve)
         .layer(middleware::from_fn_with_state(Arc::clone(&state), guard))
         .with_state(state)
