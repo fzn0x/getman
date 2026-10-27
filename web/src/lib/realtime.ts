@@ -239,17 +239,24 @@ export function matches(entry: LogEntry, search: string, direction: DirectionFil
   }
   const needle = search.trim().toLowerCase();
   if (!needle) return true;
-  const haystack =
-    event.type === "message"
-      ? `${event.event ?? ""} ${event.name ?? ""} ${event.id ?? ""} ${event.data}`
-      : event.type === "note" || event.type === "warning" || event.type === "error"
-        ? event.message
-        : event.type === "closed"
-          ? `closed ${event.code ?? ""} ${event.reason}`
-          : event.type === "connecting"
-            ? event.url
-            : `open ${event.status}`;
-  return haystack.toLowerCase().includes(needle);
+  return searchable(event).toLowerCase().includes(needle);
+}
+
+function searchable(event: StreamEvent): string {
+  switch (event.type) {
+    case "message":
+      return `${event.event ?? ""} ${event.name ?? ""} ${event.id ?? ""} ${event.data}`;
+    case "note":
+    case "warning":
+    case "error":
+      return event.message;
+    case "closed":
+      return `closed ${event.code ?? ""} ${event.reason}`;
+    case "connecting":
+      return event.url;
+    case "open":
+      return `open ${event.status}`;
+  }
 }
 
 /** A message's data for reading: indented JSON when it is JSON. */

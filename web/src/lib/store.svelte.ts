@@ -4,6 +4,8 @@
 
 import { api, ApiError } from "./api";
 import { clone, fingerprint, newDraft, toDraft, toRequest } from "./draft";
+import { isLive } from "./realtime";
+import { primary, type LiveState } from "./realtime.svelte";
 import type {
   Draft,
   DynamicVar,
@@ -206,6 +208,8 @@ export interface RequestTab {
   sending: boolean;
   requestPane: string;
   responsePane: string;
+  /** The connection of a WebSocket, event stream or Socket.IO request. */
+  live?: LiveState;
 }
 
 export interface FolderTab {
@@ -557,15 +561,33 @@ export async function saveAs(tab: RequestTab, folder: string, name: string): Pro
   }
 }
 
+/** Requests on their way, so they can be stopped. */
+const inflight = new Map<string, AbortController>();
+
+/** Stops waiting for a request's response. */
+export function stopSending(tab: RequestTab): void {
+  inflight.get(tab.id)?.abort();
+}
+
 export async function send(tab: RequestTab): Promise<void> {
+  if (isLive(tab.draft.kind)) {
+    await primary(tab);
+    return;
+  }
   if (tab.sending) return;
   tab.sending = true;
+  const id = tab.id;
+  const controller = new AbortController();
+  inflight.set(id, controller);
   try {
-    const execution = await api.send({
-      path: contextPath(tab),
-      request: toRequest(tab.draft),
-      environment: ws.environment || null,
-    });
+    const execution = await api.send(
+      {
+        path: contextPath(tab),
+        request: toRequest(tab.draft),
+        environment: ws.environment || null,
+      },
+      controller.signal,
+    );
     tab.execution = execution;
     const failing =
       execution.script_errors.length > 0 ||
@@ -586,7 +608,7 @@ export async function send(tab: RequestTab): Promise<void> {
       name: tab.draft.name,
       request: null,
       response: null,
-      error: message(error),
+      error: controller.signal.aborted ? "Stopped before the response arrived." : message(error),
       tests: [],
       checks: [],
       logs: [],
@@ -599,6 +621,7 @@ export async function send(tab: RequestTab): Promise<void> {
     };
   } finally {
     tab.sending = false;
+    inflight.delete(id);
   }
 }
 
