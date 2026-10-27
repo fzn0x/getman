@@ -9,6 +9,7 @@
 mod api;
 mod assets;
 mod history;
+mod realtime;
 mod token;
 
 use std::collections::HashMap;
@@ -37,6 +38,7 @@ pub(crate) struct AppState {
     pub(crate) port: u16,
     pub(crate) runs: Mutex<HashMap<String, Arc<AtomicBool>>>,
     pub(crate) history: history::History,
+    pub(crate) realtime: realtime::Hub,
 }
 
 impl AppState {
@@ -60,6 +62,7 @@ pub(crate) async fn serve(
         token,
         port,
         runs: Mutex::new(HashMap::new()),
+        realtime: realtime::Hub::default(),
     });
     let app = router(Arc::clone(&state));
 
@@ -91,8 +94,10 @@ pub(crate) async fn serve(
     }
 
     axum::serve(listener, app)
-        .with_graceful_shutdown(async {
+        .with_graceful_shutdown(async move {
             let _ = tokio::signal::ctrl_c().await;
+            // Live connections' event streams never end by themselves.
+            state.realtime.close_all();
         })
         .await
         .map_err(|e| e.to_string())
@@ -117,7 +122,7 @@ async fn bind(port: Option<u16>) -> Result<tokio::net::TcpListener, String> {
 
 pub(crate) fn router(state: Arc<AppState>) -> Router {
     Router::new()
-        .nest("/api", api::routes())
+        .nest("/api", api::routes().merge(realtime::routes()))
         .fallback(assets::serve)
         .layer(middleware::from_fn_with_state(Arc::clone(&state), guard))
         .with_state(state)
@@ -206,6 +211,7 @@ mod tests {
             token: "secret-token".into(),
             port: 7878,
             runs: Mutex::new(HashMap::new()),
+            realtime: realtime::Hub::default(),
         });
         (dir, router(state))
     }
