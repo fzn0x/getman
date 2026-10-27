@@ -248,6 +248,8 @@ export interface RequestTab {
   sending: boolean;
   requestPane: string;
   responsePane: string;
+  /** Opened from history: when it was sent, and whether the body was cut. */
+  fromHistory?: { at: number; bodyCut: boolean };
 }
 
 export interface FolderTab {
@@ -738,6 +740,32 @@ export function newRequest(seed?: Request, inheritPath: string | null = null): v
   addTab(tab);
 }
 
+/** Opens a request from history as a new tab, with the response it got. */
+export async function openHistoryEntry(entry: HistoryEntry): Promise<void> {
+  const detail = await api.historyEntry(entry.id).catch(() => null);
+  newRequest({ ...entry.request, name: entry.request.name || entry.url }, entry.path);
+  const tab = activeTab();
+  if (tab?.kind !== "request") return;
+  tab.fromHistory = { at: entry.at, bodyCut: detail?.body_cut ?? false };
+  if (!detail?.response && !entry.error) return;
+  tab.execution = {
+    path: entry.path,
+    name: entry.name,
+    request: null,
+    response: detail?.response ?? null,
+    error: entry.error,
+    tests: [],
+    checks: [],
+    logs: [],
+    script_errors: [],
+    changes: [],
+    missing_variables: [],
+    warnings: [],
+    skipped: false,
+    next_request: null,
+  };
+}
+
 export async function openFolder(path: string): Promise<void> {
   const id = `f:${path}`;
   if (tabs.list.some((tab) => tab.id === id)) {
@@ -876,6 +904,7 @@ export async function saveAs(tab: RequestTab, folder: string, name: string): Pro
 export async function send(tab: RequestTab): Promise<void> {
   if (tab.sending) return;
   tab.sending = true;
+  tab.fromHistory = undefined;
   try {
     const execution = await api.send({
       path: contextPath(tab),

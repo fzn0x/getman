@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { api } from "../lib/api";
-  import { ago, methodClass } from "../lib/format";
+  import { methodClass } from "../lib/format";
   import { rank } from "../lib/fuzzy";
   import { sortNodes } from "../lib/tree";
   import {
@@ -24,6 +24,7 @@
     activeTab,
     ws,
   } from "../lib/store.svelte";
+  import HistoryList from "./HistoryList.svelte";
   import Icon from "./Icon.svelte";
   import TrashList from "./TrashList.svelte";
   import Tree from "./Tree.svelte";
@@ -99,10 +100,6 @@
       event.preventDefault();
       (document.querySelector(".results button") as HTMLButtonElement | null)?.focus();
     }
-  }
-
-  function openHistory(entry: (typeof ws.history)[number]): void {
-    newRequest({ ...entry.request, name: entry.request.name || entry.url }, entry.path);
   }
 
   async function clearHistory(): Promise<void> {
@@ -227,28 +224,7 @@
     {:else if view === "trash"}
       <TrashList />
     {:else}
-      <ul class="results history">
-        {#each ws.history as entry (entry.id)}
-          <li>
-            <button onclick={() => openHistory(entry)} title={entry.url}>
-              <span class="method {methodClass(entry.method)}">{entry.method}</span>
-              <span class="text">
-                <span class="title">{entry.name || entry.url}</span>
-                <span class="path">
-                  {#if entry.status !== null}
-                    <span class="num">{entry.status}</span> ·
-                  {:else if entry.error}
-                    <span class="failed">failed</span> ·
-                  {/if}
-                  {ago(entry.at)}
-                </span>
-              </span>
-            </button>
-          </li>
-        {:else}
-          <li class="none">Requests you send appear here.</li>
-        {/each}
-      </ul>
+      <HistoryList />
     {/if}
   </div>
 
@@ -429,10 +405,6 @@
   .current .path {
     color: inherit;
     opacity: 0.7;
-  }
-
-  .failed {
-    color: var(--error);
   }
 
   .none {

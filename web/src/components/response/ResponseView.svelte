@@ -1,7 +1,7 @@
 <script lang="ts">
   import { overflowFade } from "../../lib/actions";
   import { copyText } from "../../lib/clipboard";
-  import { payloadText } from "../../lib/format";
+  import { ago, payloadText } from "../../lib/format";
   import { openDialog, openEnvironments, type RequestTab } from "../../lib/store.svelte";
   import Icon from "../Icon.svelte";
   import BodyViewer from "./BodyViewer.svelte";
@@ -84,6 +84,16 @@
 
 <div class="response">
   <Specimen {execution} sending={tab.sending} />
+
+  {#if tab.fromHistory && !tab.sending}
+    <p class="from-history">
+      <Icon name="clock" />
+      <span
+        >From history, sent {ago(tab.fromHistory.at)}.{#if tab.fromHistory.bodyCut}
+          History keeps the first MiB of a body.{/if} Send it to run it again.</span
+      >
+    </p>
+  {/if}
 
   {#if execution && !tab.sending}
     {#if execution.error}
@@ -281,6 +291,21 @@
     grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
     height: 100%;
     min-height: 0;
+  }
+
+  .from-history {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    margin: 0;
+    padding: 6px var(--s4);
+    border-bottom: 1px solid var(--rule-3);
+    color: var(--ink-2);
+  }
+
+  .from-history :global(.icon) {
+    flex: none;
+    color: var(--ink-3);
   }
 
   .error {
