@@ -209,7 +209,7 @@ fn strict(vars: &VarStack, text: &str, what: &str) -> Result<String> {
     let out = vars.interpolate(text);
     match out.missing.first() {
         Some(name) => Err(Error::Invalid(format!(
-            "the {what} uses {}",
+            "the {what} cannot be filled in: {}",
             crate::vars::missing_reason(name)
         ))),
         None => Ok(out.text),
