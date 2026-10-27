@@ -32,6 +32,12 @@ pub struct ImportReport {
     pub folders: usize,
     /// Things that could not be carried over exactly.
     pub warnings: Vec<String>,
+    /// The format read, such as `OpenAPI 3.1`. Empty for Postman files.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub format: String,
+    /// Ids of environments created alongside a collection.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub environments: Vec<String>,
 }
 
 /// Imports an exported collection, environment or globals file.
