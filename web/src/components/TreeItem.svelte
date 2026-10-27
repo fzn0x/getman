@@ -1,5 +1,6 @@
 <script lang="ts">
   import { methodClass, methodShort } from "../lib/format";
+  import { kindMark } from "../lib/realtime";
   import type { Node } from "../lib/types";
   import type { MenuItem } from "./Menu.svelte";
   import {
@@ -27,6 +28,7 @@
   let drop = $state<"" | "into" | "before">("");
 
   const open = $derived(node.kind === "folder" && ws.expanded[node.path] === true);
+  const mark = $derived(node.kind === "request" ? kindMark(node.request_kind) : "");
   const DRAG = "application/x-getman-path";
 
   function activate(): void {
@@ -127,8 +129,8 @@
       <span class="label folder">{node.name}</span>
     {:else}
       <span class="twisty"></span>
-      <span class="method {methodClass(node.method)}" title={node.method}>
-        {node.error ? "ERR" : methodShort(node.method)}
+      <span class="method {methodClass(mark || node.method)}" title={mark || node.method}>
+        {node.error ? "ERR" : mark || methodShort(node.method)}
       </span>
       <span class="label">{node.name}</span>
     {/if}
