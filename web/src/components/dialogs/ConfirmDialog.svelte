@@ -5,8 +5,10 @@
   let { dialog }: { dialog: Extract<DialogState, { kind: "confirm" }> } = $props();
 
   function confirm(): void {
+    // Props read through the open dialog, so take them before closing it.
+    const { onConfirm } = dialog;
     closeDialog();
-    dialog.onConfirm();
+    onConfirm();
   }
 </script>
 

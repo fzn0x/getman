@@ -23,8 +23,10 @@
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (!valid) return;
+    // Props read through the open dialog, so take them before closing it.
+    const target = tab;
     closeDialog();
-    await saveAs(tab, folder, name.trim());
+    await saveAs(target, folder, name.trim());
   }
 </script>
 

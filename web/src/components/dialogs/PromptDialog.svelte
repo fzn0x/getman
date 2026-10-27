@@ -10,8 +10,10 @@
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (!valid) return;
+    // Props read through the open dialog, so take them before closing it.
+    const { onSubmit } = dialog;
     closeDialog();
-    await dialog.onSubmit(value.trim());
+    await onSubmit(value.trim());
   }
 </script>
 
