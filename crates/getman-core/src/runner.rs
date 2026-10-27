@@ -18,6 +18,9 @@ use crate::workspace::Node;
 pub struct RunOptions {
     /// A folder or request path; empty for the whole workspace.
     pub target: String,
+    /// Folders and requests to run one after another, in this order,
+    /// instead of `target`. Left empty, `target` runs.
+    pub targets: Vec<String>,
     /// Id of the environment to use.
     pub environment: Option<String>,
     /// Number of iterations. Defaults to the number of data rows, or 1.
@@ -39,6 +42,7 @@ impl Default for RunOptions {
     fn default() -> Self {
         Self {
             target: String::new(),
+            targets: Vec::new(),
             environment: None,
             iterations: None,
             data: Vec::new(),
@@ -185,6 +189,26 @@ pub fn requests_in(tree: &[Node], target: &str) -> Result<Vec<RunItem>> {
     Ok(items)
 }
 
+/// The requests several targets cover, one target after another. A
+/// request named twice runs twice.
+pub fn requests_in_all(tree: &[Node], targets: &[String]) -> Result<Vec<RunItem>> {
+    let mut items = Vec::new();
+    for target in targets {
+        items.extend(requests_in(tree, target)?);
+    }
+    Ok(items)
+}
+
+/// The requests a run covers: its `targets` when it has some, else its
+/// `target`.
+pub fn planned(tree: &[Node], options: &RunOptions) -> Result<Vec<RunItem>> {
+    if options.targets.is_empty() {
+        requests_in(tree, &options.target)
+    } else {
+        requests_in_all(tree, &options.targets)
+    }
+}
+
 /// Runs the requests a target covers. Events are reported as they happen;
 /// setting `cancel` stops the run after the current request.
 pub async fn run(
@@ -194,7 +218,7 @@ pub async fn run(
     mut on_event: impl FnMut(RunEvent),
 ) -> Result<RunReport> {
     let started = Instant::now();
-    let items = requests_in(&executor.workspace.tree()?, &options.target)?;
+    let items = planned(&executor.workspace.tree()?, options)?;
     let iterations = options
         .iterations
         .unwrap_or(options.data.len().max(1))
@@ -479,6 +503,34 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn targets_run_in_the_order_given() {
+        let server = test_server::spawn().await;
+        let (_dir, executor) = setup(&server.url(""));
+        let ws = &executor.workspace;
+        let folder = ws.create_folder("", "Flow").unwrap();
+        ws.create_request(&folder, "A", &request("{{base}}/echo/a", &[], ""))
+            .unwrap();
+        ws.create_request(&folder, "B", &request("{{base}}/echo/b", &[], ""))
+            .unwrap();
+        let last = ws
+            .create_request("", "Last", &request("{{base}}/echo/last", &[], ""))
+            .unwrap();
+        let options = RunOptions {
+            targets: vec![last, "flow/b.yaml".into(), folder],
+            ..RunOptions::default()
+        };
+        let mut names = Vec::new();
+        run(&executor, &options, &AtomicBool::new(false), |e| {
+            if let RunEvent::Request { execution, .. } = e {
+                names.push(execution.name.clone());
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(names, ["Last", "B", "A", "B"]);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn cancelling_stops_before_the_next_request() {
         let server = test_server::spawn().await;
         let (_dir, executor) = setup(&server.url(""));
@@ -525,5 +577,17 @@ mod tests {
         assert_eq!(names("a"), ["X"]);
         assert_eq!(names("y.yaml"), ["Y"]);
         assert!(requests_in(&tree, "nope").is_err());
+
+        let all = |targets: &[&str]| -> Vec<String> {
+            let targets: Vec<String> = targets.iter().map(|t| (*t).to_owned()).collect();
+            requests_in_all(&tree, &targets)
+                .unwrap()
+                .into_iter()
+                .map(|i| i.name)
+                .collect()
+        };
+        assert_eq!(all(&["y.yaml", "a"]), ["Y", "X"]);
+        assert_eq!(all(&["a/x.yaml", "a/x.yaml"]), ["X", "X"]);
+        assert!(requests_in_all(&tree, &["a".into(), "nope".into()]).is_err());
     }
 }
