@@ -13,6 +13,7 @@ base64 = "0.23"
 cookie_store = "0.22"
 csv = "1"
 fastrand = "2"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 getrandom = "0.3"
 hex = "0.4"
 hmac = "0.13"
@@ -25,13 +26,16 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls-no-p
 reqwest_cookie_store = "0.10"
 rquickjs = "0.14"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+rustls-platform-verifier = "0.7"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 serde_yaml_ng = "0.10"
 sha1 = "0.11"
 sha2 = "0.11"
 thiserror = "2"
-tokio = { version = "1", features = ["rt", "macros", "time", "fs", "sync"] }
+tokio = { version = "1", features = ["rt", "macros", "time", "fs", "sync", "net"] }
+tokio-rustls = { version = "0.26", default-features = false }
+tokio-tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }
 url = "2"
 
 [lints]
