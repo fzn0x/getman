@@ -205,6 +205,10 @@ pub struct Response {
     /// Address of the server that answered.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote_addr: Option<String>,
+    /// Whether the body is an event stream that was still open when the
+    /// request timed out. The body holds what arrived until then.
+    #[serde(default)]
+    pub stream_open: bool,
 }
 
 /// Sizes of a response, in bytes.
@@ -339,13 +343,27 @@ impl HttpClient {
             })
             .collect();
 
+        let event_stream = headers.iter().any(|h| {
+            h.name.eq_ignore_ascii_case("content-type")
+                && h.value
+                    .trim_start()
+                    .to_ascii_lowercase()
+                    .starts_with("text/event-stream")
+        });
         let mut body = Vec::new();
         let mut truncated = false;
-        while let Some(chunk) = response
-            .chunk()
-            .await
-            .map_err(|e| Error::Http(describe(&e)))?
-        {
+        let mut stream_open = false;
+        loop {
+            let chunk = match response.chunk().await {
+                Ok(Some(chunk)) => chunk,
+                Ok(None) => break,
+                // An event stream need not end; keep what arrived in time.
+                Err(e) if event_stream && e.is_timeout() => {
+                    stream_open = true;
+                    break;
+                }
+                Err(e) => return Err(Error::Http(describe(&e))),
+            };
             let room = MAX_BODY_BYTES - body.len();
             if chunk.len() > room {
                 body.extend_from_slice(&chunk[..room]);
@@ -381,6 +399,7 @@ impl HttpClient {
             time_ms,
             headers_ms,
             remote_addr,
+            stream_open,
         })
     }
 
@@ -654,6 +673,34 @@ mod tests {
         assert_eq!(cookies[0].name, "flavor");
         assert!(client.remove_cookie(&cookies[0].domain, &cookies[0].path, "flavor"));
         assert_eq!(client.cookies(), []);
+    }
+
+    #[tokio::test]
+    async fn an_event_stream_keeps_what_arrived_before_the_timeout() {
+        let server = test_server::spawn().await;
+        let response = HttpClient::new()
+            .send(
+                &get(server.url("/sse/forever")),
+                Transport {
+                    timeout_ms: 300,
+                    ..Transport::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status, 200);
+        assert!(response.stream_open);
+        assert!(
+            response.text().contains("data: tick 0"),
+            "{}",
+            response.text()
+        );
+
+        let finished = HttpClient::new()
+            .send(&get(server.url("/sse")), Transport::default())
+            .await
+            .unwrap();
+        assert!(!finished.stream_open);
     }
 
     #[tokio::test]

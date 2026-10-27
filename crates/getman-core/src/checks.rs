@@ -492,6 +492,7 @@ mod tests {
                 body: body.len() as u64,
             },
             remote_addr: None,
+            stream_open: false,
         }
     }
 
