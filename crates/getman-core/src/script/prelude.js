@@ -1226,6 +1226,12 @@
         delete scopes.local[String(name)];
         out.changes.push({ scope: "local", name: String(name), value: null });
       },
+      clear() {
+        for (const name of Object.keys(scopes.local)) {
+          delete scopes.local[name];
+          out.changes.push({ scope: "local", name, value: null });
+        }
+      },
       toObject() {
         const object = {};
         for (const scope of STRONGEST_FIRST.slice().reverse()) Object.assign(object, scopes[scope]);

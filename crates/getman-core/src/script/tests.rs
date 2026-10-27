@@ -203,6 +203,41 @@ fn variables_resolve_by_scope_and_report_changes() {
 }
 
 #[test]
+fn clearing_variables_removes_only_local_ones() {
+    let mut input = input(Event::PostResponse);
+    input.scopes.local.insert("earlier".into(), "1".into());
+    let output = run(
+        &ScriptHost::default(),
+        &script(
+            r#"
+            gm.variables.set("later", "2");
+            gm.variables.clear();
+            gm.test("cleared", () => {
+                gm.expect(gm.variables.has("earlier")).to.be.false;
+                gm.expect(gm.variables.has("later")).to.be.false;
+                gm.expect(gm.variables.get("token")).to.equal("abc");
+            });
+            "#,
+        ),
+        &input,
+    );
+    assert_all_pass(&output);
+    let changes: Vec<_> = output
+        .changes
+        .iter()
+        .map(|c| (c.scope, c.name.as_str(), c.value.as_deref()))
+        .collect();
+    assert_eq!(
+        changes,
+        [
+            (ChangeScope::Local, "later", Some("2")),
+            (ChangeScope::Local, "earlier", None),
+            (ChangeScope::Local, "later", None),
+        ]
+    );
+}
+
+#[test]
 fn pre_request_scripts_edit_the_request() {
     let output = pre(r#"
         gm.request.headers.upsert({ key: "accept", value: "text/plain" });
