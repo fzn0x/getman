@@ -46,10 +46,15 @@ pub(crate) fn import(args: &ImportArgs) -> Outcome {
         postman::import(&workspace, &folder, &text, args.root).map_err(|e| e.to_string())?;
     let what = match report.kind.as_str() {
         "collection" => format!(
-            "the collection {} with {} requests in {} folders{}",
+            "the collection {} with {} requests in {} folders{}{}",
             style::paint(style::BOLD, &report.name),
             report.requests,
             report.folders,
+            match report.examples {
+                0 => String::new(),
+                1 => " and 1 saved example".to_owned(),
+                n => format!(" and {n} saved examples"),
+            },
             if report.path.is_empty() {
                 String::new()
             } else {

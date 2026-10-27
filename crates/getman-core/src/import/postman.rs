@@ -4,15 +4,16 @@
 //! Folders become directories, requests become YAML files in the original
 //! order, and collection-level variables, authentication and scripts move
 //! to the workspace or to the folder the collection is imported into.
-//! Scripts keep working: `pm` is an alias of `gm`.
+//! Saved example responses become the requests' examples. Scripts keep
+//! working: `pm` is an alias of `gm`.
 
 use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::error::{Error, Result};
 use crate::model::{
-    ApiKeyLocation, Auth, Body, ClientAuth, Environment, Folder, FormField, KeyValue, OAuth2,
-    OAuth2Grant, Request, Scripts, Settings, Vars,
+    ApiKeyLocation, Auth, Body, ClientAuth, Environment, Example, ExampleRequest, Folder,
+    FormField, KeyValue, OAuth2, OAuth2Grant, Request, Scripts, Settings, Vars,
 };
 use crate::workspace::{EnvironmentFiles, Workspace, slugify};
 
@@ -30,6 +31,8 @@ pub struct ImportReport {
     pub requests: usize,
     /// Folders created.
     pub folders: usize,
+    /// Saved example responses kept.
+    pub examples: usize,
     /// Things that could not be carried over exactly.
     pub warnings: Vec<String>,
 }
@@ -127,13 +130,6 @@ fn import_collection(
 
     let items = value["item"].as_array().cloned().unwrap_or_default();
     import_items(workspace, &folder, &items, &mut report)?;
-
-    let responses = count_examples(&items);
-    if responses > 0 {
-        report.warnings.push(format!(
-            "{responses} saved example responses were not imported; Getman does not keep examples"
-        ));
-    }
     Ok(report)
 }
 
@@ -164,6 +160,10 @@ fn import_items(
             let request = request(item, &name, &mut report.warnings);
             let path = workspace.create_request(folder, &name, &request)?;
             report.requests += 1;
+            report.examples += request.examples.len();
+            if !request.examples.is_empty() {
+                crate::examples::place_long_bodies(workspace, &path)?;
+            }
             let file = path.rsplit('/').next().unwrap_or(&path);
             order.push(file.trim_end_matches(".yaml").to_owned());
         }
@@ -203,7 +203,72 @@ fn request(item: &Value, name: &str, warnings: &mut Vec<String>) -> Request {
         request.auth = auth;
     }
     request.settings = settings(&item["protocolProfileBehavior"]);
+    request.examples = examples(&item["response"]);
     request
+}
+
+/// Saved responses, which Postman keeps in an item's `response` list.
+fn examples(responses: &Value) -> Vec<Example> {
+    let mut examples: Vec<Example> = Vec::new();
+    for (n, response) in responses.as_array().into_iter().flatten().enumerate() {
+        let mut name = text(&response["name"])
+            .filter(|name| !name.trim().is_empty())
+            .unwrap_or_else(|| format!("Example {}", n + 1));
+        let base = name.clone();
+        let mut copy = 2;
+        while examples.iter().any(|e| e.name == name) {
+            name = format!("{base} ({copy})");
+            copy += 1;
+        }
+        let headers = match &response["header"] {
+            Value::String(raw) => raw
+                .lines()
+                .filter_map(|line| line.split_once(':'))
+                .map(|(name, value)| KeyValue::new(name.trim(), value.trim()))
+                .collect(),
+            other => key_values(other),
+        };
+        examples.push(Example {
+            name,
+            status: response["code"]
+                .as_u64()
+                .and_then(|code| u16::try_from(code).ok())
+                .unwrap_or(200),
+            headers,
+            body: text(&response["body"]).unwrap_or_default(),
+            body_file: None,
+            request: example_request(&response["originalRequest"]),
+        });
+    }
+    examples
+}
+
+fn example_request(source: &Value) -> Option<ExampleRequest> {
+    if source.is_null() {
+        return None;
+    }
+    if let Some(url) = source.as_str() {
+        return Some(ExampleRequest {
+            url: url.to_owned(),
+            ..ExampleRequest::default()
+        });
+    }
+    let body = &source["body"];
+    Some(ExampleRequest {
+        method: text(&source["method"])
+            .unwrap_or_default()
+            .to_ascii_uppercase(),
+        url: url(&source["url"]).0,
+        headers: key_values(&source["header"])
+            .into_iter()
+            .filter(|h| h.enabled)
+            .collect(),
+        body: if body["mode"].as_str().unwrap_or("raw") == "raw" {
+            text(&body["raw"]).unwrap_or_default()
+        } else {
+            String::new()
+        },
+    })
 }
 
 fn url(value: &Value) -> (String, Vec<KeyValue>, Vars) {
@@ -582,18 +647,6 @@ fn text(value: &Value) -> Option<String> {
     }
 }
 
-fn count_examples(items: &[Value]) -> usize {
-    items
-        .iter()
-        .map(|item| {
-            item["response"].as_array().map_or(0, Vec::len)
-                + item["item"]
-                    .as_array()
-                    .map_or(0, |children| count_examples(children))
-        })
-        .sum()
-}
-
 fn environment_values(value: &Value) -> (Vars, Vec<String>) {
     let mut vars = Vars::new();
     let mut secrets = Vec::new();
@@ -687,7 +740,25 @@ mod tests {
                   "query": [{ "key": "limit", "value": "10" }, { "key": "debug", "value": "1", "disabled": true }]
                 }
               },
-              "response": [{ "name": "example" }]
+              "response": [
+                {
+                  "name": "Some pets",
+                  "originalRequest": {
+                    "method": "GET",
+                    "header": [{ "key": "Accept", "value": "application/json" }],
+                    "url": { "raw": "{{baseUrl}}/pets?limit=2", "host": ["{{baseUrl}}"], "path": ["pets"],
+                      "query": [{ "key": "limit", "value": "2" }] }
+                  },
+                  "status": "OK",
+                  "code": 200,
+                  "_postman_previewlanguage": "json",
+                  "header": [{ "key": "Content-Type", "value": "application/json" }],
+                  "cookie": [],
+                  "body": "[{\"id\": 1}, {\"id\": 2}]"
+                },
+                { "name": "Some pets", "code": 500, "header": null, "body": "oops" },
+                { "code": 404 }
+              ]
             },
             {
               "name": "Create pet",
@@ -795,7 +866,46 @@ mod tests {
         let warnings = report.warnings.join("\n");
         assert!(warnings.contains("rex.png"), "{warnings}");
         assert!(warnings.contains("awsv4"), "{warnings}");
-        assert!(warnings.contains("1 saved example"), "{warnings}");
+        assert!(!warnings.contains("example"), "{warnings}");
+    }
+
+    #[test]
+    fn saved_responses_become_examples() {
+        let (_dir, ws) = workspace();
+        let report = import(&ws, "", COLLECTION, false).unwrap();
+        assert_eq!(report.examples, 3);
+        let list = ws.read_request("pet-store/pets/list-pets.yaml").unwrap();
+        let names: Vec<_> = list.examples.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, ["Some pets", "Some pets (2)", "Example 3"]);
+
+        let first = &list.examples[0];
+        assert_eq!(first.status, 200);
+        assert_eq!(first.headers[0].name, "Content-Type");
+        assert_eq!(first.body, r#"[{"id": 1}, {"id": 2}]"#);
+        let sent = first.request.as_ref().unwrap();
+        assert_eq!(sent.method, "GET");
+        assert_eq!(sent.url, "{{baseUrl}}/pets?limit=2");
+        assert_eq!(sent.headers[0].value, "application/json");
+
+        assert_eq!(list.examples[1].status, 500);
+        assert!(list.examples[1].request.is_none());
+        assert_eq!(list.examples[2].status, 404);
+    }
+
+    #[test]
+    fn long_example_bodies_go_to_files() {
+        let (dir, ws) = workspace();
+        let body = "x".repeat(crate::examples::INLINE_LIMIT + 1);
+        let json = serde_json::json!({
+            "info": { "name": "Big", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json" },
+            "item": [{ "name": "Dump", "request": { "method": "GET", "url": "https://x.test/dump" },
+                "response": [{ "name": "All", "code": 200, "body": body }] }]
+        });
+        import(&ws, "", &json.to_string(), false).unwrap();
+        let dump = ws.read_request("big/dump.yaml").unwrap();
+        assert_eq!(dump.examples[0].body_file.as_deref(), Some("all.txt"));
+        let file = dir.path().join("big/dump.examples/all.txt");
+        assert_eq!(std::fs::read_to_string(file).unwrap(), body);
     }
 
     #[test]

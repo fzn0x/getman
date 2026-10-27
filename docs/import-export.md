@@ -44,13 +44,13 @@ commit.
 | Scripts | Pre-request and test scripts, unchanged: `pm` is the same object as `gm` |
 | Variables | Collection, folder, environment and global variables |
 | Settings | Redirects, TLS verification |
+| Examples | Saved responses, with their status, headers, body and the request that got them. See [Examples and mocks](examples-and-mocks.md) |
 
 ### What is reported instead
 
 Getman prints a warning for each thing it could not bring over, rather
 than dropping it quietly:
 
-- **Saved example responses.** Getman does not keep examples.
 - **Files** selected for form fields or binary bodies. Exports hold the
   absolute path on the exporting machine; Getman keeps the file name and
   asks you to copy the file into the workspace.
