@@ -8,6 +8,7 @@
 
 pub mod curl;
 pub mod har;
+pub mod hoppscotch;
 pub mod insomnia;
 pub mod openapi;
 pub mod postman;
@@ -38,6 +39,8 @@ pub enum Format {
     Har,
     /// An Insomnia export: v4 JSON or v5 YAML.
     Insomnia,
+    /// Hoppscotch collections or environments.
+    Hoppscotch,
 }
 
 impl Format {
@@ -50,6 +53,7 @@ impl Format {
             Self::Swagger => "Swagger 2.0 document",
             Self::Har => "HAR file",
             Self::Insomnia => "Insomnia export",
+            Self::Hoppscotch => "Hoppscotch export",
         }
     }
 }
@@ -160,6 +164,9 @@ fn detect_value(value: &Value) -> Option<Format> {
     {
         return Some(Format::Postman);
     }
+    if hoppscotch::matches(value) {
+        return Some(Format::Hoppscotch);
+    }
     None
 }
 
@@ -185,7 +192,7 @@ pub fn import_text(
             .map(|e| format!(" ({e})"))
             .unwrap_or_default();
         return Err(Error::Invalid(format!(
-            "this is not a format Getman imports{reason}; use a Postman or Insomnia export, an OpenAPI or Swagger document, a HAR file or a cURL command"
+            "this is not a format Getman imports{reason}; use a Postman, Insomnia or Hoppscotch export, an OpenAPI or Swagger document, a HAR file or a cURL command"
         )));
     };
     let import = match format {
@@ -205,6 +212,7 @@ pub fn import_text(
         Format::Openapi | Format::Swagger => openapi::parse(&parse_document(text)?)?,
         Format::Har => har::parse(&parse_document(text)?)?,
         Format::Insomnia => insomnia::parse(&parse_document(text)?)?,
+        Format::Hoppscotch => hoppscotch::parse(&parse_document(text)?)?,
     };
     save(workspace, parent, import, into_root, format)
 }
@@ -608,6 +616,16 @@ mod tests {
                 Some(Format::Postman),
             ),
             ("", r#"{"name": "e", "values": []}"#, Some(Format::Postman)),
+            (
+                "",
+                r#"{"v": 2, "name": "c", "folders": [], "requests": []}"#,
+                Some(Format::Hoppscotch),
+            ),
+            (
+                "",
+                r#"[{"name": "env", "variables": [{"key": "a", "value": "1"}]}]"#,
+                Some(Format::Hoppscotch),
+            ),
             ("", "{\"just\": \"json\"}", None),
             ("", "hello", None),
         ];

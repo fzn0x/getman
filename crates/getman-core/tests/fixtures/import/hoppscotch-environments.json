@@ -1,0 +1,19 @@
+[
+  {
+    "v": 1,
+    "id": "env_1",
+    "name": "Staging",
+    "variables": [
+      { "key": "baseUrl", "value": "https://staging.example.com", "secret": false },
+      { "key": "token", "value": "", "secret": true }
+    ]
+  },
+  {
+    "v": 2,
+    "id": "env_2",
+    "name": "Local",
+    "variables": [
+      { "key": "host", "initialValue": "<<base>>.example.com", "currentValue": "", "secret": false }
+    ]
+  }
+]

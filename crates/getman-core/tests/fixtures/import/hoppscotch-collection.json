@@ -1,0 +1,102 @@
+{
+  "v": 2,
+  "name": "Shop",
+  "auth": { "authType": "bearer", "authActive": true, "token": "<<token>>" },
+  "headers": [{ "key": "X-Team", "value": "core", "active": true }],
+  "folders": [
+    {
+      "v": 2,
+      "name": "Orders",
+      "auth": { "authType": "inherit", "authActive": true },
+      "headers": [],
+      "folders": [],
+      "requests": [
+        {
+          "v": "4",
+          "name": "List orders",
+          "method": "GET",
+          "endpoint": "<<baseUrl>>/orders",
+          "params": [
+            { "key": "page", "value": "1", "active": true },
+            { "key": "debug", "value": "1", "active": false }
+          ],
+          "headers": [],
+          "preRequestScript": "",
+          "testScript": "",
+          "auth": { "authType": "inherit", "authActive": true },
+          "body": { "contentType": null, "body": null },
+          "requestVariables": [{ "key": "limit", "value": "10", "active": true }]
+        },
+        {
+          "v": "4",
+          "name": "Create order",
+          "method": "POST",
+          "endpoint": "<<baseUrl>>/orders",
+          "params": [],
+          "headers": [{ "key": "Content-Type", "value": "application/json", "active": true }],
+          "preRequestScript": "",
+          "testScript": "pw.test(\"created\", () => { pw.expect(pw.response.status).toBe(201); });",
+          "auth": { "authType": "inherit", "authActive": true },
+          "body": { "contentType": "application/json", "body": "{\"sku\": \"BOOK-42\"}" }
+        }
+      ]
+    }
+  ],
+  "requests": [
+    {
+      "v": "4",
+      "name": "Login",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/login",
+      "params": [],
+      "headers": [],
+      "preRequestScript": "",
+      "testScript": "",
+      "auth": {
+        "authType": "oauth-2",
+        "authActive": true,
+        "grantTypeInfo": {
+          "grantType": "CLIENT_CREDENTIALS",
+          "authEndpoint": "https://id.example.com/authorize",
+          "tokenEndpoint": "https://id.example.com/token",
+          "clientID": "shop",
+          "clientSecret": "<<clientSecret>>",
+          "scopes": "orders",
+          "clientAuthentication": "IN_BODY"
+        },
+        "addTo": "HEADERS"
+      },
+      "body": { "contentType": "application/x-www-form-urlencoded", "body": "user: ada\n# remember: yes" }
+    },
+    {
+      "v": "4",
+      "name": "Upload",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/upload",
+      "params": [],
+      "headers": [],
+      "preRequestScript": "",
+      "testScript": "",
+      "auth": { "authType": "api-key", "authActive": true, "key": "key", "value": "<<apiKey>>", "addTo": "QUERY_PARAMS" },
+      "body": {
+        "contentType": "multipart/form-data",
+        "body": [
+          { "key": "photo", "value": [], "active": true, "isFile": true },
+          { "key": "caption", "value": "Tom", "active": true, "isFile": false }
+        ]
+      }
+    },
+    {
+      "v": "4",
+      "name": "Signed",
+      "method": "GET",
+      "endpoint": "<<baseUrl>>/signed",
+      "params": [],
+      "headers": [],
+      "preRequestScript": "",
+      "testScript": "",
+      "auth": { "authType": "aws-signature", "authActive": true },
+      "body": { "contentType": null, "body": null }
+    }
+  ]
+}
