@@ -6,13 +6,15 @@
 //! to the workspace or to the folder the collection is imported into.
 //! Scripts keep working: `pm` is an alias of `gm`.
 
+mod auth;
+
 use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::error::{Error, Result};
 use crate::model::{
-    ApiKeyLocation, Auth, Body, ClientAuth, Environment, Folder, FormField, KeyValue, OAuth2,
-    OAuth2Grant, Request, Scripts, Settings, Vars,
+    ApiKeyLocation, Auth, Body, Environment, Folder, FormField, KeyValue, Request, Scripts,
+    Settings, Vars,
 };
 use crate::workspace::{EnvironmentFiles, Workspace, slugify};
 
@@ -437,52 +439,31 @@ fn auth(value: &Value, name: &str, warnings: &mut Vec<String>) -> Option<Auth> {
         }
         "oauth2" => {
             let p = params("oauth2");
-            let grant = match get(&p, "grant_type").as_str() {
-                "client_credentials" => Some(OAuth2Grant::ClientCredentials),
-                "password_credentials" => Some(OAuth2Grant::Password),
-                _ => None,
-            };
-            match grant {
-                Some(grant) => Auth::Oauth2(OAuth2 {
-                    grant,
-                    token_url: get(&p, "accessTokenUrl"),
-                    client_id: get(&p, "clientId"),
-                    client_secret: get(&p, "clientSecret"),
-                    scope: get(&p, "scope"),
-                    audience: get(&p, "audience"),
-                    username: get(&p, "username"),
-                    password: get(&p, "password"),
-                    client_auth: if get(&p, "client_authentication") == "body" {
-                        ClientAuth::Body
-                    } else {
-                        ClientAuth::Basic
-                    },
-                    ..OAuth2::default()
-                }),
+            match auth::oauth2(&p, name, warnings) {
+                Some(oauth2) => oauth2,
                 None => {
-                    let token = get(&p, "accessToken");
+                    // A saved token would end up in a shared file, so it is
+                    // never imported.
                     warnings.push(format!(
-                        "{name}: OAuth 2.0 with the {:?} grant needs a browser; it now sends {} as a Bearer token",
+                        "{name}: OAuth 2.0 with the {:?} grant is not supported; it now sends {{{{accessToken}}}} as a Bearer token",
                         get(&p, "grant_type"),
-                        if token.is_empty() { "{{accessToken}}" } else { "the saved token" }
                     ));
                     Auth::Bearer {
-                        token: if token.is_empty() {
-                            "{{accessToken}}".into()
-                        } else {
-                            token
-                        },
+                        token: "{{accessToken}}".into(),
                         prefix: String::new(),
                     }
                 }
             }
         }
-        other => {
-            warnings.push(format!(
-                "{name}: {other} authentication is not supported; set the credentials in headers or a pre-request script"
-            ));
-            return None;
-        }
+        other => match auth::other(other, &params(other), name, warnings) {
+            Some(auth) => auth,
+            None => {
+                warnings.push(format!(
+                    "{name}: {other} authentication is not supported; set the credentials in headers or a pre-request script"
+                ));
+                return None;
+            }
+        },
     })
 }
 
@@ -726,7 +707,7 @@ mod tests {
             "method": "POST",
             "url": "{{baseUrl}}/login",
             "body": { "mode": "urlencoded", "urlencoded": [{ "key": "user", "value": "ada" }] },
-            "auth": { "type": "awsv4", "awsv4": [] }
+            "auth": { "type": "ntlm", "ntlm": [] }
           }
         }
       ]
@@ -787,7 +768,7 @@ mod tests {
         let Auth::Oauth2(oauth) = &upload.auth else {
             panic!()
         };
-        assert_eq!(oauth.client_auth, ClientAuth::Body);
+        assert_eq!(oauth.client_auth, crate::model::ClientAuth::Body);
 
         let login = ws.read_request("pet-store/login.yaml").unwrap();
         assert!(matches!(login.body, Body::Form { .. }));
@@ -795,8 +776,131 @@ mod tests {
 
         let warnings = report.warnings.join("\n");
         assert!(warnings.contains("rex.png"), "{warnings}");
-        assert!(warnings.contains("awsv4"), "{warnings}");
+        assert!(warnings.contains("ntlm"), "{warnings}");
         assert!(warnings.contains("1 saved example"), "{warnings}");
+    }
+
+    #[test]
+    fn signed_and_token_auth_types_carry_over() {
+        use crate::model::{
+            HawkAlgorithm, JwtAlgorithm, OAuth1Location, OAuth1Method, OAuth2Grant, Pkce,
+        };
+
+        let (_dir, ws) = workspace();
+        let fixture = include_str!("../../tests/fixtures/postman/auth.postman_collection.json");
+        let report = import(&ws, "", fixture, false).unwrap();
+        assert_eq!(report.requests, 11);
+        let read = |file: &str| {
+            ws.read_request(&format!("auth-types/{file}.yaml"))
+                .unwrap()
+                .auth
+        };
+
+        let Auth::AwsSigV4(aws) = read("aws-signature") else {
+            panic!()
+        };
+        assert_eq!(aws.access_key, "{{awsAccessKey}}");
+        assert_eq!(aws.session_token, "{{awsSessionToken}}");
+        assert_eq!(
+            (aws.region.as_str(), aws.service.as_str()),
+            ("eu-west-1", "s3")
+        );
+        assert_eq!(aws.location, ApiKeyLocation::Query);
+
+        let Auth::Oauth1(oauth1) = read("oauth-1-0") else {
+            panic!()
+        };
+        assert_eq!(oauth1.signature_method, OAuth1Method::HmacSha256);
+        assert_eq!(oauth1.consumer_key, "ck");
+        assert_eq!(oauth1.token_secret, "{{tokenSecret}}");
+        assert_eq!(oauth1.realm, "photos");
+        assert!(oauth1.version.is_empty());
+        assert!(oauth1.body_hash);
+        assert_eq!(oauth1.location, OAuth1Location::Query);
+
+        let Auth::Jwt(jwt) = read("jwt-bearer") else {
+            panic!()
+        };
+        assert_eq!(jwt.algorithm, JwtAlgorithm::Rs256);
+        assert_eq!(jwt.private_key, "{{jwtKey}}");
+        assert_eq!(jwt.payload, "{\"sub\": \"{{userId}}\"}");
+        assert_eq!(jwt.location, ApiKeyLocation::Query);
+        assert_eq!(jwt.param, "jwt");
+        assert!(jwt.prefix.is_empty());
+
+        let Auth::Hawk(hawk) = read("hawk") else {
+            panic!()
+        };
+        assert_eq!(
+            (hawk.id.as_str(), hawk.key.as_str()),
+            ("dh37fgj492je", "{{hawkKey}}")
+        );
+        assert_eq!(hawk.algorithm, HawkAlgorithm::Sha1);
+        assert_eq!(hawk.ext, "some-app-ext-data");
+        assert!(hawk.payload_hash);
+
+        let Auth::Edgegrid(edgegrid) = read("akamai-edgegrid") else {
+            panic!()
+        };
+        assert_eq!(edgegrid.client_token, "akab-client");
+        assert_eq!(edgegrid.headers_to_sign, ["X-Test1", "X-Test2"]);
+        assert_eq!(edgegrid.base_url, "https://akab-host.luna.akamaiapis.net");
+
+        let Auth::Asap(asap) = read("atlassian-asap") else {
+            panic!()
+        };
+        assert_eq!(asap.issuer, "billing");
+        assert_eq!(asap.key_id, "billing/key1");
+        assert_eq!(asap.algorithm, Some(JwtAlgorithm::Es256));
+        assert_eq!(asap.expires_in, Some(900));
+
+        let Auth::Oauth2(code) = read("oauth-2-0-code-with-pkce") else {
+            panic!()
+        };
+        assert_eq!(code.grant, OAuth2Grant::AuthorizationCode);
+        assert_eq!(code.pkce, Pkce::S256);
+        assert_eq!(code.auth_url, "https://id.example.com/authorize");
+        assert_eq!(code.callback_url, "http://localhost:5000/callback");
+        assert_eq!(code.auth_params[0].name, "prompt");
+        assert!(!code.auth_params[1].enabled);
+        assert_eq!(code.token_params[0].name, "tenant");
+        assert_eq!(code.token_in, ApiKeyLocation::Query);
+        assert_eq!(code.prefix, "Token");
+        assert_eq!(code.client_auth, crate::model::ClientAuth::Body);
+
+        let Auth::Oauth2(plain) = read("oauth-2-0-code") else {
+            panic!()
+        };
+        assert_eq!(plain.grant, OAuth2Grant::AuthorizationCode);
+        assert_eq!(plain.pkce, Pkce::Off);
+        assert!(plain.callback_url.is_empty());
+
+        let Auth::Oauth2(implicit) = read("oauth-2-0-implicit") else {
+            panic!()
+        };
+        assert_eq!(implicit.grant, OAuth2Grant::Implicit);
+        let Auth::Oauth2(password) = read("oauth-2-0-password") else {
+            panic!()
+        };
+        assert_eq!(password.grant, OAuth2Grant::Password);
+        assert_eq!(password.username, "ada");
+        let Auth::Oauth2(client) = read("oauth-2-0-client-credentials") else {
+            panic!()
+        };
+        assert_eq!(client.grant, OAuth2Grant::ClientCredentials);
+        assert_eq!(client.audience, "https://api.example.com");
+
+        let warnings = report.warnings.join("\n");
+        assert!(warnings.contains("oauth.pstmn.io"), "{warnings}");
+        assert!(
+            warnings.contains("saved OAuth 2.0 access token"),
+            "{warnings}"
+        );
+        assert!(!warnings.contains("not supported"), "{warnings}");
+        for file in std::fs::read_dir(ws.root().join("auth-types")).unwrap() {
+            let text = std::fs::read_to_string(file.unwrap().path()).unwrap();
+            assert!(!text.contains("saved-access-token"), "{text}");
+        }
     }
 
     #[test]

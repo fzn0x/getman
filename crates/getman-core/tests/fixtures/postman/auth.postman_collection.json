@@ -1,0 +1,228 @@
+{
+  "info": {
+    "_postman_id": "6a0f1f8e-0000-4000-8000-000000000001",
+    "name": "Auth types",
+    "description": "One request for each signed or token-based authentication type.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "AWS Signature",
+      "request": {
+        "auth": {
+          "type": "awsv4",
+          "awsv4": [
+            { "key": "accessKey", "value": "{{awsAccessKey}}", "type": "string" },
+            { "key": "secretKey", "value": "{{awsSecretKey}}", "type": "string" },
+            { "key": "sessionToken", "value": "{{awsSessionToken}}", "type": "string" },
+            { "key": "region", "value": "eu-west-1", "type": "string" },
+            { "key": "service", "value": "s3", "type": "string" },
+            { "key": "addAuthDataToQuery", "value": true, "type": "boolean" }
+          ]
+        },
+        "method": "GET",
+        "url": "https://bucket.s3.eu-west-1.amazonaws.com/report.csv"
+      }
+    },
+    {
+      "name": "OAuth 1.0",
+      "request": {
+        "auth": {
+          "type": "oauth1",
+          "oauth1": [
+            { "key": "signatureMethod", "value": "HMAC-SHA256", "type": "string" },
+            { "key": "consumerKey", "value": "ck", "type": "string" },
+            { "key": "consumerSecret", "value": "{{consumerSecret}}", "type": "string" },
+            { "key": "token", "value": "{{token}}", "type": "string" },
+            { "key": "tokenSecret", "value": "{{tokenSecret}}", "type": "string" },
+            { "key": "realm", "value": "photos", "type": "string" },
+            { "key": "version", "value": "1.0", "type": "string" },
+            { "key": "includeBodyHash", "value": true, "type": "boolean" },
+            { "key": "addParamsToHeader", "value": false, "type": "boolean" },
+            { "key": "addEmptyParamsToSign", "value": false, "type": "boolean" }
+          ]
+        },
+        "method": "GET",
+        "url": "https://photos.example.net/photos?size=original"
+      }
+    },
+    {
+      "name": "JWT Bearer",
+      "request": {
+        "auth": {
+          "type": "jwt",
+          "jwt": [
+            { "key": "algorithm", "value": "RS256", "type": "string" },
+            { "key": "privateKey", "value": "{{jwtKey}}", "type": "string" },
+            { "key": "payload", "value": "{\"sub\": \"{{userId}}\"}", "type": "string" },
+            { "key": "header", "value": "{}", "type": "string" },
+            { "key": "isSecretBase64Encoded", "value": false, "type": "boolean" },
+            { "key": "addTokenTo", "value": "queryParam", "type": "string" },
+            { "key": "headerPrefix", "value": "Bearer", "type": "string" },
+            { "key": "queryParamKey", "value": "jwt", "type": "string" }
+          ]
+        },
+        "method": "GET",
+        "url": "https://api.example.com/me"
+      }
+    },
+    {
+      "name": "Hawk",
+      "request": {
+        "auth": {
+          "type": "hawk",
+          "hawk": [
+            { "key": "authId", "value": "dh37fgj492je", "type": "string" },
+            { "key": "authKey", "value": "{{hawkKey}}", "type": "string" },
+            { "key": "algorithm", "value": "sha1", "type": "string" },
+            { "key": "extraData", "value": "some-app-ext-data", "type": "string" },
+            { "key": "includePayloadHash", "value": true, "type": "boolean" }
+          ]
+        },
+        "method": "POST",
+        "url": "https://example.com:8000/resource/1"
+      }
+    },
+    {
+      "name": "Akamai EdgeGrid",
+      "request": {
+        "auth": {
+          "type": "edgegrid",
+          "edgegrid": [
+            { "key": "clientToken", "value": "akab-client", "type": "string" },
+            { "key": "clientSecret", "value": "{{edgegridSecret}}", "type": "string" },
+            { "key": "accessToken", "value": "akab-access", "type": "string" },
+            { "key": "baseURL", "value": "https://akab-host.luna.akamaiapis.net", "type": "string" },
+            { "key": "headersToSign", "value": "X-Test1, X-Test2", "type": "string" }
+          ]
+        },
+        "method": "GET",
+        "url": "{{baseUrl}}/papi/v1/groups"
+      }
+    },
+    {
+      "name": "Atlassian ASAP",
+      "request": {
+        "auth": {
+          "type": "asap",
+          "asap": [
+            { "key": "alg", "value": "ES256", "type": "string" },
+            { "key": "iss", "value": "billing", "type": "string" },
+            { "key": "aud", "value": "ledger", "type": "string" },
+            { "key": "kid", "value": "billing/key1", "type": "string" },
+            { "key": "privateKey", "value": "{{asapKey}}", "type": "string" },
+            { "key": "claims", "value": "{}", "type": "string" },
+            { "key": "exp", "value": "15m", "type": "string" }
+          ]
+        },
+        "method": "GET",
+        "url": "https://ledger.example.com/entries"
+      }
+    },
+    {
+      "name": "OAuth 2.0 code with PKCE",
+      "request": {
+        "auth": {
+          "type": "oauth2",
+          "oauth2": [
+            { "key": "grant_type", "value": "authorization_code_with_pkce", "type": "string" },
+            { "key": "challengeAlgorithm", "value": "S256", "type": "string" },
+            { "key": "authUrl", "value": "https://id.example.com/authorize", "type": "string" },
+            { "key": "accessTokenUrl", "value": "https://id.example.com/token", "type": "string" },
+            { "key": "clientId", "value": "app", "type": "string" },
+            { "key": "redirect_uri", "value": "http://localhost:5000/callback", "type": "string" },
+            { "key": "scope", "value": "openid profile", "type": "string" },
+            { "key": "client_authentication", "value": "body", "type": "string" },
+            { "key": "addTokenTo", "value": "queryParams", "type": "string" },
+            { "key": "headerPrefix", "value": "Token", "type": "string" },
+            {
+              "key": "authRequestParams",
+              "value": [
+                { "key": "prompt", "value": "consent", "enabled": true, "send_as": "request_url" },
+                { "key": "login_hint", "value": "ada", "enabled": false, "send_as": "request_url" }
+              ],
+              "type": "any"
+            },
+            {
+              "key": "tokenRequestParams",
+              "value": [{ "key": "tenant", "value": "t1", "enabled": true, "send_as": "request_body" }],
+              "type": "any"
+            }
+          ]
+        },
+        "method": "GET",
+        "url": "https://api.example.com/me"
+      }
+    },
+    {
+      "name": "OAuth 2.0 code",
+      "request": {
+        "auth": {
+          "type": "oauth2",
+          "oauth2": [
+            { "key": "grant_type", "value": "authorization_code", "type": "string" },
+            { "key": "authUrl", "value": "https://id.example.com/authorize", "type": "string" },
+            { "key": "accessTokenUrl", "value": "https://id.example.com/token", "type": "string" },
+            { "key": "clientId", "value": "app", "type": "string" },
+            { "key": "clientSecret", "value": "{{clientSecret}}", "type": "string" },
+            { "key": "redirect_uri", "value": "https://oauth.pstmn.io/v1/callback", "type": "string" },
+            { "key": "useBrowser", "value": true, "type": "boolean" }
+          ]
+        },
+        "method": "GET",
+        "url": "https://api.example.com/me"
+      }
+    },
+    {
+      "name": "OAuth 2.0 implicit",
+      "request": {
+        "auth": {
+          "type": "oauth2",
+          "oauth2": [
+            { "key": "grant_type", "value": "implicit", "type": "string" },
+            { "key": "authUrl", "value": "https://id.example.com/authorize", "type": "string" },
+            { "key": "clientId", "value": "spa", "type": "string" },
+            { "key": "accessToken", "value": "saved-access-token", "type": "string" },
+            { "key": "tokenType", "value": "Bearer", "type": "string" }
+          ]
+        },
+        "method": "GET",
+        "url": "https://api.example.com/me"
+      }
+    },
+    {
+      "name": "OAuth 2.0 password",
+      "request": {
+        "auth": {
+          "type": "oauth2",
+          "oauth2": [
+            { "key": "grant_type", "value": "password_credentials", "type": "string" },
+            { "key": "accessTokenUrl", "value": "https://id.example.com/token", "type": "string" },
+            { "key": "clientId", "value": "app", "type": "string" },
+            { "key": "username", "value": "ada", "type": "string" },
+            { "key": "password", "value": "{{password}}", "type": "string" }
+          ]
+        },
+        "method": "GET",
+        "url": "https://api.example.com/me"
+      }
+    },
+    {
+      "name": "OAuth 2.0 client credentials",
+      "request": {
+        "auth": {
+          "type": "oauth2",
+          "oauth2": [
+            { "key": "grant_type", "value": "client_credentials", "type": "string" },
+            { "key": "accessTokenUrl", "value": "https://id.example.com/token", "type": "string" },
+            { "key": "clientId", "value": "service", "type": "string" },
+            { "key": "clientSecret", "value": "{{clientSecret}}", "type": "string" },
+            { "key": "audience", "value": "https://api.example.com", "type": "string" }
+          ]
+        },
+        "method": "GET",
+        "url": "https://api.example.com/reports"
+      }
+    }
+  ]
+}
