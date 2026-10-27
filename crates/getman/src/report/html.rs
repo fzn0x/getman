@@ -36,7 +36,10 @@ pub(crate) fn render(recorded: &Recorded) -> String {
         let at = iso8601_millis(about.started);
         facts.push(format!(
             "<time datetime=\"{at}\">{}</time>",
-            escape(&at.replace('T', " ").replace(".000Z", " UTC"))
+            escape(&format!(
+                "{} UTC",
+                at.get(..16).unwrap_or_default().replace('T', " ")
+            ))
         ));
     }
     if recorded.iterations > 1 {
