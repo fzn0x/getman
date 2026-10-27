@@ -34,7 +34,10 @@ pub(crate) async fn spawn() -> TestServer {
         .route("/slow", get(slow))
         .route("/status/{code}", any(status))
         .route("/digest", get(digest))
-        .route("/token", post(token));
+        .route("/token", post(token))
+        .route("/sse", get(sse))
+        .route("/sse/forever", get(sse_forever))
+        .route("/sse/count", get(sse_count));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -162,4 +165,48 @@ async fn token(headers: HeaderMap, body: String) -> Response {
         "expires_in": 3600,
     }))
     .into_response()
+}
+
+fn event_stream(body: axum::body::Body) -> Response {
+    Response::builder()
+        .header(header::CONTENT_TYPE, "text/event-stream")
+        .header(header::CACHE_CONTROL, "no-cache")
+        .body(body)
+        .unwrap()
+}
+
+/// A few events in the `text/event-stream` format, then the end. Echoes
+/// the `Authorization` header in the first event.
+async fn sse(headers: HeaderMap) -> Response {
+    let authorization = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("none");
+    event_stream(axum::body::Body::from(format!(
+        ": warming up\n\nevent: hello\ndata: {authorization}\n\nid: 1\nretry: 2500\ndata: {{\"price\": 42}}\n\ndata: two\ndata: lines\n\n"
+    )))
+}
+
+/// An event every 20 ms, forever.
+async fn sse_forever() -> Response {
+    let ticks = futures_util::stream::unfold(0_u64, |n| async move {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let chunk = format!("id: {n}\ndata: tick {n}\n\n");
+        Some((Ok::<_, std::convert::Infallible>(chunk), n + 1))
+    });
+    event_stream(axum::body::Body::from_stream(ticks))
+}
+
+/// One event numbered one more than `Last-Event-ID`, then the end, asking
+/// to reconnect after 50 ms.
+async fn sse_count(headers: HeaderMap) -> Response {
+    let last: u64 = headers
+        .get("last-event-id")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let next = last + 1;
+    event_stream(axum::body::Body::from(format!(
+        "retry: 50\nid: {next}\ndata: {next}\n\n"
+    )))
 }
