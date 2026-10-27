@@ -12,7 +12,6 @@ use axum::extract::State;
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
-use getman_core::Error;
 use getman_core::execute::{Context, persist_changes, resolved_variables};
 use getman_core::export::codegen;
 use getman_core::import::{curl, postman};
@@ -20,6 +19,7 @@ use getman_core::model::{Auth, Folder, Request};
 use getman_core::runner::{self, RunEvent, RunOptions};
 use getman_core::script::{ChangeScope, VarChange};
 use getman_core::workspace::{EnvironmentFiles, LocalState};
+use getman_core::{Error, Scope};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -436,14 +436,32 @@ async fn languages() -> Json<Value> {
     Json(json!(codegen::LANGUAGES))
 }
 
+/// The variables a request sees. Values from the environment that it marks
+/// secret come with `"secret": true`, so the UI can mask them.
 async fn variables(State(state): Shared, Json(arg): Json<PrepareArg>) -> ApiResult {
+    let environment = arg.environment.as_deref().filter(|e| !e.is_empty());
     let resolved = resolved_variables(
         state.workspace(),
         arg.path.as_deref().filter(|p| !p.is_empty()),
         &arg.request,
-        arg.environment.as_deref().filter(|e| !e.is_empty()),
+        environment,
     )?;
-    Ok(Json(json!(resolved)))
+    let secrets = match environment {
+        Some(id) => state.workspace().read_environment(id)?.shared.secrets,
+        None => Vec::new(),
+    };
+    let list: Vec<Value> = resolved
+        .into_iter()
+        .map(|var| {
+            let secret = var.scope == Scope::Environment && secrets.contains(&var.name);
+            let mut value = json!(var);
+            if secret {
+                value["secret"] = Value::Bool(true);
+            }
+            value
+        })
+        .collect();
+    Ok(Json(Value::Array(list)))
 }
 
 #[derive(Deserialize)]

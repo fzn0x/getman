@@ -299,7 +299,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn variables_set_from_the_ui_land_in_local_files() {
+    async fn variables_set_from_the_ui_land_in_local_files_and_secrets_are_marked() {
         let (_dir, app) = app();
         let (_, env) = call(&app, "/api/environment/create", r#"{"name":"Dev"}"#).await;
         assert_eq!(env["id"], "dev");
@@ -311,6 +311,16 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         let (_, read) = call(&app, "/api/environment/read", r#"{"id":"dev"}"#).await;
         assert_eq!(read["local"]["id"], "42");
+
+        let ask = r#"{"request":{"name":"x","method":"GET","url":""},"environment":"dev"}"#;
+        let (_, vars) = call(&app, "/api/variables", ask).await;
+        let token = vars
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["name"] == "token")
+            .unwrap();
+        assert_eq!(token["secret"], true);
 
         let nowhere = r#"{"scope":"environment","name":"id","value":"42"}"#;
         let (status, _) = call(&app, "/api/variables/set", nowhere).await;
