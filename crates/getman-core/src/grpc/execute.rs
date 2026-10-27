@@ -102,6 +102,14 @@ struct Encoded {
     bytes: Vec<u8>,
 }
 
+/// How a call is steered and watched. By default every message the
+/// request holds is sent at once, the stream ends, and nobody watches.
+#[derive(Debug, Default)]
+struct Control {
+    commands: Option<mpsc::UnboundedReceiver<Command>>,
+    events: Option<mpsc::UnboundedSender<LiveEvent>>,
+}
+
 impl Executor {
     /// Runs a gRPC request while `live` steers it: calls that stream from
     /// the client start without sending anything and send what
@@ -114,34 +122,85 @@ impl Executor {
         context: &mut Context,
         live: Live,
     ) -> Execution {
+        let control = Control {
+            commands: Some(live.commands),
+            events: Some(live.events),
+        };
+        self.execute_grpc(path, request, context, control).await
+    }
+
+    /// Runs a gRPC request like [`Executor::execute`], reporting headers
+    /// and messages to `events` as they happen.
+    pub async fn execute_watched(
+        &self,
+        path: Option<&str>,
+        request: &Request,
+        context: &mut Context,
+        events: mpsc::UnboundedSender<LiveEvent>,
+    ) -> Execution {
+        let control = Control {
+            commands: None,
+            events: Some(events),
+        };
+        self.execute_grpc(path, request, context, control).await
+    }
+
+    async fn execute_grpc(
+        &self,
+        path: Option<&str>,
+        request: &Request,
+        context: &mut Context,
+        control: Control,
+    ) -> Execution {
         let mut execution = Execution {
             path: path.map(str::to_owned),
             name: request.name.clone(),
             ..Execution::default()
         };
-        if let Err(e) = execute(self, path, request, context, &mut execution, Some(live)).await {
+        if let Err(e) = execute_with(self, path, request, context, &mut execution, control).await {
             execution.error = Some(e.to_string());
         }
         execution
     }
 }
 
-/// Runs a gRPC request from start to finish. Without `live`, every
-/// message the request holds is sent and the stream ends.
+/// Runs a gRPC request from start to finish: every message the request
+/// holds is sent and the stream ends.
 pub(crate) async fn execute(
     executor: &Executor,
     path: Option<&str>,
     request: &Request,
     context: &mut Context,
     execution: &mut Execution,
-    live: Option<Live>,
+) -> Result<()> {
+    execute_with(
+        executor,
+        path,
+        request,
+        context,
+        execution,
+        Control::default(),
+    )
+    .await
+}
+
+async fn execute_with(
+    executor: &Executor,
+    path: Option<&str>,
+    request: &Request,
+    context: &mut Context,
+    execution: &mut Execution,
+    control: Control,
 ) -> Result<()> {
     let mut call = GrpcCall {
         method: request.method.trim().trim_start_matches('/').to_owned(),
         tls: request.grpc.tls,
         ..GrpcCall::default()
     };
-    let result = run(executor, path, request, context, execution, live, &mut call).await;
+    let result = run(
+        executor, path, request, context, execution, control, &mut call,
+    )
+    .await;
     execution.grpc = Some(call);
     result
 }
@@ -153,7 +212,7 @@ async fn run(
     request: &Request,
     context: &mut Context,
     execution: &mut Execution,
-    live: Option<Live>,
+    control: Control,
     call: &mut GrpcCall,
 ) -> Result<()> {
     let chain = folder_chain(&executor.workspace, path)?;
@@ -265,7 +324,7 @@ async fn run(
                 )));
             }
         }
-    } else if live.is_some() {
+    } else if control.commands.is_some() {
         initial.clear();
     }
     if let Some(outgoing) = &mut execution.request {
@@ -280,7 +339,7 @@ async fn run(
         &metadata,
         deadline,
         initial,
-        live,
+        control,
         &method,
         &vars,
         schema.pool(),
@@ -674,16 +733,16 @@ async fn drive(
     metadata: &[Header],
     deadline: Option<Duration>,
     initial: Vec<Encoded>,
-    live: Option<Live>,
+    control: Control,
     method: &MethodDescriptor,
     vars: &VarStack,
     pool: &DescriptorPool,
 ) -> Result<()> {
     let path = format!("/{}", call.method);
-    let (mut commands, events) = match live {
-        Some(live) => (Some(live.commands), Some(live.events)),
-        None => (None, None),
-    };
+    let Control {
+        mut commands,
+        events,
+    } = control;
     let started = Instant::now();
     let mut stream = connection.start(&path, metadata, deadline).await?;
     let mut recorder = Recorder {

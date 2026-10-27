@@ -238,7 +238,7 @@ impl Executor {
         match request.kind {
             RequestKind::Http => {}
             RequestKind::Grpc => {
-                return crate::grpc::execute(self, path, request, context, execution, None).await;
+                return crate::grpc::execute(self, path, request, context, execution).await;
             }
         }
         let chain = match path {
