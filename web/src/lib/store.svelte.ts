@@ -583,11 +583,15 @@ async function openSaved(saved: SavedTab, taken: Set<string>): Promise<Tab | nul
         tab.responsePane = saved.responsePane;
         return tab;
       };
-      const folderExists = (path: string | null) =>
-        path !== null && (path === "" || findNode(path)?.kind === "folder");
+      // A new request inherits the settings of the folders above the path
+      // it was opened from, which need not exist as a file.
+      const inherits = (path: string | null) => {
+        const folder = path === null ? "" : parentOf(path);
+        return path !== null && (folder === "" || findNode(folder)?.kind === "folder");
+      };
       if (saved.path === null) {
         if (!saved.draft) return null;
-        return asNew(folderExists(saved.inheritPath) ? saved.inheritPath : null);
+        return asNew(inherits(saved.inheritPath) ? saved.inheritPath : null);
       }
       let path = saved.path;
       let request = await api.readRequest(path).catch(() => null);
@@ -606,8 +610,7 @@ async function openSaved(saved: SavedTab, taken: Set<string>): Promise<Tab | nul
         if (!saved.draft) return null;
         // The file is gone; keep the unsaved work as a new request.
         restoreNotes.lost++;
-        const folder = parentOf(saved.path);
-        return asNew(folderExists(folder) ? folder : null);
+        return asNew(inherits(saved.path) ? saved.path : null);
       }
       const tab = requestTab(path, request);
       if (saved.draft) {
