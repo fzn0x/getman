@@ -466,6 +466,9 @@ async fn oauth2_token(State(state): Shared, Json(arg): Json<OAuthArg>) -> ApiRes
 struct RunArg {
     #[serde(default)]
     target: String,
+    /// Folders and requests to run in this order, instead of `target`.
+    #[serde(default)]
+    targets: Vec<String>,
     #[serde(default)]
     environment: Option<String>,
     #[serde(default)]
@@ -491,6 +494,7 @@ async fn run(State(state): Shared, Json(arg): Json<RunArg>) -> ApiResult<Respons
     let environment = arg.environment.clone().filter(|e| !e.is_empty());
     let options = RunOptions {
         target: arg.target.clone(),
+        targets: arg.targets.clone(),
         environment: environment.clone(),
         iterations: arg.iterations,
         data,
@@ -498,8 +502,8 @@ async fn run(State(state): Shared, Json(arg): Json<RunArg>) -> ApiResult<Respons
         bail: arg.bail,
         ..RunOptions::default()
     };
-    // Fail early, as a normal error, if the target does not exist.
-    runner::requests_in(&state.workspace().tree()?, &options.target)?;
+    // Fail early, as a normal error, if a target does not exist.
+    runner::planned(&state.workspace().tree()?, &options)?;
 
     let id = getman_core::dynamic::uuid_v4();
     let cancel = Arc::new(AtomicBool::new(false));
