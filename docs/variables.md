@@ -88,7 +88,7 @@ Three files are never committed (`getman init` adds them to `.gitignore`):
 | --- | --- |
 | `environments/<name>.local.yaml` | Local values of an environment: secrets, tokens, your own base URL |
 | `getman.local.yaml` | Local overrides of workspace variables, and globals |
-| `.getman/` | History of sent requests |
+| `.getman/` | History of sent requests and their responses, the trash, your header presets |
 
 When a script sets a variable with `gm.environment.set`,
 `gm.collectionVariables.set` or `gm.globals.set` while you work in the UI,

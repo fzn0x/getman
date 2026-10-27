@@ -15,6 +15,7 @@ These pages are also published at <https://fzn0x.github.io/getman/>.
 - [Scripts](scripts.md): the `gm` JavaScript API
 - [Running in CI](runner.md): `getman run`, reports, GitHub Actions, GitLab
 - [Import and export](import-export.md): Postman, cURL, code
+- [Browser UI](browser-ui.md): tabs, history, the trash, header presets
 - [Terminal UI](terminal.md)
 
 **Reference**
