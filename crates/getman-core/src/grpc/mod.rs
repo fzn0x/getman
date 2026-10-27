@@ -16,6 +16,7 @@
 //! array of messages when the server streams).
 
 mod execute;
+mod generate;
 mod json;
 mod metadata;
 mod reflection;
@@ -37,6 +38,7 @@ use serde_json::Value;
 
 pub(crate) use execute::execute;
 pub use execute::{Command, Live, LiveEvent, grpcurl, load_schema};
+pub use generate::generate_requests;
 pub use json::example;
 pub use schema::{MethodInfo, Schema, ServiceInfo, proto_files};
 pub use status::{Code, Status, code_name};
