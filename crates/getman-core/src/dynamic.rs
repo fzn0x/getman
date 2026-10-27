@@ -195,9 +195,16 @@ pub fn generate(name: &str) -> Option<String> {
     Some(value)
 }
 
-/// A random UUID, version 4.
+/// A random UUID, version 4, from the OS random generator: scripts use
+/// `crypto.randomUUID` for idempotency keys and nonces, and the Web
+/// Crypto API it stands in for promises an unpredictable value.
+///
+/// # Panics
+///
+/// If the operating system cannot supply random bytes.
 pub fn uuid_v4() -> String {
-    let mut bytes = fastrand::u128(..).to_be_bytes();
+    let mut bytes = [0_u8; 16];
+    getrandom::fill(&mut bytes).expect("the OS random number generator");
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
     let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
