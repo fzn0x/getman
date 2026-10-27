@@ -211,9 +211,9 @@ pub(crate) struct ExportArgs {
     /// The request: a path in the workspace or a path on disk.
     pub(crate) request: String,
 
-    /// Language or tool to write.
+    /// Language or tool to write. gRPC requests are written for grpcurl.
     #[arg(long = "to", short = 't', default_value = "curl", value_parser = clap::builder::PossibleValuesParser::new(
-        getman_core::export::codegen::LANGUAGES.iter().map(|l| l.id)
+        getman_core::export::codegen::LANGUAGES.iter().map(|l| l.id).chain(["grpcurl"])
     ))]
     pub(crate) language: String,
 
