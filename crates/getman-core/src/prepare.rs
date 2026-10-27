@@ -193,6 +193,8 @@ pub fn prepare(
     if find_header(&outgoing.headers, "accept").is_none() {
         outgoing.headers.push(Header::new("Accept", "*/*"));
     }
+    // Signatures cover the finished request, so they come last.
+    crate::auth::sign(auth, &mut |text| r.render(text), &mut outgoing, root)?;
 
     Ok(Prepared {
         outgoing,
@@ -323,7 +325,8 @@ fn build_body(
 }
 
 /// Adds credentials that need no round trip: Basic, Bearer and API keys.
-/// Digest and OAuth 2.0 are handled when sending (see [`crate::auth`]).
+/// Digest and OAuth 2.0 are handled when sending, and signatures once the
+/// request is complete (see [`crate::auth`]).
 fn apply_auth(auth: &Auth, r: &mut Renderer<'_>, outgoing: &mut Outgoing) -> Result<()> {
     match auth {
         Auth::Basic { username, password } => {
@@ -365,7 +368,7 @@ fn apply_auth(auth: &Auth, r: &mut Renderer<'_>, outgoing: &mut Outgoing) -> Res
                 }
             }
         }
-        Auth::Inherit | Auth::None | Auth::Digest { .. } | Auth::Oauth2(_) => {}
+        Auth::Inherit | Auth::None | Auth::Digest { .. } | Auth::Oauth2(_) | Auth::AwsSigV4(_) => {}
     }
     Ok(())
 }

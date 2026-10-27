@@ -1,13 +1,22 @@
 //! Authentication that needs a round trip: HTTP Digest, which answers the
-//! server's challenge, and OAuth 2.0, which fetches a token first.
+//! server's challenge, and OAuth 2.0, which fetches a token first. Also the
+//! signatures computed from the request itself, such as AWS Signature
+//! Version 4, which are added as the last step of preparing it.
 
+mod sigv4;
+
+use std::borrow::Cow;
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
+use hmac::digest::KeyInit;
+use hmac::{Hmac, Mac};
 use md5::Md5;
+use percent_encoding::{AsciiSet, NON_ALPHANUMERIC};
 use serde::Serialize;
 use sha2::{Digest as _, Sha256};
 
@@ -17,6 +26,87 @@ use crate::http::{
 };
 use crate::model::{Auth, ClientAuth, OAuth2, OAuth2Grant};
 use crate::vars::VarStack;
+
+/// Characters escaped by RFC 3986 percent-encoding: all but the unreserved
+/// `A-Z a-z 0-9 - . _ ~`.
+const RFC3986: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'.')
+    .remove(b'_')
+    .remove(b'~');
+
+/// Signs a prepared request with the kinds of authentication computed from
+/// the request itself. `render` replaces variables in the settings, and
+/// key files are looked up under `root`. Other kinds are left alone.
+pub(crate) fn sign(
+    auth: &Auth,
+    render: &mut dyn FnMut(&str) -> String,
+    outgoing: &mut Outgoing,
+    _root: &Path,
+) -> Result<()> {
+    let now = SystemTime::now();
+    match auth {
+        Auth::AwsSigV4(settings) => sigv4::sign(&sigv4::render(settings, render), outgoing, now),
+        _ => Ok(()),
+    }
+}
+
+/// The body's bytes, for hashing: `None` for a multipart body, whose bytes
+/// are only known once it is sent.
+fn body_bytes(body: &OutgoingBody) -> Result<Option<Cow<'_, [u8]>>> {
+    Ok(match body {
+        OutgoingBody::None => Some(Cow::Borrowed(&[])),
+        OutgoingBody::Bytes { data } => Some(Cow::Borrowed(&data.0)),
+        OutgoingBody::File { path } => Some(Cow::Owned(
+            std::fs::read(path).map_err(|e| Error::io(path, e))?,
+        )),
+        OutgoingBody::Multipart { .. } => None,
+    })
+}
+
+/// An HMAC of `data` under `key`.
+fn hmac<M: Mac + KeyInit>(key: &[u8], data: &[u8]) -> Vec<u8> {
+    let mut mac = <M as KeyInit>::new_from_slice(key).expect("HMAC accepts any key length");
+    mac.update(data);
+    mac.finalize().into_bytes().to_vec()
+}
+
+fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
+    hmac::<Hmac<Sha256>>(key, data)
+}
+
+/// A time in UTC as `YYYYMMDD` and `HHMMSS`.
+fn utc_compact(time: SystemTime) -> (String, String) {
+    // 2026-10-14T05:07:09.120Z
+    let iso = crate::time::iso8601(time);
+    let date = iso[..10].replace('-', "");
+    let clock = iso[11..19].replace(':', "");
+    (date, clock)
+}
+
+/// Escapes a string with RFC 3986 percent-encoding.
+fn rfc3986(text: &str) -> String {
+    percent_encoding::utf8_percent_encode(text, RFC3986).to_string()
+}
+
+/// A URL from an outgoing request, for signing.
+fn parse_url(outgoing: &Outgoing) -> Result<url::Url> {
+    url::Url::parse(&outgoing.url)
+        .map_err(|e| Error::Invalid(format!("{:?} is not a valid URL: {e}", outgoing.url)))
+}
+
+/// The host and port the request goes to, as a `Host` header names it:
+/// the port only when it is not the scheme's default.
+fn host_header(outgoing: &Outgoing, url: &url::Url) -> String {
+    if let Some(host) = crate::http::find_header(&outgoing.headers, "host") {
+        return host.trim().to_owned();
+    }
+    let host = url.host_str().unwrap_or_default();
+    match url.port() {
+        Some(port) => format!("{host}:{port}"),
+        None => host.to_owned(),
+    }
+}
 
 /// Tokens are renewed this long before they expire.
 const EXPIRY_MARGIN: Duration = Duration::from_secs(30);

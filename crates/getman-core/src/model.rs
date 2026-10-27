@@ -262,6 +262,9 @@ pub enum Auth {
     },
     /// An OAuth 2.0 access token, fetched and cached automatically.
     Oauth2(OAuth2),
+    /// AWS Signature Version 4, computed when the request is sent.
+    #[serde(rename = "aws_sigv4")]
+    AwsSigV4(AwsSigV4),
 }
 
 impl Auth {
@@ -271,7 +274,7 @@ impl Auth {
     }
 }
 
-/// Where an API key goes.
+/// Where an API key, a token or a signature goes.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ApiKeyLocation {
@@ -342,6 +345,39 @@ pub enum ClientAuth {
     Basic,
     /// As `client_id` and `client_secret` form fields.
     Body,
+}
+
+/// AWS Signature Version 4 settings.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AwsSigV4 {
+    /// Access key ID.
+    #[serde(deserialize_with = "lenient::string")]
+    pub access_key: String,
+    /// Secret access key.
+    #[serde(deserialize_with = "lenient::string")]
+    pub secret_key: String,
+    /// Session token, for temporary credentials.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub session_token: String,
+    /// Region, such as `us-east-1`.
+    #[serde(deserialize_with = "lenient::string")]
+    pub region: String,
+    /// Service name, such as `s3` or `execute-api`.
+    #[serde(deserialize_with = "lenient::string")]
+    pub service: String,
+    /// Where the signature goes: headers, or a presigned query string.
+    #[serde(rename = "in", skip_serializing_if = "is_header")]
+    pub location: ApiKeyLocation,
+    /// Seconds a presigned URL stays valid. Default 3600.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_in: Option<u64>,
+    /// Sign `UNSIGNED-PAYLOAD` instead of the body's hash, as S3 allows.
+    #[serde(skip_serializing_if = "is_false")]
+    pub unsigned_payload: bool,
 }
 
 /// JavaScript run around a request.
@@ -465,6 +501,16 @@ fn is_true(value: &bool) -> bool {
     *value
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_header(location: &ApiKeyLocation) -> bool {
+    *location == ApiKeyLocation::Header
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -537,6 +583,31 @@ mod tests {
         assert_eq!(oauth.grant, OAuth2Grant::Password);
         assert_eq!(oauth.username, "ada");
         assert_eq!(oauth.client_auth, ClientAuth::Basic);
+    }
+
+    #[test]
+    fn aws_signatures_write_only_what_is_set() {
+        let auth = Auth::AwsSigV4(AwsSigV4 {
+            access_key: "{{awsKey}}".into(),
+            secret_key: "{{awsSecret}}".into(),
+            region: "eu-west-1".into(),
+            service: "execute-api".into(),
+            ..AwsSigV4::default()
+        });
+        let yaml = serde_yaml_ng::to_string(&auth).unwrap();
+        assert_eq!(
+            yaml,
+            "type: aws_sigv4\naccess_key: '{{awsKey}}'\nsecret_key: '{{awsSecret}}'\nregion: eu-west-1\nservice: execute-api\n"
+        );
+        let presigned: Auth = serde_yaml_ng::from_str(
+            "type: aws_sigv4\nservice: s3\nin: query\nunsigned_payload: true\n",
+        )
+        .unwrap();
+        let Auth::AwsSigV4(settings) = presigned else {
+            panic!("expected aws_sigv4, got {presigned:?}");
+        };
+        assert_eq!(settings.location, ApiKeyLocation::Query);
+        assert!(settings.unsigned_payload);
     }
 
     #[test]
