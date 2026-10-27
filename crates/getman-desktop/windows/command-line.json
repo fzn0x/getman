@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "resources": {
+      "windows/bin/getman.exe": "bin/getman.exe"
+    },
+    "windows": {
+      "nsis": {
+        "installerHooks": "windows/hooks.nsh"
+      },
+      "wix": {
+        "fragmentPaths": ["windows/path.wxs"],
+        "componentRefs": ["GetmanCommandOnPath"]
+      }
+    }
+  }
+}

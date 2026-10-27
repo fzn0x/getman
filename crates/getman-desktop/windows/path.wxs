@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Getman's addition to the Windows Installer package: the folder holding
+  the getman command, INSTALLDIR\bin, goes on the PATH of the machine, as
+  the package installs for every user. Install with ADDTOPATH=0 to leave
+  PATH alone:
+
+      msiexec /i Getman-windows-x64.msi ADDTOPATH=0
+
+  Uninstalling takes the folder off PATH again.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    <Property Id="ADDTOPATH" Value="1" Secure="yes" />
+    <DirectoryRef Id="INSTALLDIR">
+      <Component Id="GetmanCommandOnPath" Guid="5A0B8F64-2C7E-4E2B-9D1A-6F3C8B7E21D4">
+        <Condition>ADDTOPATH = "1"</Condition>
+        <Environment
+          Id="GetmanCommandOnPath"
+          Name="PATH"
+          Value="[INSTALLDIR]bin"
+          Part="last"
+          Action="set"
+          System="yes"
+          Permanent="no" />
+        <RegistryValue
+          Root="HKLM"
+          Key="Software\fzn0x\Getman"
+          Name="CommandOnPath"
+          Type="integer"
+          Value="1"
+          KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+</Wix>
