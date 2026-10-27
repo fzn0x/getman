@@ -3,6 +3,7 @@
 //! signatures computed from the request itself, such as AWS Signature
 //! Version 4, which are added as the last step of preparing it.
 
+mod edgegrid;
 mod hawk;
 mod jwt;
 mod keys;
@@ -59,6 +60,9 @@ pub(crate) fn sign(
             oauth1::apply(&oauth1::render(settings, render), outgoing, root, now)
         }
         Auth::Hawk(settings) => hawk::apply(&hawk::render(settings, render), outgoing, now),
+        Auth::Edgegrid(settings) => {
+            edgegrid::apply(&edgegrid::render(settings, render), outgoing, now)
+        }
         _ => Ok(()),
     }
 }

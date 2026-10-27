@@ -273,6 +273,8 @@ pub enum Auth {
     Oauth1(OAuth1),
     /// Hawk, signed when the request is sent.
     Hawk(Hawk),
+    /// Akamai EdgeGrid, signed when the request is sent.
+    Edgegrid(EdgeGrid),
 }
 
 impl Auth {
@@ -698,6 +700,34 @@ impl HawkAlgorithm {
     pub fn is_default(&self) -> bool {
         *self == Self::default()
     }
+}
+
+/// Akamai EdgeGrid settings, as an `.edgerc` section holds them.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EdgeGrid {
+    /// Client token.
+    #[serde(deserialize_with = "lenient::string")]
+    pub client_token: String,
+    /// Client secret.
+    #[serde(deserialize_with = "lenient::string")]
+    pub client_secret: String,
+    /// Access token.
+    #[serde(deserialize_with = "lenient::string")]
+    pub access_token: String,
+    /// The API host, such as `https://akab-xxx.luna.akamaiapis.net`. When
+    /// set, requests go there, keeping their path and query.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub base_url: String,
+    /// Headers included in the signature, in order.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub headers_to_sign: Vec<String>,
+    /// Most body bytes a POST signature covers. Default 131072.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_body: Option<u64>,
 }
 
 /// JavaScript run around a request.
