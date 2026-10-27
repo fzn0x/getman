@@ -4,6 +4,7 @@
   import { isDirty, newRequestIn, openRunner, save, ws, type FolderTab } from "../lib/store.svelte";
   import type { Auth, Settings } from "../lib/types";
   import Icon from "./Icon.svelte";
+  import MockPanel from "./MockPanel.svelte";
   import AuthPane from "./request/AuthPane.svelte";
   import KeyValueTable from "./request/KeyValueTable.svelte";
   import ScriptsPane from "./request/ScriptsPane.svelte";
@@ -63,6 +64,8 @@
       ? `Everything here applies to every request in ${ws.name}. Folders and requests can override it.`
       : "Everything here applies to every request in this folder, after the workspace's. Requests can override it."}
   </p>
+
+  <MockPanel folder={tab.path} />
 
   <div
     class="tablist"
@@ -138,7 +141,7 @@
 <style>
   .folder {
     display: grid;
-    grid-template-rows: auto auto auto minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto minmax(0, 1fr);
     height: 100%;
     min-height: 0;
   }
