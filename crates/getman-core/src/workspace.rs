@@ -778,6 +778,17 @@ impl Workspace {
         Ok(())
     }
 
+    /// Copies an environment, its local values included, as "<name> copy"
+    /// and returns the copy's id.
+    pub fn duplicate_environment(&self, id: &str) -> Result<String> {
+        let mut files = self.read_environment(id)?;
+        let name = format!("{} copy", files.shared.name);
+        let copy = self.create_environment(&name)?;
+        files.shared.name = name;
+        self.write_environment(&copy, &files)?;
+        Ok(copy)
+    }
+
     fn environment_paths(&self, id: &str) -> Result<(PathBuf, PathBuf)> {
         let local_like = Path::new(id)
             .extension()
@@ -1261,6 +1272,30 @@ mod tests {
         assert_eq!(ws.read_environment(&new_id).unwrap().local["token"], "t");
         ws.delete_environment(&new_id).unwrap();
         assert_eq!(ws.environments().unwrap(), []);
+    }
+
+    #[test]
+    fn environments_duplicate_with_their_local_values() {
+        let (_dir, ws) = workspace();
+        let id = ws.create_environment("Staging").unwrap();
+        let mut files = ws.read_environment(&id).unwrap();
+        files
+            .shared
+            .variables
+            .insert("base".into(), "https://x".into());
+        files.shared.variables.insert("token".into(), String::new());
+        files.shared.secrets.push("token".into());
+        files.local.insert("token".into(), "s3cret".into());
+        ws.write_environment(&id, &files).unwrap();
+
+        let copy = ws.duplicate_environment(&id).unwrap();
+        assert_eq!(copy, "staging-copy");
+        let copied = ws.read_environment(&copy).unwrap();
+        assert_eq!(copied.shared.name, "Staging copy");
+        assert_eq!(copied.effective()["base"], "https://x");
+        assert_eq!(copied.local["token"], "s3cret");
+        assert_eq!(copied.shared.secrets, ["token"]);
+        assert!(ws.duplicate_environment("nope").is_err());
     }
 
     #[test]
