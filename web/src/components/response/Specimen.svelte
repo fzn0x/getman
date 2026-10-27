@@ -3,8 +3,25 @@
   import { bytes, millis, statusClass } from "../../lib/format";
   import { keyLabel } from "../../lib/keys";
   import type { Execution } from "../../lib/types";
+  import TimingPanel from "./TimingPanel.svelte";
 
   let { execution, sending }: { execution: Execution | null; sending: boolean } = $props();
+  let panel = $state<{ x: number; y: number } | null>(null);
+  let timeButton = $state<HTMLButtonElement>();
+
+  function togglePanel(event: MouseEvent): void {
+    if (panel) {
+      panel = null;
+      return;
+    }
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    panel = { x: rect.left, y: rect.bottom + 6 };
+  }
+
+  function closePanel(): void {
+    panel = null;
+    timeButton?.focus();
+  }
 
   let field: HTMLDivElement;
   let width = $state(480);
@@ -22,8 +39,17 @@
 
   const response = $derived(execution?.response ?? null);
   const kind = $derived(
-    response ? statusClass(response.status) : execution?.error ? "server" : "info",
+    response
+      ? statusClass(response.status)
+      : execution?.error && !execution.cancelled
+        ? "server"
+        : "info",
   );
+  // A new response closes the panel of the last one.
+  $effect(() => {
+    void response;
+    panel = null;
+  });
   const results = $derived(execution ? [...execution.tests, ...execution.checks] : []);
   const passed = $derived(results.filter((r) => r.passed && !r.skipped).length);
   const failed = $derived(results.filter((r) => !r.passed).length);
@@ -79,6 +105,8 @@
           {response.status}
         {:else if execution?.skipped}
           SKIP
+        {:else if execution?.cancelled}
+          STOP
         {:else if execution}
           ERR
         {:else}
@@ -92,6 +120,8 @@
           {response.status_text || "Status"}
         {:else if execution?.skipped}
           Skipped by a script
+        {:else if execution?.cancelled}
+          Cancelled
         {:else if execution}
           No response
         {:else}
@@ -104,7 +134,20 @@
       <dl class="sizes">
         <div>
           <dt>Time</dt>
-          <dd class="num">{millis(response.time_ms)}</dd>
+          <dd class="num">
+            {#if response.timings}
+              <button
+                class="time"
+                bind:this={timeButton}
+                aria-haspopup="dialog"
+                aria-expanded={panel !== null}
+                title="Where the time went, and the connection"
+                onclick={togglePanel}>{millis(response.time_ms)}</button
+              >
+            {:else}
+              {millis(response.time_ms)}
+            {/if}
+          </dd>
         </div>
         <div>
           <dt>First byte</dt>
@@ -116,7 +159,16 @@
         </div>
         <div>
           <dt>Protocol</dt>
-          <dd>{response.http_version.replace("HTTP/", "")}</dd>
+          <dd>
+            {response.http_version.replace("HTTP/", "")}
+            {#if response.http3_available}
+              <span
+                class="offer bitmap"
+                title="The server offers HTTP/3 in its Alt-Svc header. Set the HTTP version to HTTP/3 in Settings to use it."
+                >H3 offered</span
+              >
+            {/if}
+          </dd>
         </div>
         {#if results.length}
           <div>
@@ -134,6 +186,10 @@
     {/if}
   </div>
 </div>
+
+{#if panel && response}
+  <TimingPanel {response} x={panel.x} y={panel.y} onClose={closePanel} />
+{/if}
 
 <style>
   .specimen {
@@ -289,6 +345,34 @@
 
   .sizes dd.good {
     color: var(--ok);
+  }
+
+  .time {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+
+  .time:hover,
+  .time[aria-expanded="true"] {
+    background: var(--ink);
+    color: var(--paper);
+    text-decoration: none;
+  }
+
+  .offer {
+    margin-left: 4px;
+    padding: 1px 3px;
+    border: 1px solid var(--rule-2);
+    font-size: var(--b1);
+    font-weight: 400;
+    color: var(--ink-2);
+    vertical-align: 1px;
   }
 
   .sizes dd.bad {

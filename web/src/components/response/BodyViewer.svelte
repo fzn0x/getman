@@ -160,7 +160,10 @@
   </div>
 
   {#if response.truncated}
-    <p class="notice">The body was over 100 MB and is shown cut short.</p>
+    <p class="notice">
+      The body is cut short at the size limit, 100 MiB unless Largest response in Settings says
+      otherwise.
+    </p>
   {/if}
   {#if filtered.error}
     <p class="notice">{filtered.error}</p>
