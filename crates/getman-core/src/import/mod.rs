@@ -203,8 +203,11 @@ pub fn import_text(
         return Err(Error::Invalid("there is nothing to import".into()));
     }
     let Some(format) = detect(name, text) else {
+        // Only JSON's errors help: other text was not meant to be YAML.
+        let looks_like_json = text.trim_start().starts_with(['{', '[']);
         let reason = parse_document(text.trim_start())
             .err()
+            .filter(|_| looks_like_json)
             .map(|e| format!(" ({e})"))
             .unwrap_or_default();
         return Err(Error::Invalid(format!(
@@ -244,9 +247,9 @@ pub fn import_text(
     save(workspace, parent, import, into_root, format)
 }
 
-/// Imports several files at once. A folder holding `.bru` files or a
-/// `bruno.json` is one Bruno collection; anything else is imported file
-/// by file.
+/// Imports several files at once, such as a folder. A folder holding
+/// `.bru` files or a `bruno.json` is one Bruno collection; otherwise each
+/// file in a known format is imported on its own.
 pub fn import_files(
     workspace: &Workspace,
     parent: &str,
@@ -268,14 +271,22 @@ pub fn import_files(
             Format::Bruno,
         )?]);
     }
+    // Files of no known format, such as a README, are passed over, unless
+    // there is only one.
+    let known: Vec<&SourceFile> = files
+        .iter()
+        .filter(|f| files.len() == 1 || detect(&f.path, &f.text).is_some())
+        .collect();
+    if known.is_empty() {
+        return Err(Error::Invalid(
+            "none of the files is in a format Getman imports".into(),
+        ));
+    }
     let mut reports = Vec::new();
-    for file in &files {
+    for file in known {
         let report = import_text(workspace, parent, &file.path, &file.text, into_root)
             .map_err(|e| Error::Invalid(format!("{}: {e}", file.path)))?;
         reports.push(report);
-    }
-    if reports.is_empty() {
-        return Err(Error::Invalid("there are no files to import".into()));
     }
     Ok(reports)
 }
@@ -337,7 +348,11 @@ pub fn save(
                 path,
                 requests: 1,
                 warnings,
-                format: format.label().into(),
+                format: if format == Format::Bruno {
+                    ".bru file".into()
+                } else {
+                    format.label().into()
+                },
                 ..ImportReport::default()
             })
         }
@@ -661,6 +676,16 @@ pub(crate) fn with_query(base: &str, params: &[KeyValue]) -> String {
     format!("{base}{separator}{}", enabled.join("&"))
 }
 
+/// A count with its noun: `1 request`, `2 requests`. A singular that
+/// starts with `a ` is written without the number.
+pub(crate) fn count(n: usize, one: &str, many: &str) -> String {
+    match n {
+        1 if one.starts_with("a ") => one.to_owned(),
+        1 => format!("1 {one}"),
+        n => format!("{n} {many}"),
+    }
+}
+
 /// Whether a file name ends with `.extension`, in any case.
 pub(crate) fn has_extension(name: &str, extension: &str) -> bool {
     std::path::Path::new(name)
@@ -813,6 +838,29 @@ mod tests {
         let env = ws.read_environment("live").unwrap();
         assert_eq!(env.shared.variables["token"], "");
         assert_eq!(env.local["token"], "s3cret");
+    }
+
+    #[test]
+    fn folders_import_each_file_in_a_known_format() {
+        let (_dir, ws) = workspace();
+        let files = vec![
+            SourceFile {
+                path: "exports/README.md".into(),
+                text: "# Notes".into(),
+            },
+            SourceFile {
+                path: "exports/staging.json".into(),
+                text: r#"{"name": "Staging", "values": [{"key": "a", "value": "1"}]}"#.into(),
+            },
+            SourceFile {
+                path: "exports/api.har".into(),
+                text: include_str!("../../tests/fixtures/import/browser.har").into(),
+            },
+        ];
+        let reports = import_files(&ws, "", &files, false).unwrap();
+        let kinds: Vec<&str> = reports.iter().map(|r| r.kind.as_str()).collect();
+        assert_eq!(kinds, ["environment", "collection"]);
+        assert!(import_files(&ws, "", &files[..1], false).is_err());
     }
 
     #[test]

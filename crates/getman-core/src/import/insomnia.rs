@@ -269,8 +269,12 @@ impl Reader {
     ) -> Import {
         if self.skipped > 0 {
             self.warnings.push(format!(
-                "{} gRPC and WebSocket requests were skipped; Getman sends HTTP requests",
-                self.skipped
+                "skipped {}: Getman sends HTTP requests",
+                super::count(
+                    self.skipped,
+                    "a gRPC or WebSocket request",
+                    "gRPC and WebSocket requests"
+                )
             ));
         }
         Import::Collection(Collection {
@@ -714,7 +718,10 @@ mod tests {
         let warnings = c.warnings.join("\n");
         assert!(warnings.contains("cat.png"), "{warnings}");
         assert!(warnings.contains("response"), "{warnings}");
-        assert!(warnings.contains("1 gRPC"), "{warnings}");
+        assert!(
+            warnings.contains("a gRPC or WebSocket request"),
+            "{warnings}"
+        );
         assert!(warnings.contains("hawk"), "{warnings}");
     }
 

@@ -92,12 +92,14 @@ pub fn parse(doc: &Value) -> Result<Import> {
     }
     if with_cookies > 0 {
         warnings.push(format!(
-            "{with_cookies} requests sent cookies, which were left out; sign in again from Getman, or add a Cookie header"
+            "cookies sent with {} were left out; sign in again from Getman, or add a Cookie header",
+            super::count(with_cookies, "request", "requests")
         ));
     }
     if with_credentials > 0 {
         warnings.push(format!(
-            "{with_credentials} headers carry the credentials that were captured; move them into secret variables before you commit"
+            "captured credentials were kept in {}; move them into secret variables before you commit",
+            super::count(with_credentials, "header", "headers")
         ));
     }
     let name = doc["log"]["pages"]
@@ -262,7 +264,10 @@ mod tests {
         );
 
         let warnings = c.warnings.join("\n");
-        assert!(warnings.contains("1 requests sent cookies"), "{warnings}");
+        assert!(
+            warnings.contains("cookies sent with 1 request"),
+            "{warnings}"
+        );
         assert!(warnings.contains("credentials"), "{warnings}");
         assert!(
             warnings.contains("cat.png") || warnings.contains("uploaded files"),
