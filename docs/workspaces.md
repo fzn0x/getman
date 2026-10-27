@@ -69,7 +69,13 @@ settings:
   timeout_ms: 5000
   follow_redirects: false
   verify_tls: true
+examples:                     # saved responses; see Examples and mocks
+  - name: Created
+    status: 201
+    body: '{ "id": 42 }'
 ```
+
+Examples are described in [Examples and mocks](examples-and-mocks.md).
 
 ### Bodies
 
@@ -185,6 +191,6 @@ login request's token survives a restart without ever being committed.
 
 | Commit | Keep local |
 | --- | --- |
-| `getman.yaml`, `_folder.yaml`, request files, `environments/*.yaml` | `*.local.yaml`, `.getman/` (history) |
+| `getman.yaml`, `_folder.yaml`, request files, `*.examples/` (example bodies), `environments/*.yaml` | `*.local.yaml`, `.getman/` (history, past runs) |
 
 `getman init` writes a `.gitignore` with exactly those two lines.
