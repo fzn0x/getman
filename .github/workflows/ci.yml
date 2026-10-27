@@ -51,6 +51,8 @@ jobs:
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
+      # The desktop app compiles against WebKitGTK on Linux.
+      - uses: ./.github/actions/setup-desktop-linux
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- --deny warnings
 
@@ -70,6 +72,9 @@ jobs:
           path: web/dist
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # The desktop app compiles against WebKitGTK on Linux.
+      - if: runner.os == 'Linux'
+        uses: ./.github/actions/setup-desktop-linux
       - run: cargo test --workspace --locked
       - name: Run the example workspace offline
         shell: bash
@@ -77,6 +82,11 @@ jobs:
           cargo run --quiet --locked -- init "$RUNNER_TEMP/smoke" --name Smoke
           cargo run --quiet --locked -- import -w "$RUNNER_TEMP/smoke" --curl "curl http://127.0.0.1:9/never"
           cargo run --quiet --locked -- export -w "$RUNNER_TEMP/smoke" get-never.yaml --to python
+      # On macOS and Linux the desktop app's executable is the getman
+      # command too. (On Windows it is only ever the window.)
+      - if: runner.os != 'Windows'
+        name: Run the command line from the desktop app
+        run: cargo run --quiet --locked --package getman-desktop -- --version
 
   msrv:
     name: Minimum supported Rust version
@@ -89,4 +99,7 @@ jobs:
         with:
           toolchain: "1.88"
       - uses: Swatinem/rust-cache@v2
-      - run: cargo +1.88 check --workspace --all-targets --locked
+      # The desktop app is left out on purpose: it sets its own
+      # rust-version, the one Tauri needs (see its Cargo.toml), and is
+      # built with stable by the other jobs.
+      - run: cargo +1.88 check --workspace --exclude getman-desktop --all-targets --locked

@@ -1,0 +1,14 @@
+name: Set up the desktop app on Linux
+description: >-
+  Installs the system libraries the desktop app (crates/getman-desktop,
+  built on Tauri) compiles against on Linux: WebKitGTK 4.1, GTK 3 and
+  librsvg.
+
+runs:
+  using: composite
+  steps:
+    - name: Install WebKitGTK and GTK
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev librsvg2-dev
