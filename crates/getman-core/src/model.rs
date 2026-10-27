@@ -5,7 +5,7 @@
 //! so the files stay short and diffs stay small.
 
 use indexmap::IndexMap;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::lenient;
 
@@ -19,6 +19,9 @@ pub struct Request {
     /// Display name. When missing, the file name is used.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub name: String,
+    /// What the file holds: an HTTP request unless it says otherwise.
+    #[serde(skip_serializing_if = "RequestKind::is_http")]
+    pub kind: RequestKind,
     /// HTTP method, such as `GET` or `POST`. Any token is accepted.
     pub method: String,
     /// URL with the enabled query parameters. May contain `{{variables}}`
@@ -75,6 +78,7 @@ impl Default for Request {
     fn default() -> Self {
         Self {
             name: String::new(),
+            kind: RequestKind::Http,
             method: "GET".to_owned(),
             url: String::new(),
             description: String::new(),
@@ -89,6 +93,79 @@ impl Default for Request {
             captures: Vars::new(),
             settings: Settings::default(),
         }
+    }
+}
+
+/// What a request file holds: one HTTP request and its response, or a
+/// connection that stays open and carries messages.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RequestKind {
+    /// An HTTP request. Files without a `kind` hold one.
+    #[default]
+    Http,
+    /// A WebSocket connection.
+    Websocket,
+    /// A stream of Server-Sent Events.
+    Sse,
+    /// A Socket.IO connection, over WebSocket.
+    Socketio,
+}
+
+impl RequestKind {
+    /// Every kind, in the order they are offered.
+    pub const ALL: [Self; 4] = [Self::Http, Self::Websocket, Self::Sse, Self::Socketio];
+
+    /// The name written in files, such as `websocket`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Http => "http",
+            Self::Websocket => "websocket",
+            Self::Sse => "sse",
+            Self::Socketio => "socketio",
+        }
+    }
+
+    /// A name for people, such as `WebSocket`.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Http => "HTTP",
+            Self::Websocket => "WebSocket",
+            Self::Sse => "Server-Sent Events",
+            Self::Socketio => "Socket.IO",
+        }
+    }
+
+    /// Whether this is [`RequestKind::Http`].
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn is_http(&self) -> bool {
+        *self == Self::Http
+    }
+
+    /// Whether requests of this kind stay open and carry messages, so they
+    /// are connected to rather than sent once.
+    pub fn is_realtime(self) -> bool {
+        matches!(self, Self::Websocket | Self::Sse | Self::Socketio)
+    }
+}
+
+impl<'de> Deserialize<'de> for RequestKind {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let name = Option::<String>::deserialize(deserializer)?.unwrap_or_default();
+        let name = name.trim();
+        if name.is_empty() {
+            return Ok(Self::Http);
+        }
+        Self::ALL
+            .into_iter()
+            .find(|kind| kind.as_str().eq_ignore_ascii_case(name))
+            .ok_or_else(|| {
+                let known: Vec<&str> = Self::ALL.iter().map(|kind| kind.as_str()).collect();
+                serde::de::Error::custom(format!(
+                    "{name:?} is not a request kind this version of Getman knows ({}); a newer version may have written it",
+                    known.join(", ")
+                ))
+            })
     }
 }
 
@@ -537,6 +614,36 @@ mod tests {
         assert_eq!(oauth.grant, OAuth2Grant::Password);
         assert_eq!(oauth.username, "ada");
         assert_eq!(oauth.client_auth, ClientAuth::Basic);
+    }
+
+    #[test]
+    fn the_kind_is_written_only_when_it_is_not_http() {
+        let request: Request = serde_yaml_ng::from_str("url: https://example.com").unwrap();
+        assert_eq!(request.kind, RequestKind::Http);
+        let yaml = serde_yaml_ng::to_string(&request).unwrap();
+        assert!(!yaml.contains("kind"), "{yaml}");
+
+        let request: Request =
+            serde_yaml_ng::from_str("kind: websocket\nurl: wss://example.com/chat").unwrap();
+        assert_eq!(request.kind, RequestKind::Websocket);
+        assert!(request.kind.is_realtime());
+        let yaml = serde_yaml_ng::to_string(&request).unwrap();
+        assert!(yaml.contains("kind: websocket"), "{yaml}");
+
+        let request: Request = serde_yaml_ng::from_str("kind:\nurl: https://example.com").unwrap();
+        assert_eq!(request.kind, RequestKind::Http);
+    }
+
+    #[test]
+    fn an_unknown_kind_is_an_error_not_http() {
+        let error = serde_yaml_ng::from_str::<Request>("kind: carrier-pigeon\nurl: x")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("\"carrier-pigeon\" is not a request kind"),
+            "{error}"
+        );
+        assert!(error.contains("http, websocket, sse, socketio"), "{error}");
     }
 
     #[test]

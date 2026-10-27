@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 use crate::lenient;
-use crate::model::{Environment, Folder, Request, Vars};
+use crate::model::{Environment, Folder, Request, RequestKind, Vars};
 
 /// File that marks the root of a workspace and holds its settings.
 pub const WORKSPACE_FILE: &str = "getman.yaml";
@@ -69,6 +69,10 @@ pub enum Node {
         name: String,
         /// HTTP method.
         method: String,
+        /// What the request is, when it is not HTTP. Not named `kind`,
+        /// which tells folders from requests here.
+        #[serde(skip_serializing_if = "RequestKind::is_http")]
+        request_kind: RequestKind,
         /// Why the file could not be read, if it could not.
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
@@ -307,6 +311,7 @@ impl Workspace {
                             request.name
                         },
                         method: request.method,
+                        request_kind: request.kind,
                         error: None,
                     },
                     Ok(None) => continue,
@@ -314,6 +319,7 @@ impl Workspace {
                         path: join(rel, &file_name),
                         name: stem.clone(),
                         method: String::new(),
+                        request_kind: RequestKind::Http,
                         error: Some(message),
                     },
                 };
@@ -1082,6 +1088,33 @@ mod tests {
             panic!()
         };
         assert!(error.is_some());
+    }
+
+    #[test]
+    fn the_tree_tells_realtime_requests_apart() {
+        let (dir, ws) = workspace();
+        fs::write(
+            dir.path().join("chat.yaml"),
+            "kind: websocket\nurl: ws://localhost/chat\n",
+        )
+        .unwrap();
+        fs::write(dir.path().join("future.yaml"), "kind: telepathy\nurl: x\n").unwrap();
+        let tree = ws.tree().unwrap();
+        let Node::Request { request_kind, .. } = &tree[0] else {
+            panic!()
+        };
+        assert_eq!(*request_kind, RequestKind::Websocket);
+        let json = serde_json::to_value(&tree).unwrap();
+        assert_eq!(json[0]["kind"], "request");
+        assert_eq!(json[0]["request_kind"], "websocket");
+        let Node::Request { error, .. } = &tree[1] else {
+            panic!()
+        };
+        assert!(
+            error.as_deref().unwrap().contains("not a request kind"),
+            "{error:?}"
+        );
+        assert!(ws.read_request("future.yaml").is_err());
     }
 
     #[test]
