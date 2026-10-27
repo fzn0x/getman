@@ -121,8 +121,9 @@ pub(crate) struct RunArgs {
     #[arg(long)]
     pub(crate) bail: bool,
 
-    /// Reporters: `cli` (the default), `json` and `junit`, each optionally
-    /// followed by `=PATH` to write to a file. Repeat for more.
+    /// Reporters: `cli` (the default), `json`, `junit`, `html`, `csv` and
+    /// `xlsx`, each optionally followed by `=PATH` to write to a file
+    /// (`xlsx` needs one). Repeat for more.
     #[arg(long = "reporter", short = 'r', value_name = "NAME[=PATH]", value_parser = parse_reporter)]
     pub(crate) reporters: Vec<Reporter>,
 
@@ -147,6 +148,24 @@ pub(crate) enum ReporterKind {
     Cli,
     Json,
     Junit,
+    Html,
+    Csv,
+    Xlsx,
+}
+
+impl ReporterKind {
+    /// The file report this reporter writes; `None` for the terminal.
+    pub(crate) fn format(self) -> Option<crate::report::Format> {
+        use crate::report::Format;
+        match self {
+            Self::Cli => None,
+            Self::Json => Some(Format::Json),
+            Self::Junit => Some(Format::Junit),
+            Self::Html => Some(Format::Html),
+            Self::Csv => Some(Format::Csv),
+            Self::Xlsx => Some(Format::Xlsx),
+        }
+    }
 }
 
 #[derive(Debug, Args)]
@@ -239,8 +258,12 @@ fn parse_reporter(text: &str) -> Result<Reporter, String> {
         Some((kind, path)) => (kind, Some(PathBuf::from(path))),
         None => (text, None),
     };
-    let kind = ReporterKind::from_str(kind, true)
-        .map_err(|_| format!("{kind:?} is not a reporter; use cli, json or junit"))?;
+    let kind = ReporterKind::from_str(kind, true).map_err(|_| {
+        format!("{kind:?} is not a reporter; use cli, json, junit, html, csv or xlsx")
+    })?;
+    if kind == ReporterKind::Xlsx && path.is_none() {
+        return Err("the xlsx reporter writes a file; give it one, as in xlsx=report.xlsx".into());
+    }
     Ok(Reporter { kind, path })
 }
 
@@ -263,7 +286,10 @@ mod tests {
                 path: Some("out/report.xml".into())
             }
         );
-        assert!(parse_reporter("html").is_err());
+        assert_eq!(parse_reporter("HTML").unwrap().kind, ReporterKind::Html);
+        assert!(parse_reporter("xlsx").is_err());
+        assert!(parse_reporter("xlsx=r.xlsx").is_ok());
+        assert!(parse_reporter("pdf").is_err());
         assert_eq!(parse_var("a=b=c").unwrap(), ("a".into(), "b=c".into()));
         assert!(parse_var("novalue").is_err());
     }

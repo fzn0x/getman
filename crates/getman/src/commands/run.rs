@@ -6,7 +6,7 @@ use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use getman_core::execute::{Executor, persist_changes};
-use getman_core::runner::{self, RunEvent, RunOptions};
+use getman_core::runner::{self, RunOptions};
 use getman_core::script::{ChangeScope, VarChange};
 
 use super::Outcome;
@@ -37,7 +37,7 @@ pub(crate) async fn run(args: RunArgs) -> Outcome {
     let show_cli = reporters.iter().any(|r| r.kind == ReporterKind::Cli);
 
     let options = RunOptions {
-        targets,
+        targets: targets.clone(),
         environment: environment.clone(),
         iterations: args.iterations,
         data,
@@ -54,8 +54,16 @@ pub(crate) async fn run(args: RunArgs) -> Outcome {
             .map_or_else(|_| id.clone(), |files| files.shared.name)
     });
 
-    let mut pretty = Pretty::new(args.verbose, workspace.name(), environment_name);
-    let mut recorded = Recorded::default();
+    let mut pretty = Pretty::new(args.verbose, workspace.name(), environment_name.clone());
+    let mut recorded = Recorded {
+        about: report::About {
+            workspace: workspace.name(),
+            targets,
+            environment: environment_name,
+            started: getman_core::time::now_millis(),
+        },
+        ..Recorded::default()
+    };
     let cancel = Arc::new(AtomicBool::new(false));
     {
         let cancel = Arc::clone(&cancel);
@@ -76,11 +84,10 @@ pub(crate) async fn run(args: RunArgs) -> Outcome {
     .map_err(|e| e.to_string())?;
 
     for reporter in &reporters {
-        let output = match reporter.kind {
-            ReporterKind::Cli => continue,
-            ReporterKind::Json => report::json::render(&recorded),
-            ReporterKind::Junit => report::junit::render(&recorded, &workspace.name()),
+        let Some(format) = reporter.kind.format() else {
+            continue;
         };
+        let output = format.render(&recorded)?;
         match &reporter.path {
             Some(path) => {
                 if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
@@ -90,14 +97,22 @@ pub(crate) async fn run(args: RunArgs) -> Outcome {
                 std::fs::write(path, output).map_err(|e| format!("{}: {e}", path.display()))?;
                 crate::style::note(&format!(
                     "Wrote the {} report to {}",
-                    match reporter.kind {
-                        ReporterKind::Json => "JSON",
-                        _ => "JUnit",
-                    },
+                    format.label(),
                     path.display()
                 ));
             }
-            None => println!("{output}"),
+            None => {
+                use std::io::Write as _;
+                let mut out = std::io::stdout().lock();
+                out.write_all(&output)
+                    .and_then(|()| {
+                        out.write_all(
+                            b"
+",
+                        )
+                    })
+                    .map_err(|e| e.to_string())?;
+            }
         }
     }
 
@@ -127,19 +142,4 @@ pub(crate) async fn run(args: RunArgs) -> Outcome {
             ExitCode::FAILURE
         },
     )
-}
-
-impl Recorded {
-    pub(crate) fn record(&mut self, event: RunEvent) {
-        match event {
-            RunEvent::Start { iterations, .. } => self.iterations = iterations,
-            RunEvent::Request {
-                iteration,
-                execution,
-                ..
-            } => self.requests.push((iteration, *execution)),
-            RunEvent::Finish { summary } => self.summary = Some(summary),
-            RunEvent::Iteration { .. } => {}
-        }
-    }
 }

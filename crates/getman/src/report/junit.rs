@@ -7,7 +7,8 @@ use getman_core::time::iso8601;
 
 use super::Recorded;
 
-pub(crate) fn render(recorded: &Recorded, workspace: &str) -> String {
+pub(crate) fn render(recorded: &Recorded) -> String {
+    let workspace = &recorded.about.workspace;
     let mut suites = String::new();
     let (mut total, mut failures, mut errors) = (0_usize, 0_usize, 0_usize);
     let mut seconds_total = 0.0;
@@ -174,9 +175,13 @@ mod tests {
                     },
                 ),
             ],
-            summary: None,
+            about: super::super::About {
+                workspace: "API & co".into(),
+                ..super::super::About::default()
+            },
+            ..Recorded::default()
         };
-        let xml = render(&recorded, "API & co");
+        let xml = render(&recorded);
         assert!(
             xml.contains(r#"<testsuites name="API &amp; co" tests="3" failures="1" errors="1""#),
             "{xml}"
