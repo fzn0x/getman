@@ -183,6 +183,23 @@ impl Executor {
         )
     }
 
+    /// Builds a request as [`Self::prepare`] does but with every
+    /// `{{variable}}` left as written, for code that should hold no
+    /// secrets.
+    pub fn prepare_unresolved(&self, path: Option<&str>, request: &Request) -> Result<Prepared> {
+        let chain = match path {
+            Some(path) => self.workspace.folder_chain(path)?,
+            None => vec![self.workspace.read_folder("")?],
+        };
+        let effective = Effective::new(&chain, request);
+        crate::prepare::prepare_unresolved(
+            request,
+            &effective.headers,
+            &effective.auth,
+            self.workspace.root(),
+        )
+    }
+
     /// Runs a saved request.
     pub async fn execute_path(&self, path: &str, context: &mut Context) -> Execution {
         match self.workspace.read_request(path) {
