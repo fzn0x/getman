@@ -34,6 +34,11 @@ sent, when one of its scripts throws, or when a test or check fails. A
 `500` with no checks is not a failure, so give the requests that matter
 a `status` check.
 
+WebSocket, event stream and Socket.IO requests are skipped, with a note
+that says why: they stay open, so there is no one response to check.
+`getman send` connects to them; see
+[WebSocket, SSE and Socket.IO](realtime.md).
+
 ## Options
 
 | Option | Does |

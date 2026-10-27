@@ -4,7 +4,8 @@
 getman [DIR]                   open the browser UI (the default)
 getman tui [DIR]               open the terminal UI
 getman run [TARGET]            run a folder or the workspace, for CI
-getman send REQUEST            send one request, print the body
+getman send REQUEST            send one request, print the body, or
+                               connect to a WebSocket, SSE or Socket.IO one
 getman init [DIR]              create a workspace
 getman import FILE | --curl    import from Postman or cURL
 getman export REQUEST --to X   print a request as code
@@ -53,15 +54,19 @@ getman run [TARGET] [-e ENV] [--var NAME=VALUE]... [-d DATA] [-n N]
 
 ## getman send
 
-Sends one request and prints the response body.
+Sends one request and prints the response body. On a WebSocket, event
+stream or Socket.IO request, it connects instead and prints each message
+it receives on a line; see [WebSocket, SSE and Socket.IO](realtime.md).
 
 | Option | |
 | --- | --- |
 | `REQUEST` | A path in the workspace, such as `orders/create.yaml`, or a path on disk |
 | `-e`, `--env NAME` | Environment to use. `GETMAN_ENVIRONMENT` sets it too |
 | `--var NAME=VALUE` | Set a variable. Repeat for more |
-| `-i`, `--include` | Print the status line and headers first |
-| `--json` | Print everything as JSON: request, response, tests, checks, logs |
+| `-i`, `--include` | Print the status line and headers first; for a connection, the handshake's answer |
+| `--json` | Print everything as JSON: request, response, tests, checks, logs. For a connection, every event as one line of JSON |
+| `-m`, `--message NAME` | WebSocket and Socket.IO: a saved message to send once connected. Repeat to send several, in order |
+| `--until N\|TIME` | Connections: stop after `N` received messages, or after a time such as `30s`, `500ms` or `2m`. Repeat for both; the first reached stops. Without it, <kbd>Ctrl</kbd> <kbd>C</kbd> stops |
 | `--script-timeout SECONDS` | Default 10 |
 
 ## getman init

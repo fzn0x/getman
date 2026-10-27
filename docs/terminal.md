@@ -15,6 +15,11 @@ the body, authentication, checks) opens in your own editor:
 `$VISUAL`, then `$EDITOR`, then `vi` (Notepad on Windows). Save and close
 the editor, and the change appears, ready to send and save.
 
+WebSocket, event stream and Socket.IO requests show in the tree as `WS`,
+`SSE` and `SIO`, but the terminal UI does not connect to them yet. Use
+`getman send` or the browser UI; see
+[WebSocket, SSE and Socket.IO](realtime.md).
+
 ## Keys
 
 Press <kbd>?</kbd> in the terminal UI to see these.

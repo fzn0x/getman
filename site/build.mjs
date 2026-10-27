@@ -30,7 +30,16 @@ export const sections = [
   { title: "Start", pages: ["getting-started", "why-getman"] },
   {
     title: "Guides",
-    pages: ["workspaces", "variables", "checks", "scripts", "runner", "import-export", "terminal"],
+    pages: [
+      "workspaces",
+      "variables",
+      "checks",
+      "scripts",
+      "realtime",
+      "runner",
+      "import-export",
+      "terminal",
+    ],
   },
   { title: "Reference", pages: ["cli", "security"] },
 ];
