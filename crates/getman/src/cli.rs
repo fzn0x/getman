@@ -37,8 +37,9 @@ pub(crate) enum Command {
     Send(SendArgs),
     /// Create a workspace.
     Init(InitArgs),
-    /// Import a Postman collection, environment or globals file, or a cURL
-    /// command.
+    /// Import collections, environments, API specs, browser recordings or
+    /// a cURL command: Postman, Insomnia, Hoppscotch and Bruno exports,
+    /// OpenAPI and Swagger documents and HAR files, told apart by content.
     Import(ImportArgs),
     /// Print a request as code: cURL, HTTPie, PowerShell, fetch, Python,
     /// Go, Rust or Java.
@@ -183,8 +184,9 @@ pub(crate) struct InitArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct ImportArgs {
-    /// File to import, or `-` to read standard input. A cURL command can
-    /// be given directly with --curl instead.
+    /// File or folder to import, or `-` to read standard input. A folder
+    /// of `.bru` files is a Bruno collection. A cURL command can be given
+    /// directly with --curl instead.
     #[arg(required_unless_present = "curl")]
     pub(crate) file: Option<PathBuf>,
 
