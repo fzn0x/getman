@@ -20,6 +20,9 @@ indexmap = { version = "2", features = ["serde"] }
 md-5 = "0.11"
 mime_guess = "2"
 percent-encoding = "2"
+prost = "0.14"
+prost-reflect = { version = "0.16", features = ["serde"] }
+protox = "0.10"
 regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "cookies", "gzip", "brotli", "deflate", "multipart", "system-proxy", "socks", "stream"] }
 reqwest_cookie_store = "0.10"
