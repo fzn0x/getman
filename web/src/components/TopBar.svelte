@@ -9,6 +9,7 @@
     signals,
     ws,
   } from "../lib/store.svelte";
+  import DesktopActions from "./DesktopActions.svelte";
   import Icon from "./Icon.svelte";
 
   let environmentSelect: HTMLSelectElement;
@@ -120,6 +121,7 @@
     >
       <Icon name="contrast" />
     </button>
+    <DesktopActions />
   </div>
 </header>
 

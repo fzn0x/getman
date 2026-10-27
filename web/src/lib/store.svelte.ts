@@ -715,7 +715,9 @@ export type Dialog =
       confirm: string;
       onSubmit: (value: string) => void | Promise<void>;
     }
-  | { kind: "saveAs"; tab: RequestTab };
+  | { kind: "saveAs"; tab: RequestTab }
+  | { kind: "settings" }
+  | { kind: "update" };
 
 export const dialogs = $state({ current: null as Dialog | null });
 

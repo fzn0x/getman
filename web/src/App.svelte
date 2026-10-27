@@ -12,6 +12,7 @@
   import TopBar from "./components/TopBar.svelte";
   import Welcome from "./components/Welcome.svelte";
   import { whenSignedOut } from "./lib/api";
+  import { startDesktop } from "./lib/desktop.svelte";
   import { matches, typing } from "./lib/keys";
   import {
     activeTab,
@@ -43,6 +44,7 @@
   onMount(() => {
     setTheme(prefs.theme);
     void loadWorkspace();
+    void startDesktop();
     const media = matchMedia("(max-width: 900px)");
     const update = () => (narrow = media.matches);
     update();

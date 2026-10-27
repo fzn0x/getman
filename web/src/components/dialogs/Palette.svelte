@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from "svelte";
+  import { desktopCommands } from "../../lib/desktop.svelte";
   import { methodClass } from "../../lib/format";
   import { rank } from "../../lib/fuzzy";
   import type { IconName } from "../../lib/icons";
@@ -96,6 +97,7 @@
         keys: "?",
         run: () => openDialog({ kind: "shortcuts" }),
       },
+      ...desktopCommands(),
       {
         id: "env-none",
         title: "Use no environment",
