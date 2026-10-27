@@ -66,8 +66,46 @@ export interface Settings {
   verify_tls?: boolean | null;
 }
 
+/** What a request file holds; `http` when the file says nothing. */
+export type RequestKind = "http" | "websocket" | "sse" | "socketio";
+
+export type MessageFormat = "text" | "json" | "binary";
+
+/** A WebSocket message saved with a request. */
+export interface SavedMessage {
+  name?: string;
+  type?: MessageFormat;
+  content: string;
+}
+
+/** A Socket.IO event saved with a request. */
+export interface SavedEmit {
+  name?: string;
+  event: string;
+  args?: string;
+  ack?: boolean;
+}
+
+export interface WebSocketSettings {
+  subprotocols?: string[];
+  messages?: SavedMessage[];
+}
+
+export interface SseSettings {
+  reconnect?: boolean;
+}
+
+export interface SocketIoSettings {
+  namespace?: string;
+  path?: string;
+  auth?: string;
+  events?: string[];
+  messages?: SavedEmit[];
+}
+
 export interface Request {
   name: string;
+  kind?: RequestKind;
   method: string;
   url: string;
   description?: string;
@@ -81,11 +119,15 @@ export interface Request {
   checks?: string[];
   captures?: Vars;
   settings?: Settings;
+  websocket?: WebSocketSettings;
+  sse?: SseSettings;
+  socketio?: SocketIoSettings;
 }
 
 /** A request with every optional part present, as the editors use it. */
 export interface Draft {
   name: string;
+  kind: RequestKind;
   method: string;
   url: string;
   description: string;
@@ -99,6 +141,15 @@ export interface Draft {
   checks: string[];
   captures: Vars;
   settings: Settings;
+  websocket: { subprotocols: string[]; messages: Required<SavedMessage>[] };
+  sse: { reconnect: boolean };
+  socketio: {
+    namespace: string;
+    path: string;
+    auth: string;
+    events: string[];
+    messages: Required<SavedEmit>[];
+  };
 }
 
 export interface Folder {
@@ -114,7 +165,14 @@ export interface Folder {
 
 export type Node =
   | { kind: "folder"; path: string; name: string; children: Node[] }
-  | { kind: "request"; path: string; name: string; method: string; error?: string };
+  | {
+      kind: "request";
+      path: string;
+      name: string;
+      method: string;
+      request_kind?: RequestKind;
+      error?: string;
+    };
 
 export interface EnvironmentSummary {
   id: string;
@@ -180,6 +238,8 @@ export interface Response {
   headers_ms: number;
   size: { headers: number; body: number };
   remote_addr?: string;
+  /** The body is an event stream that was still open when the request timed out. */
+  stream_open?: boolean;
 }
 
 export interface TestResult {
