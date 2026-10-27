@@ -12,19 +12,27 @@ use crate::lenient;
 /// Named string values, in the order they were written.
 pub type Vars = IndexMap<String, String>;
 
-/// One HTTP request, stored as `<name>.yaml` inside the workspace.
+/// One request, stored as `<name>.yaml` inside the workspace. Requests are
+/// HTTP unless `kind` says otherwise.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Request {
     /// Display name. When missing, the file name is used.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub name: String,
-    /// HTTP method, such as `GET` or `POST`. Any token is accepted.
+    /// What the request speaks. Not written for HTTP.
+    #[serde(skip_serializing_if = "RequestKind::is_http")]
+    pub kind: RequestKind,
+    /// HTTP method, such as `GET` or `POST`. Any token is accepted. For
+    /// gRPC, the method's full name, such as `shop.Orders/GetOrder`.
     pub method: String,
     /// URL with the enabled query parameters. May contain `{{variables}}`
-    /// and `:path` parameters.
+    /// and `:path` parameters. For gRPC, the server's address.
     #[serde(deserialize_with = "lenient::string")]
     pub url: String,
+    /// gRPC settings, for `kind: grpc`.
+    #[serde(skip_serializing_if = "Grpc::is_empty")]
+    pub grpc: Grpc,
     /// Free-form Markdown shown next to the request.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub description: String,
@@ -75,8 +83,10 @@ impl Default for Request {
     fn default() -> Self {
         Self {
             name: String::new(),
+            kind: RequestKind::Http,
             method: "GET".to_owned(),
             url: String::new(),
+            grpc: Grpc::default(),
             description: String::new(),
             path_params: Vars::new(),
             disabled_params: Vec::new(),
@@ -89,6 +99,88 @@ impl Default for Request {
             captures: Vars::new(),
             settings: Settings::default(),
         }
+    }
+}
+
+/// What a request speaks.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum RequestKind {
+    /// HTTP, the default.
+    #[default]
+    Http,
+    /// A gRPC call over HTTP/2.
+    Grpc,
+}
+
+impl RequestKind {
+    /// Every kind, with the name files use for it.
+    pub const ALL: &[(Self, &str)] = &[(Self::Http, "http"), (Self::Grpc, "grpc")];
+
+    /// The name files use for this kind.
+    pub fn name(self) -> &'static str {
+        Self::ALL
+            .iter()
+            .find(|(kind, _)| *kind == self)
+            .map_or("http", |(_, name)| name)
+    }
+
+    /// Whether this is [`RequestKind::Http`].
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn is_http(&self) -> bool {
+        *self == Self::Http
+    }
+}
+
+impl Serialize for RequestKind {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.name())
+    }
+}
+
+impl<'de> Deserialize<'de> for RequestKind {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let name = String::deserialize(deserializer)?;
+        Self::ALL
+            .iter()
+            .find(|(_, known)| known.eq_ignore_ascii_case(name.trim()))
+            .map(|(kind, _)| *kind)
+            .ok_or_else(|| {
+                let known: Vec<&str> = Self::ALL.iter().map(|(_, name)| *name).collect();
+                serde::de::Error::custom(format!(
+                    "{name:?} is not a kind of request this version of Getman knows; use {}",
+                    known.join(" or ")
+                ))
+            })
+    }
+}
+
+/// How a gRPC request finds its schema, how it connects, and what it
+/// sends.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Grpc {
+    /// A `.proto` file or a folder of them, relative to the workspace
+    /// root. When empty, the schema comes from the server's reflection
+    /// service.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub proto: String,
+    /// Connect with TLS. Addresses that start with `https://` always do.
+    #[serde(skip_serializing_if = "is_false")]
+    pub tls: bool,
+    /// The message to send, as JSON. May contain `{{variables}}`. Calls
+    /// that stream from the client send every message written here, one
+    /// after another.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub message: String,
+}
+
+impl Grpc {
+    /// Whether nothing is set.
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
     }
 }
 
@@ -465,6 +557,11 @@ fn is_true(value: &bool) -> bool {
     *value
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -537,6 +634,54 @@ mod tests {
         assert_eq!(oauth.grant, OAuth2Grant::Password);
         assert_eq!(oauth.username, "ada");
         assert_eq!(oauth.client_auth, ClientAuth::Basic);
+    }
+
+    #[test]
+    fn http_requests_do_not_write_their_kind() {
+        let yaml = serde_yaml_ng::to_string(&Request {
+            url: "https://example.com".into(),
+            ..Request::default()
+        })
+        .unwrap();
+        assert!(!yaml.contains("kind"), "{yaml}");
+        assert!(!yaml.contains("grpc"), "{yaml}");
+    }
+
+    #[test]
+    fn a_grpc_request_round_trips_through_yaml() {
+        let request = Request {
+            name: "Say hello".into(),
+            kind: RequestKind::Grpc,
+            method: "greet.Greeter/SayHello".into(),
+            url: "localhost:50051".into(),
+            grpc: Grpc {
+                proto: "protos/greet.proto".into(),
+                tls: false,
+                message: "{ \"name\": \"{{who}}\" }\n".into(),
+            },
+            headers: vec![KeyValue::new("x-trace", "abc")],
+            checks: vec!["status == 0".into()],
+            ..Request::default()
+        };
+        let yaml = serde_yaml_ng::to_string(&request).unwrap();
+        assert!(yaml.starts_with("name: Say hello\nkind: grpc\n"), "{yaml}");
+        assert!(!yaml.contains("tls"), "{yaml}");
+        let back: Request = serde_yaml_ng::from_str(&yaml).unwrap();
+        assert_eq!(back, request);
+    }
+
+    #[test]
+    fn an_unknown_kind_is_an_error_not_http() {
+        let error = serde_yaml_ng::from_str::<Request>("kind: carrier-pigeon\nurl: coop:1\n")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("\"carrier-pigeon\" is not a kind of request"),
+            "{error}"
+        );
+        assert!(error.contains("http or grpc"), "{error}");
+        let request: Request = serde_yaml_ng::from_str("kind: GRPC\nurl: a:1\n").unwrap();
+        assert_eq!(request.kind, RequestKind::Grpc);
     }
 
     #[test]

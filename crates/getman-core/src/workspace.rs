@@ -67,7 +67,8 @@ pub enum Node {
         path: String,
         /// Display name.
         name: String,
-        /// HTTP method.
+        /// HTTP method, or the kind of a request that is not HTTP in
+        /// capitals, such as `GRPC`.
         method: String,
         /// Why the file could not be read, if it could not.
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -306,7 +307,11 @@ impl Workspace {
                         } else {
                             request.name
                         },
-                        method: request.method,
+                        method: if request.kind.is_http() {
+                            request.method
+                        } else {
+                            request.kind.name().to_ascii_uppercase()
+                        },
                         error: None,
                     },
                     Ok(None) => continue,
