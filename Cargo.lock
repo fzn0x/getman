@@ -1835,6 +1835,7 @@ dependencies = [
 name = "getman-desktop"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "getman",
  "getman-core",
  "open",

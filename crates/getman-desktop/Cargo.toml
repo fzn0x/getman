@@ -11,6 +11,7 @@ homepage.workspace = true
 publish = false
 
 [dependencies]
+axum = { version = "0.8", default-features = false, features = ["json"] }
 getman.workspace = true
 getman-core.workspace = true
 open = "5"

@@ -7,6 +7,8 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
 
+use axum::routing::get;
+use axum::{Json, Router};
 use getman::server::{Options, Server};
 use getman_core::Workspace;
 use tauri::ipc::CapabilityBuilder;
@@ -89,15 +91,23 @@ fn setup(app: &mut App, folder: Option<&Path>) -> Result<(), Box<dyn Error>> {
     ));
     let workspace = first_workspace(folder, &store)?;
     let root = workspace.root().to_path_buf();
+    let updates = Arc::new(Updates::new(
+        Install::current(),
+        app.package_info().version.clone(),
+        Arc::clone(&store),
+    ));
 
     // Ask for the port used last, so the page keeps the storage that
     // belongs to its address: theme, layout and open tabs.
     let remembered = store.get().port;
+    let routes = app_routes(&updates);
     let server = tauri::async_runtime::block_on(async {
-        match Server::start(workspace.clone(), options(remembered.or(Some(0)))).await {
-            Ok(server) => Ok(server),
-            Err(_) if remembered.is_some() => Server::start(workspace, options(Some(0))).await,
-            Err(e) => Err(e),
+        let first = Server::start(workspace.clone(), options(remembered, &routes)).await;
+        match first {
+            Err(_) if remembered.is_some() => {
+                Server::start(workspace, options(None, &routes)).await
+            }
+            started => started,
         }
     })?;
     let port = server.address().port();
@@ -125,22 +135,32 @@ fn setup(app: &mut App, folder: Option<&Path>) -> Result<(), Box<dyn Error>> {
     let url: Url = server.url_with_token().parse()?;
     window(app.handle(), url, port)?;
 
-    let updates = Arc::new(Updates::new(
-        Install::current(),
-        app.package_info().version.clone(),
-        Arc::clone(&store),
-    ));
     app.manage(Arc::clone(&updates));
     app.manage(Arc::new(Workspaces { server, store }));
     tauri::async_runtime::spawn(updates.schedule(app.handle().clone()));
     Ok(())
 }
 
-fn options(port: Option<u16>) -> Options {
+/// Starts the server on `port`, or any free port.
+fn options(port: Option<u16>, routes: &Router) -> Options {
     Options {
-        port,
+        port: Some(port.unwrap_or(0)),
         open_browser: false,
+        app_routes: Some(routes.clone()),
     }
+}
+
+/// The app's own API on the server, behind its token: the update status
+/// at `/api/app/updates`, for a look from outside the window.
+fn app_routes(updates: &Arc<Updates>) -> Router {
+    let updates = Arc::clone(updates);
+    Router::new().route(
+        "/updates",
+        get(move || {
+            let status = updates.status();
+            async move { Json(status) }
+        }),
+    )
 }
 
 /// The workspace to open first: the one in `folder`, else the one used
