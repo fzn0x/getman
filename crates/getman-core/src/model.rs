@@ -8,6 +8,7 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::lenient;
+use crate::realtime::{SocketIoSettings, SseSettings, WebSocketSettings};
 
 /// Named string values, in the order they were written.
 pub type Vars = IndexMap<String, String>;
@@ -72,6 +73,15 @@ pub struct Request {
     /// Transport settings that override the folder's.
     #[serde(skip_serializing_if = "Settings::is_empty")]
     pub settings: Settings,
+    /// Subprotocols and saved messages of a WebSocket request.
+    #[serde(skip_serializing_if = "WebSocketSettings::is_empty")]
+    pub websocket: WebSocketSettings,
+    /// Settings of a Server-Sent Events request.
+    #[serde(skip_serializing_if = "SseSettings::is_empty")]
+    pub sse: SseSettings,
+    /// Namespace, events and saved events of a Socket.IO request.
+    #[serde(skip_serializing_if = "SocketIoSettings::is_empty")]
+    pub socketio: SocketIoSettings,
 }
 
 impl Default for Request {
@@ -92,6 +102,9 @@ impl Default for Request {
             checks: Vec::new(),
             captures: Vars::new(),
             settings: Settings::default(),
+            websocket: WebSocketSettings::default(),
+            sse: SseSettings::default(),
+            socketio: SocketIoSettings::default(),
         }
     }
 }
