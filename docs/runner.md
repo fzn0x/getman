@@ -48,6 +48,8 @@ a `status` check.
 | `-v`, `--verbose` | Print every response's status line, headers and body, and script console output |
 | `--script-timeout SECONDS` | How long a script may run. Default 10 |
 | `--persist` | Save variables the run set to the git-ignored local files, as the UI does |
+| `--http-version VERSION` | `auto`, `http1`, `http2` or `http3` for every request, over the files' settings. See [HTTP and connections](http.md) |
+| `--proxy URL` | A proxy URL, `system` or `off` for every request, over the files' settings |
 | `-w`, `--workspace DIR` | The workspace, when it is not the current directory or a parent |
 
 ## Exit status
@@ -83,7 +85,8 @@ not strings are passed as JSON text.
 ## Reports
 
 `-r json` prints the whole run as JSON: a summary, and for each request
-its URL, status, time, size, tests, checks, script errors, missing
+its URL, status, time and where it went (DNS, connect, first byte,
+download), HTTP version, size, tests, checks, script errors, missing
 variables and console output. `-r junit=report.xml` writes a JUnit XML file,
 with one test suite per request and one test case per test or check,
 which most CI systems can show.
