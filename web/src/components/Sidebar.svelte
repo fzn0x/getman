@@ -260,6 +260,7 @@
   .sidebar {
     display: grid;
     grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     height: 100%;
     min-width: 0;
   }
