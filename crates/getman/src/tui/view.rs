@@ -543,6 +543,14 @@ fn draw_foot(frame: &mut Frame<'_>, app: &App, area: Rect) {
                 Style::new().add_modifier(Modifier::BOLD),
             ),
         ]),
+        (Mode::Delete { name, .. }, _) => Line::from(vec![
+            Span::styled(" Move ", Style::new().fg(Color::DarkGray)),
+            Span::styled(name.clone(), Style::new().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                " to the trash? y moves it · any other key keeps it",
+                Style::new().fg(Color::DarkGray),
+            ),
+        ]),
         (_, Some((text, error, at))) if at.elapsed().as_secs() < 5 => Line::styled(
             format!(" {text}"),
             if *error {
@@ -594,6 +602,8 @@ fn draw_help(frame: &mut Frame<'_>) {
         ("j k / arrows", "move"),
         ("Enter l / h", "open or expand / collapse"),
         ("a", "add a request in the folder"),
+        ("d or Del", "move to the trash (asks first)"),
+        ("u", "put back what was moved to the trash last"),
         ("", ""),
         ("Request", ""),
         ("i or Enter", "edit the URL (Enter sends)"),
@@ -722,5 +732,35 @@ mod tests {
 
         app.help = true;
         assert!(screen(&mut app, 100, 40).contains("edit that part in $EDITOR"));
+    }
+
+    #[test]
+    fn the_tree_deletes_into_the_trash_and_puts_back() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = Workspace::init(dir.path(), "Shop").unwrap();
+        workspace
+            .create_request("", "Ping", &Request::default())
+            .unwrap();
+        let mut app = App::new(workspace).unwrap();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let press = |app: &mut App, code: KeyCode| {
+            app.on_key(KeyEvent::new(code, KeyModifiers::NONE), &tx);
+        };
+
+        press(&mut app, KeyCode::Char('d'));
+        assert!(screen(&mut app, 100, 30).contains("Move Ping to the trash?"));
+        press(&mut app, KeyCode::Char('n'));
+        assert_eq!(app.rows.len(), 1);
+
+        press(&mut app, KeyCode::Delete);
+        press(&mut app, KeyCode::Char('y'));
+        assert!(app.rows.is_empty());
+        assert_eq!(app.executor.workspace.trash_list().unwrap().len(), 1);
+
+        press(&mut app, KeyCode::Char('u'));
+        assert_eq!(app.rows.len(), 1);
+        assert!(app.executor.workspace.trash_list().unwrap().is_empty());
     }
 }
