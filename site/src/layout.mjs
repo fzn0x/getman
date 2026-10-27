@@ -12,8 +12,24 @@ const escape = (text) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-export function head({ root, assets, title, description, canonical, site }) {
-  const full = title === "Getman" ? "Getman: a local-first API client" : `${title} · Getman`;
+/**
+ * The page's head. `home` takes `title` as the whole title; `extra` is
+ * markup for the end of the head, such as structured data.
+ */
+export function head({
+  root,
+  assets,
+  title,
+  description,
+  canonical,
+  site,
+  home = false,
+  extra = "",
+}) {
+  const full = home ? title : `${title} · Getman`;
+  const image = `${site}images/getman-dark.png`;
+  const alt =
+    "Getman in the dark theme, with a request's four checks beside its response: a 200 on a green halftone field";
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -23,11 +39,19 @@ export function head({ root, assets, title, description, canonical, site }) {
 <meta name="description" content="${escape(description)}">
 <link rel="canonical" href="${canonical}">
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="Getman">
 <meta property="og:title" content="${escape(full)}">
 <meta property="og:description" content="${escape(description)}">
 <meta property="og:url" content="${canonical}">
-<meta property="og:image" content="${site}images/getman-light.png">
+<meta property="og:image" content="${image}">
+<meta property="og:image:width" content="2560">
+<meta property="og:image:height" content="1600">
+<meta property="og:image:alt" content="${escape(alt)}">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${escape(full)}">
+<meta name="twitter:description" content="${escape(description)}">
+<meta name="twitter:image" content="${image}">
+<meta name="twitter:image:alt" content="${escape(alt)}">
 <meta name="theme-color" content="#f2f0eb" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0e0e0d" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="${root}favicon.svg" type="image/svg+xml">
@@ -51,7 +75,7 @@ export function head({ root, assets, title, description, canonical, site }) {
     : "other";
 </script>
 <script src="${root}${assets.js}" defer></script>
-</head>`;
+${extra}</head>`;
 }
 
 export function bar({ root, current }) {

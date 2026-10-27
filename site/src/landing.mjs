@@ -41,8 +41,24 @@ function breakable(command) {
 }
 
 export function landing({ root, assets, site, repo, pages }) {
+  const title = "Getman — fast, open-source Postman alternative in Rust";
   const description =
-    "Getman is a local-first API client whose requests are files in your repository, for the desktop, browser, terminal and CI. No account, no cloud, no telemetry.";
+    "Getman is a local-first, offline API client with HTTP/2, HTTP/3, gRPC and WebSocket, compatible with Postman, for the browser, desktop, terminal and CI, with no account, no cloud and no telemetry.";
+  const app = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "Getman",
+    description,
+    url: site,
+    applicationCategory: "DeveloperApplication",
+    operatingSystem: "Windows, macOS, Linux",
+    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    license: [`${repo}/blob/main/LICENSE-MIT`, `${repo}/blob/main/LICENSE-APACHE`],
+    downloadUrl: `${repo}/releases/latest`,
+    screenshot: `${site}images/getman-dark.png`,
+    sameAs: repo,
+  };
+  const jsonLd = `<script type="application/ld+json">${JSON.stringify(app).replace(/</g, "\\u003c")}</script>`;
 
   const buttons = systems
     .map(
@@ -58,7 +74,7 @@ export function landing({ root, assets, site, repo, pages }) {
     ? `<a href="${root}docs/desktop.html">Desktop app guide</a>`
     : "";
 
-  return `${head({ root, assets, title: "Getman", description, canonical: site, site })}
+  return `${head({ root, assets, title, description, canonical: site, site, home: true, extra: jsonLd })}
 <body class="home">
 ${bar({ root, current: "" })}
 <main id="content">
