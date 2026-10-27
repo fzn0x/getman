@@ -115,10 +115,8 @@ fn log(hit: &Hit) {
         (Some(example), Some(request)) => paint(DIM, &format!("{example} from {request}")),
         _ => paint(DIM, "no example"),
     };
-    let time = getman_core::time::iso8601_millis(hit.at);
     anstream::println!(
-        "{} {} {} → {status} {source}",
-        paint(DIM, time.get(11..19).unwrap_or_default()),
+        "  {} {} → {status} {source}",
         paint(BOLD, &format!("{:<7}", hit.method)),
         hit.path,
     );
