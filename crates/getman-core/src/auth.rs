@@ -3,6 +3,7 @@
 //! signatures computed from the request itself, such as AWS Signature
 //! Version 4, which are added as the last step of preparing it.
 
+mod hawk;
 mod jwt;
 mod keys;
 mod oauth1;
@@ -57,6 +58,7 @@ pub(crate) fn sign(
         Auth::Oauth1(settings) => {
             oauth1::apply(&oauth1::render(settings, render), outgoing, root, now)
         }
+        Auth::Hawk(settings) => hawk::apply(&hawk::render(settings, render), outgoing, now),
         _ => Ok(()),
     }
 }

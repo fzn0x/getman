@@ -271,6 +271,8 @@ pub enum Auth {
     Asap(Asap),
     /// OAuth 1.0a, signed when the request is sent.
     Oauth1(OAuth1),
+    /// Hawk, signed when the request is sent.
+    Hawk(Hawk),
 }
 
 impl Auth {
@@ -637,6 +639,61 @@ pub enum OAuth1Location {
 
 impl OAuth1Location {
     /// Whether this is the default, the header.
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// Hawk settings.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Hawk {
+    /// Key identifier.
+    #[serde(deserialize_with = "lenient::string")]
+    pub id: String,
+    /// The shared key.
+    #[serde(deserialize_with = "lenient::string")]
+    pub key: String,
+    /// MAC algorithm. Default `sha256`.
+    #[serde(skip_serializing_if = "HawkAlgorithm::is_default")]
+    pub algorithm: HawkAlgorithm,
+    /// Application-specific data, sent as `ext`.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub ext: String,
+    /// Application ID, for delegated credentials.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub app: String,
+    /// Delegated-by application ID.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub dlg: String,
+    /// Sign the body too, with a payload `hash`.
+    #[serde(skip_serializing_if = "is_false")]
+    pub payload_hash: bool,
+}
+
+/// A Hawk MAC algorithm.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum HawkAlgorithm {
+    /// HMAC with SHA-256.
+    #[default]
+    Sha256,
+    /// HMAC with SHA-1.
+    Sha1,
+}
+
+impl HawkAlgorithm {
+    /// Whether this is the default, SHA-256.
     #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn is_default(&self) -> bool {
         *self == Self::default()
