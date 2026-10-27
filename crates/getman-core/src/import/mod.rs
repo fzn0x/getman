@@ -8,6 +8,7 @@
 
 pub mod curl;
 pub mod har;
+pub mod insomnia;
 pub mod openapi;
 pub mod postman;
 
@@ -35,6 +36,8 @@ pub enum Format {
     Swagger,
     /// An HTTP Archive (HAR 1.2), as saved by browsers.
     Har,
+    /// An Insomnia export: v4 JSON or v5 YAML.
+    Insomnia,
 }
 
 impl Format {
@@ -46,6 +49,7 @@ impl Format {
             Self::Openapi => "OpenAPI document",
             Self::Swagger => "Swagger 2.0 document",
             Self::Har => "HAR file",
+            Self::Insomnia => "Insomnia export",
         }
     }
 }
@@ -147,6 +151,9 @@ fn detect_value(value: &Value) -> Option<Format> {
     if value["log"]["entries"].is_array() {
         return Some(Format::Har);
     }
+    if insomnia::matches(value) {
+        return Some(Format::Insomnia);
+    }
     if (value.get("info").is_some() && value.get("item").is_some())
         || value["values"].is_array()
         || value["collection"].get("item").is_some()
@@ -178,7 +185,7 @@ pub fn import_text(
             .map(|e| format!(" ({e})"))
             .unwrap_or_default();
         return Err(Error::Invalid(format!(
-            "this is not a format Getman imports{reason}; use a Postman export, an OpenAPI or Swagger document, a HAR file or a cURL command"
+            "this is not a format Getman imports{reason}; use a Postman or Insomnia export, an OpenAPI or Swagger document, a HAR file or a cURL command"
         )));
     };
     let import = match format {
@@ -197,6 +204,7 @@ pub fn import_text(
         Format::Postman => return postman::import(workspace, parent, text, into_root),
         Format::Openapi | Format::Swagger => openapi::parse(&parse_document(text)?)?,
         Format::Har => har::parse(&parse_document(text)?)?,
+        Format::Insomnia => insomnia::parse(&parse_document(text)?)?,
     };
     save(workspace, parent, import, into_root, format)
 }
@@ -583,6 +591,16 @@ mod tests {
                 "",
                 r#"{"log": {"version": "1.2", "entries": []}}"#,
                 Some(Format::Har),
+            ),
+            (
+                "",
+                r#"{"_type": "export", "__export_format": 4, "resources": []}"#,
+                Some(Format::Insomnia),
+            ),
+            (
+                "",
+                "type: collection.insomnia.rest/5.0\nname: x\n",
+                Some(Format::Insomnia),
             ),
             (
                 "",

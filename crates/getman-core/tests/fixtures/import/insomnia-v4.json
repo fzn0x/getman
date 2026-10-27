@@ -1,0 +1,62 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-01-01T00:00:00.000Z",
+  "__export_source": "insomnia.desktop.app:v2023.5.8",
+  "resources": [
+    { "_id": "wrk_1", "_type": "workspace", "parentId": null, "name": "Shop API", "description": "", "scope": "collection" },
+    { "_id": "env_base", "_type": "environment", "parentId": "wrk_1", "name": "Base Environment", "data": { "baseUrl": "https://shop.example.com", "db": { "host": "localhost" } } },
+    { "_id": "env_prod", "_type": "environment", "parentId": "env_base", "name": "Production", "data": { "baseUrl": "https://api.shop.example.com" } },
+    { "_id": "env_mine", "_type": "environment", "parentId": "env_base", "name": "Mine", "isPrivate": true, "data": { "token": "s3cret" } },
+    {
+      "_id": "fld_orders", "_type": "request_group", "parentId": "wrk_1", "name": "Orders", "description": "",
+      "environment": { "page": 1 }, "metaSortKey": -10,
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" }
+    },
+    {
+      "_id": "req_list", "_type": "request", "parentId": "fld_orders", "name": "List orders", "method": "GET",
+      "url": "{{ _.baseUrl }}/orders",
+      "parameters": [{ "name": "page", "value": "{{page}}" }, { "name": "debug", "value": "1", "disabled": true }],
+      "headers": [], "authentication": {}, "body": {}, "settingFollowRedirects": "off", "metaSortKey": -5
+    },
+    {
+      "_id": "req_create", "_type": "request", "parentId": "fld_orders", "name": "Create order", "method": "post",
+      "url": "{{ _.baseUrl }}/orders",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\"id\": \"{% uuid 'v4' %}\", \"by\": \"{% response 'body', 'req_login', 'b64::JC50b2tlbg==::46b', 'never', 60 %}\"}"
+      },
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "afterResponseScript": "insomnia.test('created', () => insomnia.expect(insomnia.response.code).to.equal(201));",
+      "metaSortKey": -1
+    },
+    {
+      "_id": "req_login", "_type": "request", "parentId": "wrk_1", "name": "Login", "method": "POST",
+      "url": "{{ _.baseUrl }}/login",
+      "body": { "mimeType": "application/x-www-form-urlencoded", "params": [{ "name": "user", "value": "ada" }] },
+      "authentication": {
+        "type": "oauth2", "grantType": "password", "accessTokenUrl": "https://id.example.com/token",
+        "clientId": "shop", "username": "ada", "password": "{{ _.password }}", "credentialsInBody": true
+      },
+      "metaSortKey": 1
+    },
+    {
+      "_id": "req_upload", "_type": "request", "parentId": "wrk_1", "name": "Upload", "method": "POST",
+      "url": "{{ _.baseUrl }}/upload",
+      "body": {
+        "mimeType": "multipart/form-data",
+        "params": [{ "name": "photo", "type": "file", "fileName": "/Users/ada/cat.png" }, { "name": "caption", "value": "Tom" }]
+      },
+      "authentication": { "type": "hawk", "id": "x" },
+      "metaSortKey": 2
+    },
+    {
+      "_id": "req_graph", "_type": "request", "parentId": "wrk_1", "name": "Graph", "method": "POST",
+      "url": "{{ _.baseUrl }}/graphql",
+      "body": { "mimeType": "application/graphql", "text": "{\"query\":\"{ orders { id } }\",\"variables\":{\"first\":2}}" },
+      "metaSortKey": 3
+    },
+    { "_id": "greq_1", "_type": "grpc_request", "parentId": "wrk_1", "name": "Stream", "metaSortKey": 4 },
+    { "_id": "jar_1", "_type": "cookie_jar", "parentId": "wrk_1", "name": "Default Jar", "cookies": [] }
+  ]
+}

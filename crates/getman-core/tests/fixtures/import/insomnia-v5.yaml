@@ -1,0 +1,58 @@
+type: collection.insomnia.rest/5.0
+name: Shop API
+meta:
+  id: wrk_1
+  created: 1700000000000
+  modified: 1700000000000
+  description: ""
+collection:
+  - name: Users
+    meta:
+      id: fld_users
+      sortKey: -2
+      description: People who buy things
+    headers:
+      - name: X-Team
+        value: core
+    children:
+      - url: "{{ _.baseUrl }}/users/:id"
+        name: Get user
+        meta:
+          id: req_get
+          sortKey: -1
+        method: GET
+        pathParameters:
+          - name: id
+            value: "7"
+        scripts:
+          preRequest: insomnia.environment.set('a', 1);
+          afterResponse: ""
+        settings:
+          followRedirects: global
+  - url: "{{ _.baseUrl }}/health"
+    name: Health
+    meta:
+      id: req_health
+      sortKey: 5
+    method: GET
+    authentication:
+      type: apikey
+      key: key
+      value: "{{ _.apiKey }}"
+      addTo: queryParams
+cookieJar:
+  name: Default Jar
+  meta:
+    id: jar_1
+environments:
+  name: Base Environment
+  meta:
+    id: env_base
+  data:
+    baseUrl: https://shop.example.com
+  subEnvironments:
+    - name: Staging
+      meta:
+        id: env_staging
+      data:
+        baseUrl: https://staging.example.com
