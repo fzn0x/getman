@@ -368,7 +368,13 @@ fn apply_auth(auth: &Auth, r: &mut Renderer<'_>, outgoing: &mut Outgoing) -> Res
                 }
             }
         }
-        Auth::Inherit | Auth::None | Auth::Digest { .. } | Auth::Oauth2(_) | Auth::AwsSigV4(_) => {}
+        Auth::Inherit
+        | Auth::None
+        | Auth::Digest { .. }
+        | Auth::Oauth2(_)
+        | Auth::AwsSigV4(_)
+        | Auth::Jwt(_)
+        | Auth::Asap(_) => {}
     }
     Ok(())
 }

@@ -265,6 +265,10 @@ pub enum Auth {
     /// AWS Signature Version 4, computed when the request is sent.
     #[serde(rename = "aws_sigv4")]
     AwsSigV4(AwsSigV4),
+    /// A JSON Web Token, signed when the request is sent.
+    Jwt(Jwt),
+    /// Atlassian ASAP: a short-lived JWT signed with a private key.
+    Asap(Asap),
 }
 
 impl Auth {
@@ -378,6 +382,134 @@ pub struct AwsSigV4 {
     /// Sign `UNSIGNED-PAYLOAD` instead of the body's hash, as S3 allows.
     #[serde(skip_serializing_if = "is_false")]
     pub unsigned_payload: bool,
+}
+
+/// A JSON Web Token signed when the request is sent.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Jwt {
+    /// Signature algorithm. Default `HS256`.
+    #[serde(skip_serializing_if = "JwtAlgorithm::is_default")]
+    pub algorithm: JwtAlgorithm,
+    /// Secret for the HMAC algorithms.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub secret: String,
+    /// Whether `secret` is base64 text to decode first.
+    #[serde(skip_serializing_if = "is_false")]
+    pub secret_base64: bool,
+    /// PEM private key for the RSA and ECDSA algorithms, usually a
+    /// `{{variable}}`.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub private_key: String,
+    /// A PEM private key file in the workspace, used instead of
+    /// `private_key`.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub private_key_file: String,
+    /// Extra header fields, as JSON text. `alg` is set from `algorithm`.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub header: String,
+    /// The claims, as JSON text.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub payload: String,
+    /// Add an `iat` claim with the current time.
+    #[serde(skip_serializing_if = "is_false")]
+    pub issued_at: bool,
+    /// Add an `exp` claim this many seconds from now.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_in: Option<u64>,
+    /// Where the token goes: the `Authorization` header or the query.
+    #[serde(rename = "in", skip_serializing_if = "is_header")]
+    pub location: ApiKeyLocation,
+    /// Scheme written before the token in the header. `Bearer` when empty.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub prefix: String,
+    /// Query parameter name. `token` when empty.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub param: String,
+}
+
+/// A JSON Web Signature algorithm.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum JwtAlgorithm {
+    /// HMAC with SHA-256.
+    #[default]
+    Hs256,
+    /// HMAC with SHA-384.
+    Hs384,
+    /// HMAC with SHA-512.
+    Hs512,
+    /// RSA PKCS#1 v1.5 with SHA-256.
+    Rs256,
+    /// RSA PKCS#1 v1.5 with SHA-384.
+    Rs384,
+    /// RSA PKCS#1 v1.5 with SHA-512.
+    Rs512,
+    /// RSA-PSS with SHA-256.
+    Ps256,
+    /// RSA-PSS with SHA-384.
+    Ps384,
+    /// RSA-PSS with SHA-512.
+    Ps512,
+    /// ECDSA on P-256 with SHA-256.
+    Es256,
+    /// ECDSA on P-384 with SHA-384.
+    Es384,
+}
+
+impl JwtAlgorithm {
+    /// Whether this is the default, `HS256`.
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// Atlassian ASAP settings: a JWT signed with a private key, sent as a
+/// Bearer token.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Asap {
+    /// Signature algorithm. Default `RS256`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub algorithm: Option<JwtAlgorithm>,
+    /// The `iss` claim: who issues the token.
+    #[serde(deserialize_with = "lenient::string")]
+    pub issuer: String,
+    /// The `sub` claim. Left out when empty.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub subject: String,
+    /// The `aud` claim; separate several with commas.
+    #[serde(deserialize_with = "lenient::string")]
+    pub audience: String,
+    /// The `kid` header: the key's ID.
+    #[serde(deserialize_with = "lenient::string")]
+    pub key_id: String,
+    /// PEM private key, usually a `{{variable}}`.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub private_key: String,
+    /// A PEM private key file in the workspace, used instead of
+    /// `private_key`.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub private_key_file: String,
+    /// More claims, as JSON text.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub claims: String,
+    /// Seconds the token is valid. Default 3600.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_in: Option<u64>,
 }
 
 /// JavaScript run around a request.
@@ -608,6 +740,24 @@ mod tests {
         };
         assert_eq!(settings.location, ApiKeyLocation::Query);
         assert!(settings.unsigned_payload);
+    }
+
+    #[test]
+    fn jwt_algorithms_are_written_as_named() {
+        let auth: Auth = serde_yaml_ng::from_str(
+            "type: jwt\nalgorithm: ES384\nprivate_key_file: keys/signing.pem\npayload: '{\"sub\": \"{{user}}\"}'\nexpires_in: 300\n",
+        )
+        .unwrap();
+        let Auth::Jwt(jwt) = &auth else {
+            panic!("expected jwt, got {auth:?}");
+        };
+        assert_eq!(jwt.algorithm, JwtAlgorithm::Es384);
+        assert_eq!(jwt.expires_in, Some(300));
+        let yaml = serde_yaml_ng::to_string(&auth).unwrap();
+        assert!(yaml.contains("algorithm: ES384"), "{yaml}");
+        assert!(!yaml.contains("issued_at"), "{yaml}");
+        let default = serde_yaml_ng::to_string(&Auth::Jwt(Jwt::default())).unwrap();
+        assert_eq!(default, "type: jwt\n");
     }
 
     #[test]

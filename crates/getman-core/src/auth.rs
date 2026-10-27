@@ -3,6 +3,8 @@
 //! signatures computed from the request itself, such as AWS Signature
 //! Version 4, which are added as the last step of preparing it.
 
+mod jwt;
+mod keys;
 mod sigv4;
 
 use std::borrow::Cow;
@@ -42,11 +44,15 @@ pub(crate) fn sign(
     auth: &Auth,
     render: &mut dyn FnMut(&str) -> String,
     outgoing: &mut Outgoing,
-    _root: &Path,
+    root: &Path,
 ) -> Result<()> {
     let now = SystemTime::now();
     match auth {
         Auth::AwsSigV4(settings) => sigv4::sign(&sigv4::render(settings, render), outgoing, now),
+        Auth::Jwt(settings) => jwt::apply(&jwt::render(settings, render), outgoing, root, now),
+        Auth::Asap(settings) => {
+            jwt::apply_asap(&jwt::render_asap(settings, render), outgoing, root, now)
+        }
         _ => Ok(()),
     }
 }
@@ -73,6 +79,12 @@ fn hmac<M: Mac + KeyInit>(key: &[u8], data: &[u8]) -> Vec<u8> {
 
 fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
     hmac::<Hmac<Sha256>>(key, data)
+}
+
+/// Seconds since the Unix epoch.
+fn unix_seconds(time: SystemTime) -> u64 {
+    time.duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 /// A time in UTC as `YYYYMMDD` and `HHMMSS`.
