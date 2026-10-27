@@ -8,6 +8,7 @@
 
 mod api;
 mod assets;
+mod grpc;
 mod history;
 mod token;
 
@@ -37,6 +38,7 @@ pub(crate) struct AppState {
     pub(crate) port: u16,
     pub(crate) runs: Mutex<HashMap<String, Arc<AtomicBool>>>,
     pub(crate) history: history::History,
+    pub(crate) grpc: grpc::Calls,
 }
 
 impl AppState {
@@ -60,6 +62,7 @@ pub(crate) async fn serve(
         token,
         port,
         runs: Mutex::new(HashMap::new()),
+        grpc: grpc::Calls::default(),
     });
     let app = router(Arc::clone(&state));
 
@@ -117,7 +120,7 @@ async fn bind(port: Option<u16>) -> Result<tokio::net::TcpListener, String> {
 
 pub(crate) fn router(state: Arc<AppState>) -> Router {
     Router::new()
-        .nest("/api", api::routes())
+        .nest("/api", api::routes().merge(grpc::routes()))
         .fallback(assets::serve)
         .layer(middleware::from_fn_with_state(Arc::clone(&state), guard))
         .with_state(state)
@@ -206,6 +209,7 @@ mod tests {
             token: "secret-token".into(),
             port: 7878,
             runs: Mutex::new(HashMap::new()),
+            grpc: grpc::Calls::default(),
         });
         (dir, router(state))
     }

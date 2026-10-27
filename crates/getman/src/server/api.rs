@@ -68,7 +68,7 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
 }
 
 /// An error answered as `{"error": "..."}` with a fitting status.
-pub(super) struct ApiError(StatusCode, String);
+pub(super) struct ApiError(pub(super) StatusCode, pub(super) String);
 
 impl From<Error> for ApiError {
     fn from(error: Error) -> Self {
@@ -95,7 +95,7 @@ fn bad(message: impl Into<String>) -> ApiError {
     ApiError(StatusCode::BAD_REQUEST, message.into())
 }
 
-type ApiResult<T = Json<Value>> = Result<T, ApiError>;
+pub(super) type ApiResult<T = Json<Value>> = Result<T, ApiError>;
 
 fn done() -> Json<Value> {
     Json(json!({}))
