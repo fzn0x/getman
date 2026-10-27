@@ -115,10 +115,16 @@ impl Pretty {
         let outcome = if execution.skipped {
             paint(YELLOW, "skipped")
         } else if let Some(response) = &execution.response {
+            // A gRPC call succeeds with status 0, not 2xx.
+            let tone = match &execution.grpc {
+                Some(_) if response.status == 0 => GREEN,
+                Some(_) => RED,
+                None => style::status(response.status),
+            };
             format!(
                 "{} {}",
                 paint(
-                    style::status(response.status),
+                    tone,
                     &format!("{} {}", response.status, response.status_text)
                 ),
                 paint(
@@ -141,6 +147,12 @@ impl Pretty {
         );
         if let Some(error) = &execution.error {
             anstream::println!("      {}", paint(RED, error));
+        }
+        if let Some(status) = execution.grpc.as_ref().and_then(|c| c.status.as_ref())
+            && !status.is_ok()
+            && !status.message.is_empty()
+        {
+            anstream::println!("      {}", paint(DIM, &status.message));
         }
         for error in &execution.script_errors {
             anstream::println!(
