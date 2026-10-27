@@ -136,30 +136,81 @@ async fn digest(headers: HeaderMap) -> Response {
     }
 }
 
-/// An OAuth 2.0 token endpoint accepting client `app` with secret `s3cret`.
+/// An OAuth 2.0 token endpoint accepting client `app` with secret
+/// `s3cret`, and the public client `public` without one. The authorization
+/// code `good-code` is valid; its token names the PKCE challenge of the
+/// verifier sent. A `lifetime` parameter sets `expires_in`.
 async fn token(headers: HeaderMap, body: String) -> Response {
+    use base64::Engine as _;
+    use sha2::Digest as _;
+
     let form: BTreeMap<String, String> = url::form_urlencoded::parse(body.as_bytes())
         .into_owned()
         .collect();
+    let field = |name: &str| form.get(name).map(String::as_str);
     let basic = headers
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .is_some_and(|v| v == "Basic YXBwOnMzY3JldA==");
-    let in_body = form.get("client_id").map(String::as_str) == Some("app")
-        && form.get("client_secret").map(String::as_str) == Some("s3cret");
-    if !(basic || in_body) {
+    let in_body = field("client_id") == Some("app") && field("client_secret") == Some("s3cret");
+    let public = field("client_id") == Some("public") && field("client_secret").is_none();
+    if !(basic || in_body || public) {
         return (
             StatusCode::UNAUTHORIZED,
             axum::Json(json!({"error": "invalid_client"})),
         )
             .into_response();
     }
-    let grant = form.get("grant_type").cloned().unwrap_or_default();
-    let scope = form.get("scope").cloned().unwrap_or_default();
-    axum::Json(json!({
-        "access_token": format!("token-for-{grant}-{scope}"),
-        "token_type": "Bearer",
-        "expires_in": 3600,
-    }))
-    .into_response()
+    let grant = field("grant_type").unwrap_or_default();
+    let scope = field("scope").unwrap_or_default();
+    let lifetime: u64 = field("lifetime")
+        .and_then(|l| l.parse().ok())
+        .unwrap_or(3600);
+    match grant {
+        "authorization_code" => {
+            if field("code") != Some("good-code") || field("redirect_uri").is_none() {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    axum::Json(json!({"error": "invalid_grant"})),
+                )
+                    .into_response();
+            }
+            let challenge = field("code_verifier").map_or_else(
+                || "none".to_owned(),
+                |verifier| {
+                    base64::engine::general_purpose::URL_SAFE_NO_PAD
+                        .encode(sha2::Sha256::digest(verifier.as_bytes()))
+                },
+            );
+            axum::Json(json!({
+                "access_token": format!("code-token-{challenge}"),
+                "token_type": "Bearer",
+                "expires_in": lifetime,
+                "refresh_token": "refresh-1",
+            }))
+            .into_response()
+        }
+        "refresh_token" => {
+            let Some(refresh) = field("refresh_token").filter(|r| r.starts_with("refresh-")) else {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    axum::Json(json!({"error": "invalid_grant"})),
+                )
+                    .into_response();
+            };
+            axum::Json(json!({
+                "access_token": format!("refreshed-with-{refresh}"),
+                "token_type": "Bearer",
+                "expires_in": 3600,
+            }))
+            .into_response()
+        }
+        _ => axum::Json(json!({
+            "access_token": format!("token-for-{grant}-{scope}"),
+            "token_type": "Bearer",
+            "expires_in": lifetime,
+            "refresh_token": if grant == "password" { Some("refresh-pw") } else { None },
+        }))
+        .into_response(),
+    }
 }

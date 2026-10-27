@@ -296,12 +296,18 @@ pub enum ApiKeyLocation {
     Query,
 }
 
-/// OAuth 2.0 settings for grants that need no browser.
+/// OAuth 2.0 settings.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OAuth2 {
     /// The grant used to get a token.
     pub grant: OAuth2Grant,
+    /// Authorization endpoint, for the grants that sign in with a browser.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub auth_url: String,
     /// Token endpoint.
     #[serde(deserialize_with = "lenient::string")]
     pub token_url: String,
@@ -314,12 +320,22 @@ pub struct OAuth2 {
         deserialize_with = "lenient::string"
     )]
     pub client_secret: String,
+    /// Where the provider sends the browser back: a loopback `http` URL.
+    /// When empty, Getman listens on a free port of 127.0.0.1.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub callback_url: String,
+    /// Proof Key for Code Exchange, for the authorization code grant.
+    #[serde(skip_serializing_if = "Pkce::is_off")]
+    pub pkce: Pkce,
     /// Space-separated scopes.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub scope: String,
     /// Audience, for providers that require one.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub audience: String,
+    /// Resource indicator (RFC 8707), for providers that require one.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub resource: String,
     /// Resource owner's user name, for the password grant.
     #[serde(
         skip_serializing_if = "String::is_empty",
@@ -334,9 +350,22 @@ pub struct OAuth2 {
     pub password: String,
     /// How the client authenticates to the token endpoint.
     pub client_auth: ClientAuth,
+    /// More parameters for the authorization request.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub auth_params: Vec<KeyValue>,
+    /// More parameters for token requests.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub token_params: Vec<KeyValue>,
+    /// Scheme written before the token. `Bearer` when empty.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub prefix: String,
+    /// Where the token goes: the `Authorization` header, or the query as
+    /// `access_token`.
+    #[serde(skip_serializing_if = "is_header")]
+    pub token_in: ApiKeyLocation,
 }
 
-/// OAuth 2.0 grant types Getman can complete on its own.
+/// OAuth 2.0 grant types.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OAuth2Grant {
@@ -345,6 +374,38 @@ pub enum OAuth2Grant {
     ClientCredentials,
     /// Resource owner password credentials grant.
     Password,
+    /// Authorization code grant: the user signs in with a browser.
+    AuthorizationCode,
+    /// Implicit grant: the browser receives the token directly.
+    Implicit,
+}
+
+impl OAuth2Grant {
+    /// Whether the user signs in with a browser to get a token.
+    pub fn uses_browser(self) -> bool {
+        matches!(self, Self::AuthorizationCode | Self::Implicit)
+    }
+}
+
+/// Proof Key for Code Exchange (RFC 7636).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Pkce {
+    /// No PKCE.
+    #[default]
+    Off,
+    /// A SHA-256 challenge.
+    S256,
+    /// The verifier itself as the challenge.
+    Plain,
+}
+
+impl Pkce {
+    /// Whether PKCE is off.
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn is_off(&self) -> bool {
+        *self == Self::Off
+    }
 }
 
 /// How an OAuth 2.0 client sends its credentials to the token endpoint.
@@ -977,6 +1038,25 @@ mod tests {
         assert!(!yaml.contains("issued_at"), "{yaml}");
         let default = serde_yaml_ng::to_string(&Auth::Jwt(Jwt::default())).unwrap();
         assert_eq!(default, "type: jwt\n");
+    }
+
+    #[test]
+    fn browser_grants_keep_their_settings_beside_the_type() {
+        let yaml = "type: oauth2\ngrant: authorization_code\nauth_url: https://id.example.com/authorize\ntoken_url: https://id.example.com/token\nclient_id: cli\npkce: s256\nauth_params:\n- name: prompt\n  value: consent\ntoken_in: query\n";
+        let auth: Auth = serde_yaml_ng::from_str(yaml).unwrap();
+        let Auth::Oauth2(oauth) = &auth else {
+            panic!("expected oauth2, got {auth:?}");
+        };
+        assert_eq!(oauth.grant, OAuth2Grant::AuthorizationCode);
+        assert!(oauth.grant.uses_browser());
+        assert_eq!(oauth.pkce, Pkce::S256);
+        assert_eq!(oauth.auth_params[0].name, "prompt");
+        assert_eq!(oauth.token_in, ApiKeyLocation::Query);
+        let written = serde_yaml_ng::to_string(&auth).unwrap();
+        assert!(written.contains("pkce: s256"), "{written}");
+        assert!(!written.contains("prefix"), "{written}");
+        assert!(!written.contains("callback_url"), "{written}");
+        assert_eq!(serde_yaml_ng::from_str::<Auth>(&written).unwrap(), auth);
     }
 
     #[test]

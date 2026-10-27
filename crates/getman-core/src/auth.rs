@@ -1,35 +1,36 @@
 //! Authentication that needs a round trip: HTTP Digest, which answers the
-//! server's challenge, and OAuth 2.0, which fetches a token first. Also the
-//! signatures computed from the request itself, such as AWS Signature
-//! Version 4, which are added as the last step of preparing it.
+//! server's challenge, and OAuth 2.0, which fetches a token first or signs
+//! in with a browser. Also the signatures computed from the request itself,
+//! such as AWS Signature Version 4, which are added as the last step of
+//! preparing it.
 
+mod callback;
 mod edgegrid;
 mod hawk;
 mod jwt;
 mod keys;
 mod oauth1;
+mod oauth2;
 mod sigv4;
+
+pub use oauth2::{Authorization, Token};
 
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::path::Path;
-use std::sync::Mutex;
-use std::time::{Duration, Instant, SystemTime};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime};
 
-use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD as BASE64;
 use hmac::digest::KeyInit;
 use hmac::{Hmac, Mac};
 use md5::Md5;
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC};
-use serde::Serialize;
 use sha2::{Digest as _, Sha256};
+use tokio::sync::Notify;
 
 use crate::error::{Error, Result};
-use crate::http::{
-    Header, HttpClient, Outgoing, OutgoingBody, Payload, Response, Transport, set_header,
-};
-use crate::model::{Auth, ClientAuth, OAuth2, OAuth2Grant};
+use crate::http::{HttpClient, Outgoing, OutgoingBody, Response, Transport, set_header};
+use crate::model::{Auth, OAuth2};
 use crate::vars::VarStack;
 
 /// Characters escaped by RFC 3986 percent-encoding: all but the unreserved
@@ -138,44 +139,45 @@ fn host_header(outgoing: &Outgoing, url: &url::Url) -> String {
     }
 }
 
-/// Tokens are renewed this long before they expire.
-const EXPIRY_MARGIN: Duration = Duration::from_secs(30);
-/// How long to keep a token whose lifetime the server did not state.
-const UNSTATED_LIFETIME: Duration = Duration::from_secs(10 * 60);
+/// File in the workspace's state directory that keeps OAuth 2.0 tokens
+/// from browser sign-ins.
+pub const TOKEN_FILE: &str = "oauth2-tokens.json";
 
 /// Sends requests with any kind of authentication, remembering OAuth 2.0
-/// tokens until they expire.
+/// tokens until they expire. Tokens from a browser sign-in are also kept
+/// in a file, so later runs and `getman run` can use them.
 #[derive(Debug, Default)]
 pub struct Authenticator {
-    tokens: Mutex<HashMap<String, CachedToken>>,
+    tokens: Mutex<HashMap<String, oauth2::Record>>,
+    store: Option<PathBuf>,
+    flows: Mutex<HashMap<String, Flow>>,
 }
 
-#[derive(Debug, Clone)]
-struct CachedToken {
-    token: Token,
-    renew_at: Instant,
-}
-
-/// An OAuth 2.0 access token.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct Token {
-    /// The access token.
-    pub access_token: String,
-    /// Token type, usually `Bearer`.
-    pub token_type: String,
-    /// Lifetime in seconds, as the server stated it.
-    pub expires_in: Option<u64>,
-    /// Scopes the server granted, if it said.
-    pub scope: Option<String>,
+/// A browser sign-in: a way to cancel it, and its listener until someone
+/// waits on it.
+#[derive(Debug)]
+struct Flow {
+    cancel: Arc<Notify>,
+    pending: Option<oauth2::Pending>,
 }
 
 impl Authenticator {
-    /// An authenticator without cached tokens.
+    /// An authenticator without cached tokens, which keeps tokens in
+    /// memory only.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Forgets every cached token.
+    /// An authenticator that keeps tokens from browser sign-ins in `file`,
+    /// usually [`TOKEN_FILE`] in the workspace's state directory.
+    pub fn with_store(file: impl Into<PathBuf>) -> Self {
+        Self {
+            store: Some(file.into()),
+            ..Self::default()
+        }
+    }
+
+    /// Forgets every token cached in memory.
     pub fn clear_tokens(&self) {
         self.tokens.lock().expect("token cache lock").clear();
     }
@@ -223,26 +225,18 @@ impl Authenticator {
             }
             Auth::Oauth2(settings) => {
                 let token = self.token(http, settings, vars, transport, false).await?;
-                let scheme = if token.token_type.eq_ignore_ascii_case("bearer")
-                    || token.token_type.is_empty()
-                {
-                    "Bearer"
-                } else {
-                    token.token_type.as_str()
-                };
-                set_header(
-                    &mut outgoing.headers,
-                    "Authorization",
-                    format!("{scheme} {}", token.access_token),
-                );
+                oauth2::apply_token(&oauth2::render(settings, vars), &token, outgoing)?;
                 http.send(outgoing, transport).await
             }
             _ => http.send(outgoing, transport).await,
         }
     }
 
-    /// The token for these settings: a cached one while it is fresh, else
-    /// a new one from the token endpoint. `renew` skips the cache.
+    /// The token for these settings: a cached one while it is fresh, a
+    /// refreshed one when it came with a refresh token, else a new one
+    /// from the token endpoint. `renew` skips the cache. The grants that
+    /// sign in with a browser never start one here; they need a token from
+    /// [`Authenticator::authorize`] first.
     pub async fn token(
         &self,
         http: &HttpClient,
@@ -251,155 +245,167 @@ impl Authenticator {
         transport: Transport,
         renew: bool,
     ) -> Result<Token> {
-        let s = render_oauth2(settings, vars);
-        let key = [
-            s.token_url.as_str(),
-            s.client_id.as_str(),
-            s.client_secret.as_str(),
-            s.scope.as_str(),
-            s.audience.as_str(),
-            s.username.as_str(),
-            s.password.as_str(),
-            match s.grant {
-                OAuth2Grant::ClientCredentials => "client_credentials",
-                OAuth2Grant::Password => "password",
-            },
-        ]
-        .join("\u{0}");
-        if !renew {
-            let tokens = self.tokens.lock().expect("token cache lock");
-            if let Some(cached) = tokens.get(&key)
-                && Instant::now() < cached.renew_at
-            {
-                return Ok(cached.token.clone());
+        let s = oauth2::render(settings, vars);
+        let browser = s.grant.uses_browser();
+        let key = oauth2::cache_key(&s);
+        if !renew && let Some(record) = self.lookup(&key, browser) {
+            if record.fresh(crate::time::now_millis()) {
+                return Ok(record.token());
+            }
+            match &record.refresh_token {
+                Some(refresh_token) => {
+                    match oauth2::refresh(http, &s, refresh_token, transport).await {
+                        Ok(renewed) => {
+                            self.remember(&key, &renewed, browser)?;
+                            return Ok(renewed.token());
+                        }
+                        Err(e) if browser => {
+                            return Err(Error::Http(format!(
+                                "The OAuth 2.0 token expired and could not be refreshed. {e}. Get a new token under Auth in Getman's browser UI."
+                            )));
+                        }
+                        // Fetch a new one below.
+                        Err(_) => {}
+                    }
+                }
+                None if browser => {
+                    return Err(Error::Invalid(
+                        "The OAuth 2.0 token expired and came without a refresh token. Get a new token under Auth in Getman's browser UI.".into(),
+                    ));
+                }
+                None => {}
             }
         }
-        let token = fetch_token(http, &s, transport).await?;
-        let lifetime = token
-            .expires_in
-            .map_or(UNSTATED_LIFETIME, Duration::from_secs);
-        self.tokens.lock().expect("token cache lock").insert(
-            key,
-            CachedToken {
-                token: token.clone(),
-                renew_at: Instant::now() + lifetime.saturating_sub(EXPIRY_MARGIN),
+        if browser {
+            return Err(oauth2::needs_browser(s.grant));
+        }
+        let record = oauth2::fetch(http, &s, transport).await?;
+        self.remember(&key, &record, false)?;
+        Ok(record.token())
+    }
+
+    /// The token cached for these settings, fresh or not.
+    pub fn cached_token(&self, settings: &OAuth2, vars: &VarStack) -> Option<Token> {
+        let s = oauth2::render(settings, vars);
+        self.lookup(&oauth2::cache_key(&s), s.grant.uses_browser())
+            .map(|record| record.token())
+    }
+
+    /// Forgets the token for these settings, in memory and in the token
+    /// file. Returns whether there was one.
+    pub fn clear_token(&self, settings: &OAuth2, vars: &VarStack) -> Result<bool> {
+        let key = oauth2::cache_key(&oauth2::render(settings, vars));
+        let mut found = self
+            .tokens
+            .lock()
+            .expect("token cache lock")
+            .remove(&key)
+            .is_some();
+        if let Some(path) = &self.store {
+            let mut stored = oauth2::load(path);
+            if stored.remove(&key).is_some() {
+                found = true;
+                oauth2::save(path, &stored)?;
+            }
+        }
+        Ok(found)
+    }
+
+    /// Starts a browser sign-in for the authorization code or implicit
+    /// grant: listens for the callback and returns the URL to open. Any
+    /// sign-in already under way is cancelled. Finish it with
+    /// [`Authenticator::wait_for_token`].
+    pub async fn authorize(&self, settings: &OAuth2, vars: &VarStack) -> Result<Authorization> {
+        let s = oauth2::render(settings, vars);
+        {
+            // One at a time: this frees the callback port of the last one.
+            let mut flows = self.flows.lock().expect("sign-in lock");
+            for flow in flows.values() {
+                flow.cancel.notify_one();
+            }
+            flows.clear();
+        }
+        let (pending, authorization) = oauth2::begin(s).await?;
+        self.flows.lock().expect("sign-in lock").insert(
+            authorization.id.clone(),
+            Flow {
+                cancel: Arc::new(Notify::new()),
+                pending: Some(pending),
             },
         );
-        Ok(token)
+        Ok(authorization)
     }
-}
 
-fn render_oauth2(settings: &OAuth2, vars: &VarStack) -> OAuth2 {
-    OAuth2 {
-        grant: settings.grant,
-        token_url: vars.render(settings.token_url.trim()),
-        client_id: vars.render(&settings.client_id),
-        client_secret: vars.render(&settings.client_secret),
-        scope: vars.render(&settings.scope),
-        audience: vars.render(&settings.audience),
-        username: vars.render(&settings.username),
-        password: vars.render(&settings.password),
-        client_auth: settings.client_auth,
+    /// Waits for the browser sign-in `id` to come back, at most `timeout`,
+    /// then gets and keeps its token.
+    pub async fn wait_for_token(
+        &self,
+        http: &HttpClient,
+        id: &str,
+        transport: Transport,
+        timeout: Duration,
+    ) -> Result<Token> {
+        let gone = || Error::Invalid("This sign-in was cancelled or has already finished.".into());
+        let (pending, cancel) = {
+            let mut flows = self.flows.lock().expect("sign-in lock");
+            let flow = flows.get_mut(id).ok_or_else(gone)?;
+            (
+                flow.pending.take().ok_or_else(gone)?,
+                Arc::clone(&flow.cancel),
+            )
+        };
+        let key = pending.key();
+        let result = tokio::select! {
+            result = oauth2::finish(http, pending, transport) => result,
+            () = cancel.notified() => Err(Error::Invalid("The sign-in was cancelled.".into())),
+            () = tokio::time::sleep(timeout) => Err(Error::Http(
+                "Getman stopped waiting for the browser sign-in. Start it again.".into(),
+            )),
+        };
+        self.flows.lock().expect("sign-in lock").remove(id);
+        let record = result?;
+        self.remember(&key, &record, true)?;
+        Ok(record.token())
     }
-}
 
-async fn fetch_token(http: &HttpClient, s: &OAuth2, transport: Transport) -> Result<Token> {
-    if s.token_url.is_empty() {
-        return Err(Error::Invalid("OAuth 2.0 needs a token URL".into()));
-    }
-    let request = token_request(s);
-    let response = http
-        .send(&request, transport)
-        .await
-        .map_err(|e| Error::Http(format!("Could not get an OAuth 2.0 token: {e}")))?;
-    read_token(&response)
-}
-
-/// The token request. Built outside the async function: the form encoder
-/// is not `Send`, so it must not live across an await.
-fn token_request(s: &OAuth2) -> Outgoing {
-    let mut form = url::form_urlencoded::Serializer::new(String::new());
-    match s.grant {
-        OAuth2Grant::ClientCredentials => {
-            form.append_pair("grant_type", "client_credentials");
-        }
-        OAuth2Grant::Password => {
-            form.append_pair("grant_type", "password");
-            form.append_pair("username", &s.username);
-            form.append_pair("password", &s.password);
-        }
-    }
-    if !s.scope.trim().is_empty() {
-        form.append_pair("scope", s.scope.trim());
-    }
-    if !s.audience.trim().is_empty() {
-        form.append_pair("audience", s.audience.trim());
-    }
-    let mut headers = vec![
-        Header::new("Content-Type", "application/x-www-form-urlencoded"),
-        Header::new("Accept", "application/json"),
-    ];
-    match s.client_auth {
-        ClientAuth::Basic => {
-            // RFC 6749 section 2.3.1: both parts are form-encoded first.
-            let encode = |text: &str| {
-                url::form_urlencoded::byte_serialize(text.as_bytes()).collect::<String>()
-            };
-            let credentials = format!("{}:{}", encode(&s.client_id), encode(&s.client_secret));
-            headers.push(Header::new(
-                "Authorization",
-                format!("Basic {}", BASE64.encode(credentials)),
-            ));
-        }
-        ClientAuth::Body => {
-            form.append_pair("client_id", &s.client_id);
-            if !s.client_secret.is_empty() {
-                form.append_pair("client_secret", &s.client_secret);
+    /// Cancels the browser sign-in `id`, if it is still under way.
+    pub fn cancel_authorization(&self, id: &str) {
+        let mut flows = self.flows.lock().expect("sign-in lock");
+        if let Some(flow) = flows.get_mut(id) {
+            flow.cancel.notify_one();
+            if flow.pending.take().is_some() {
+                flows.remove(id);
             }
         }
     }
-    Outgoing {
-        method: "POST".into(),
-        url: s.token_url.clone(),
-        headers,
-        body: OutgoingBody::Bytes {
-            data: Payload(form.finish().into_bytes()),
-        },
-    }
-}
 
-fn read_token(response: &Response) -> Result<Token> {
-    let json = response.json().unwrap_or_default();
-    if !(200..300).contains(&response.status) {
-        let reason = [json["error"].as_str(), json["error_description"].as_str()]
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>()
-            .join(": ");
-        return Err(Error::Http(format!(
-            "The token endpoint answered {} {}{}",
-            response.status,
-            response.status_text,
-            if reason.is_empty() {
-                String::new()
-            } else {
-                format!(" ({reason})")
-            }
-        )));
+    /// A cached token: from memory, or for a browser grant, from the file.
+    fn lookup(&self, key: &str, browser: bool) -> Option<oauth2::Record> {
+        if let Some(record) = self.tokens.lock().expect("token cache lock").get(key) {
+            return Some(record.clone());
+        }
+        let path = self.store.as_ref().filter(|_| browser)?;
+        let record = oauth2::load(path).remove(key)?;
+        self.tokens
+            .lock()
+            .expect("token cache lock")
+            .insert(key.to_owned(), record.clone());
+        Some(record)
     }
-    let Some(access_token) = json["access_token"].as_str() else {
-        return Err(Error::Http(
-            "The token endpoint's answer has no access_token".into(),
-        ));
-    };
-    Ok(Token {
-        access_token: access_token.to_owned(),
-        token_type: json["token_type"].as_str().unwrap_or("Bearer").to_owned(),
-        expires_in: json["expires_in"]
-            .as_u64()
-            .or_else(|| json["expires_in"].as_str().and_then(|s| s.parse().ok())),
-        scope: json["scope"].as_str().map(str::to_owned),
-    })
+
+    /// Caches a token, and writes tokens of browser grants to the file.
+    fn remember(&self, key: &str, record: &oauth2::Record, browser: bool) -> Result<()> {
+        self.tokens
+            .lock()
+            .expect("token cache lock")
+            .insert(key.to_owned(), record.clone());
+        if browser && let Some(path) = &self.store {
+            let mut stored = oauth2::load(path);
+            stored.insert(key.to_owned(), record.clone());
+            oauth2::save(path, &stored)?;
+        }
+        Ok(())
+    }
 }
 
 /// The parameters of a `Digest` challenge, with lowercase names.
@@ -572,6 +578,7 @@ fn sha512_256_hex(data: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::{ClientAuth, KeyValue, OAuth2Grant, Pkce};
     use crate::test_server;
     use crate::vars::Scope;
 
@@ -729,6 +736,279 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status, 401);
+    }
+
+    /// Visits a URL the way a browser would, returning status and body.
+    async fn visit(url: String) -> (u16, String) {
+        let response = HttpClient::new()
+            .send(&get(url), Transport::default())
+            .await
+            .unwrap();
+        (response.status, response.text().into_owned())
+    }
+
+    fn query_param(url: &str, name: &str) -> Option<String> {
+        url::Url::parse(url)
+            .unwrap()
+            .query_pairs()
+            .find(|(n, _)| n == name)
+            .map(|(_, v)| v.into_owned())
+    }
+
+    fn code_grant(server: &test_server::TestServer) -> OAuth2 {
+        OAuth2 {
+            grant: OAuth2Grant::AuthorizationCode,
+            auth_url: "https://id.example.com/authorize?tenant=t1".into(),
+            token_url: server.url("/token"),
+            client_id: "app".into(),
+            client_secret: "{{secret}}".into(),
+            pkce: Pkce::S256,
+            scope: "read write".into(),
+            auth_params: vec![KeyValue::new("prompt", "consent")],
+            token_params: vec![KeyValue::new("lifetime", "1")],
+            ..OAuth2::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn the_authorization_code_grant_signs_in_refreshes_and_persists() {
+        let server = test_server::spawn().await;
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(".getman").join(TOKEN_FILE);
+        let http = HttpClient::new();
+        let mut vars = VarStack::new();
+        vars.push(
+            Scope::Environment,
+            [("secret".to_owned(), "s3cret".to_owned())]
+                .into_iter()
+                .collect(),
+        );
+        let settings = code_grant(&server);
+        let authenticator = Authenticator::with_store(&file);
+
+        let error = authenticator
+            .token(&http, &settings, &vars, Transport::default(), false)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("Get new token"), "{error}");
+
+        let authorization = authenticator.authorize(&settings, &vars).await.unwrap();
+        let url = &authorization.url;
+        assert!(url.starts_with("https://id.example.com/authorize?tenant=t1&"));
+        assert_eq!(query_param(url, "response_type").as_deref(), Some("code"));
+        assert_eq!(query_param(url, "client_id").as_deref(), Some("app"));
+        assert_eq!(query_param(url, "scope").as_deref(), Some("read write"));
+        assert_eq!(query_param(url, "prompt").as_deref(), Some("consent"));
+        assert_eq!(
+            query_param(url, "code_challenge_method").as_deref(),
+            Some("S256")
+        );
+        assert_eq!(
+            query_param(url, "redirect_uri").unwrap(),
+            authorization.redirect_uri
+        );
+        let state = query_param(url, "state").unwrap();
+        assert!(state.len() >= 20);
+        let challenge = query_param(url, "code_challenge").unwrap();
+
+        let redirect = authorization.redirect_uri.clone();
+        let browser = tokio::spawn(async move {
+            let (status, _) = visit(format!("{redirect}?code=good-code&state=forged")).await;
+            assert_eq!(status, 400);
+            let (status, page) = visit(format!("{redirect}?code=good-code&state={state}")).await;
+            assert_eq!(status, 200);
+            assert!(page.contains("Signed in"), "{page}");
+        });
+        let token = authenticator
+            .wait_for_token(
+                &http,
+                &authorization.id,
+                Transport::default(),
+                Duration::from_secs(10),
+            )
+            .await
+            .unwrap();
+        browser.await.unwrap();
+        assert_eq!(token.access_token, format!("code-token-{challenge}"));
+        assert!(token.refreshable);
+        assert!(token.expires_at.is_some());
+        assert!(file.is_file());
+        assert!(dir.path().join(".getman/.gitignore").is_file());
+        let saved = std::fs::read_to_string(&file).unwrap();
+        assert!(!saved.contains("s3cret"), "{saved}");
+
+        // It lives for a second, less than the margin, so the next request
+        // refreshes it.
+        let mut outgoing = get(server.url("/echo"));
+        let response = authenticator
+            .send(
+                &http,
+                &Auth::Oauth2(settings.clone()),
+                &vars,
+                &mut outgoing,
+                Transport::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            response.json().unwrap()["headers"]["authorization"],
+            "Bearer refreshed-with-refresh-1"
+        );
+
+        // Another run reads the file.
+        let later = Authenticator::with_store(&file);
+        let cached = later.cached_token(&settings, &vars).unwrap();
+        assert_eq!(cached.access_token, "refreshed-with-refresh-1");
+        assert!(cached.refreshable);
+        assert!(later.clear_token(&settings, &vars).unwrap());
+        assert!(later.cached_token(&settings, &vars).is_none());
+        assert!(!file.exists());
+    }
+
+    #[tokio::test]
+    async fn the_implicit_grant_takes_the_token_from_the_fragment() {
+        let authenticator = Authenticator::new();
+        let settings = OAuth2 {
+            grant: OAuth2Grant::Implicit,
+            auth_url: "https://id.example.com/authorize".into(),
+            client_id: "public".into(),
+            ..OAuth2::default()
+        };
+        let vars = VarStack::new();
+        let authorization = authenticator.authorize(&settings, &vars).await.unwrap();
+        assert_eq!(
+            query_param(&authorization.url, "response_type").as_deref(),
+            Some("token")
+        );
+        assert!(query_param(&authorization.url, "code_challenge").is_none());
+        let state = query_param(&authorization.url, "state").unwrap();
+        let redirect = authorization.redirect_uri.clone();
+        let browser = tokio::spawn(async move {
+            let (status, page) = visit(redirect.clone()).await;
+            assert_eq!(status, 200);
+            assert!(page.contains("location.hash"), "{page}");
+            let (status, _) = visit(format!(
+                "{redirect}?access_token=imp&token_type=bearer&expires_in=120&state={state}"
+            ))
+            .await;
+            assert_eq!(status, 200);
+        });
+        let token = authenticator
+            .wait_for_token(
+                &HttpClient::new(),
+                &authorization.id,
+                Transport::default(),
+                Duration::from_secs(10),
+            )
+            .await
+            .unwrap();
+        browser.await.unwrap();
+        assert_eq!(token.access_token, "imp");
+        assert_eq!(token.expires_in, Some(120));
+        assert!(!token.refreshable);
+        assert_eq!(
+            authenticator
+                .cached_token(&settings, &vars)
+                .unwrap()
+                .access_token,
+            "imp"
+        );
+    }
+
+    #[tokio::test]
+    async fn sign_ins_can_be_cancelled_and_replaced() {
+        let server = test_server::spawn().await;
+        let authenticator = Arc::new(Authenticator::new());
+        let mut settings = code_grant(&server);
+        settings.client_secret = "s3cret".into();
+        let vars = VarStack::new();
+        let first = authenticator.authorize(&settings, &vars).await.unwrap();
+        let waiting = {
+            let authenticator = Arc::clone(&authenticator);
+            let id = first.id.clone();
+            tokio::spawn(async move {
+                authenticator
+                    .wait_for_token(
+                        &HttpClient::new(),
+                        &id,
+                        Transport::default(),
+                        Duration::from_secs(10),
+                    )
+                    .await
+            })
+        };
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        authenticator.cancel_authorization(&first.id);
+        let error = waiting.await.unwrap().unwrap_err();
+        assert!(error.to_string().contains("cancelled"), "{error}");
+
+        // A new sign-in replaces one nobody waits on yet.
+        let second = authenticator.authorize(&settings, &vars).await.unwrap();
+        let third = authenticator.authorize(&settings, &vars).await.unwrap();
+        let error = authenticator
+            .wait_for_token(
+                &HttpClient::new(),
+                &second.id,
+                Transport::default(),
+                Duration::from_secs(1),
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("already finished"), "{error}");
+        let error = authenticator
+            .wait_for_token(
+                &HttpClient::new(),
+                &third.id,
+                Transport::default(),
+                Duration::from_millis(100),
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("stopped waiting"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn password_tokens_refresh_and_can_go_in_the_query() {
+        let server = test_server::spawn().await;
+        let http = HttpClient::new();
+        let settings = OAuth2 {
+            grant: OAuth2Grant::Password,
+            token_url: server.url("/token"),
+            client_id: "app".into(),
+            client_secret: "s3cret".into(),
+            username: "ada".into(),
+            token_params: vec![KeyValue::new("lifetime", "1")],
+            token_in: crate::model::ApiKeyLocation::Query,
+            ..OAuth2::default()
+        };
+        let authenticator = Authenticator::new();
+        let first = authenticator
+            .token(
+                &http,
+                &settings,
+                &VarStack::new(),
+                Transport::default(),
+                false,
+            )
+            .await
+            .unwrap();
+        assert_eq!(first.access_token, "token-for-password-");
+        assert!(first.refreshable);
+        let mut outgoing = get(server.url("/echo?a=1"));
+        let response = authenticator
+            .send(
+                &http,
+                &Auth::Oauth2(settings),
+                &VarStack::new(),
+                &mut outgoing,
+                Transport::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            response.json().unwrap()["query"],
+            "a=1&access_token=refreshed-with-refresh-pw"
+        );
     }
 
     #[tokio::test]

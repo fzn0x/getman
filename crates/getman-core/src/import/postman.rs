@@ -457,6 +457,7 @@ fn auth(value: &Value, name: &str, warnings: &mut Vec<String>) -> Option<Auth> {
                     } else {
                         ClientAuth::Basic
                     },
+                    ..OAuth2::default()
                 }),
                 None => {
                     let token = get(&p, "accessToken");
