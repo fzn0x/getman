@@ -9,6 +9,8 @@ import type {
   EnvironmentSummary,
   Execution,
   Folder,
+  GrpcEvent,
+  GrpcService,
   HistoryEntry,
   ImportReport,
   Language,
@@ -172,6 +174,41 @@ export const api = {
 
   cancelRun: (id: string) => post("/run/cancel", { id }),
 
+  grpcProtos: () => post<{ files: string[] }>("/grpc/protos"),
+  grpcSchema: (args: SendArgs & { refresh?: boolean }) =>
+    post<{ services: GrpcService[] }>("/grpc/schema", args),
+  grpcCode: (args: SendArgs) => post<{ code: string; missing: string[] }>("/grpc/code", args),
+  grpcSend: (id: string, text: string) => post<{ sent: number }>("/grpc/send", { id, text }),
+  grpcEnd: (id: string) => post("/grpc/end", { id }),
+  grpcCancel: (id: string) => post("/grpc/cancel", { id }),
+  grpcGenerate: (args: SendArgs & { service: string; folder: string }) =>
+    post<{ folder: string; requests: number }>("/grpc/generate", args),
+
+  /** Starts a gRPC call; events arrive as they happen. Resolves when it ends. */
+  async grpcInvoke(
+    args: SendArgs,
+    onEvent: (event: GrpcEvent) => void,
+    onStart: (id: string) => void,
+  ): Promise<void> {
+    let response: globalThis.Response;
+    try {
+      response = await fetch("/api/grpc/invoke", {
+        method: "POST",
+        headers: { "x-getman-token": token(), "content-type": "application/json" },
+        body: JSON.stringify(args),
+      });
+    } catch {
+      throw new ApiError("Getman is not answering.", 0, "offline");
+    }
+    if (!response.ok || !response.body) {
+      const data = (await response.json().catch(() => ({}))) as { error?: string; code?: string };
+      if (response.status === 401 && data.code === "token") onSignedOut();
+      throw new ApiError(data.error ?? response.statusText, response.status);
+    }
+    onStart(response.headers.get("x-call-id") ?? "");
+    await readLines(response.body, (line) => onEvent(JSON.parse(line) as GrpcEvent));
+  },
+
   /** Starts a run; events arrive as they happen. Resolves when it ends. */
   async run(
     args: RunArgs,
@@ -209,3 +246,23 @@ export const api = {
     }
   },
 };
+
+/** Reads a stream of JSON lines until it ends. */
+async function readLines(
+  body: NonNullable<globalThis.Response["body"]>,
+  onLine: (line: string) => void,
+): Promise<void> {
+  const reader = body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value;
+    let newline: number;
+    while ((newline = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      if (line) onLine(line);
+    }
+  }
+}

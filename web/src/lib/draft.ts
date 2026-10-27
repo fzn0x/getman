@@ -14,11 +14,24 @@ export function newDraft(name = "Untitled request"): Draft {
   return toDraft({ name, method: "GET", url: "" });
 }
 
+/** A new gRPC request, without a method until one is chosen. */
+export function newGrpcDraft(name = "Untitled call"): Draft {
+  return toDraft({ name, kind: "grpc", method: "", url: "" });
+}
+
 export function toDraft(request: Request): Draft {
+  const kind = request.kind ?? "http";
   return {
     name: request.name ?? "",
-    method: (request.method || "GET").toUpperCase(),
+    kind,
+    // gRPC methods are names such as shop.Orders/Get, not HTTP tokens.
+    method: kind === "http" ? (request.method || "GET").toUpperCase() : (request.method ?? ""),
     url: request.url ?? "",
+    grpc: {
+      proto: request.grpc?.proto ?? "",
+      tls: request.grpc?.tls ?? false,
+      message: request.grpc?.message ?? "",
+    },
     description: request.description ?? "",
     path_params: { ...(request.path_params ?? {}) },
     disabled_params: (request.disabled_params ?? []).map((p) => ({ ...p, enabled: false })),
@@ -49,10 +62,13 @@ export function toRequest(draft: Draft): Request {
       (settings as Record<string, unknown>)[key] = value;
     }
   }
+  const http = draft.kind === "http";
   return {
     name: draft.name,
-    method: draft.method.trim().toUpperCase() || "GET",
+    ...(http ? {} : { kind: draft.kind }),
+    method: http ? draft.method.trim().toUpperCase() || "GET" : draft.method.trim(),
     url: draft.url,
+    ...(draft.kind === "grpc" ? { grpc: { ...draft.grpc } } : {}),
     description: draft.description,
     path_params: { ...draft.path_params },
     disabled_params: filled(draft.disabled_params).map((p) => ({ ...p, enabled: false })),
