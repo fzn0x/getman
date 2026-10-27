@@ -3,6 +3,7 @@
   import CodeDialog from "./CodeDialog.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import CookiesDialog from "./CookiesDialog.svelte";
+  import HeaderPresetsDialog from "./HeaderPresetsDialog.svelte";
   import ImportDialog from "./ImportDialog.svelte";
   import MoveDialog from "./MoveDialog.svelte";
   import Palette from "./Palette.svelte";
@@ -33,6 +34,8 @@
       <SaveAsDialog tab={current.tab} />
     {:else if current.kind === "move"}
       <MoveDialog paths={current.paths} />
+    {:else if current.kind === "headerPresets"}
+      <HeaderPresetsDialog />
     {/if}
   {/key}
 {/if}

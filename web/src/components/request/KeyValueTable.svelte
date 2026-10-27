@@ -2,6 +2,7 @@
   import { tick } from "svelte";
   import type { KeyValue } from "../../lib/types";
   import Icon from "../Icon.svelte";
+  import HeaderPresets from "./HeaderPresets.svelte";
 
   interface Props {
     rows: KeyValue[];
@@ -14,6 +15,8 @@
     fixedNames?: boolean;
     toggles?: boolean;
     bulk?: boolean;
+    /** Offer header presets beside Bulk edit. */
+    presets?: boolean;
     label: string;
   }
 
@@ -26,6 +29,7 @@
     fixedNames = false,
     toggles = true,
     bulk = true,
+    presets = false,
     label,
   }: Props = $props();
 
@@ -195,6 +199,7 @@
   {/if}
   {#if bulk && !fixedNames}
     <div class="tools">
+      {#if presets && !bulkMode}<HeaderPresets {rows} {onChange} />{/if}
       <button class="btn quiet" onclick={() => (bulkMode ? closeBulk() : openBulk())}>
         {bulkMode ? "Back to table" : "Bulk edit"}
       </button>

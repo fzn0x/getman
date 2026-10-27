@@ -384,6 +384,7 @@
               names={HEADER_NAMES}
               label="Headers"
               nameLabel="Header"
+              presets
             />
             <div class="sent">
               <button class="btn quiet" onclick={previewHeaders}

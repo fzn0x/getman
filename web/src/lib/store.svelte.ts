@@ -1063,7 +1063,8 @@ export type Dialog =
       onSubmit: (value: string) => void | Promise<void>;
     }
   | { kind: "saveAs"; tab: RequestTab }
-  | { kind: "move"; paths: string[] };
+  | { kind: "move"; paths: string[] }
+  | { kind: "headerPresets" };
 
 export const dialogs = $state({ current: null as Dialog | null });
 
