@@ -531,7 +531,11 @@ export function flushSession(): boolean {
 }
 
 /** Saves the tabs a moment after any draft changes. */
+let watching = false;
+
 function watchSession(): void {
+  if (watching) return;
+  watching = true;
   $effect.root(() => {
     $effect(() => {
       JSON.stringify(
