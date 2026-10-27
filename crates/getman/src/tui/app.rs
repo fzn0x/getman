@@ -456,6 +456,19 @@ impl App {
             return;
         }
         match self.workspace().read_request(path) {
+            Ok(request) if !request.kind.is_http() => {
+                let kind = if request.kind == getman_core::model::RequestKind::Grpc {
+                    "gRPC".to_owned()
+                } else {
+                    request.kind.name().to_owned()
+                };
+                self.say(
+                    format!(
+                        "The terminal UI cannot open {kind} requests yet; use `getman` for the browser UI, or `getman send {path}`"
+                    ),
+                    true,
+                );
+            }
             Ok(request) => {
                 let saved = serde_yaml_ng::to_string(&request).unwrap_or_default();
                 let cursor = request.url.chars().count();
