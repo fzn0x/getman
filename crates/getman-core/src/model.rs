@@ -69,6 +69,9 @@ pub struct Request {
     /// Transport settings that override the folder's.
     #[serde(skip_serializing_if = "Settings::is_empty")]
     pub settings: Settings,
+    /// Saved responses, kept to look at and to serve from `getman mock`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub examples: Vec<Example>,
 }
 
 impl Default for Request {
@@ -88,6 +91,7 @@ impl Default for Request {
             checks: Vec::new(),
             captures: Vars::new(),
             settings: Settings::default(),
+            examples: Vec::new(),
         }
     }
 }
@@ -456,6 +460,74 @@ pub struct Environment {
     pub secrets: Vec<String>,
 }
 
+/// A saved response: what a request answered once, kept with the request
+/// to look at later and to serve from `getman mock`.
+///
+/// Short text bodies are stored inline in `body`. Bodies longer than
+/// [`crate::examples::INLINE_LIMIT`] bytes, or that are not text, are
+/// stored in a file named by `body_file`, inside the `<request>.examples`
+/// directory beside the request file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Example {
+    /// Name, unique within the request.
+    pub name: String,
+    /// Status code.
+    pub status: u16,
+    /// Response headers.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub headers: Vec<KeyValue>,
+    /// The body, when it is short text.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub body: String,
+    /// File holding the body, in the `<request>.examples` directory.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body_file: Option<String>,
+    /// The request that got this response, when it is known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request: Option<ExampleRequest>,
+}
+
+impl Default for Example {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            status: 200,
+            headers: Vec::new(),
+            body: String::new(),
+            body_file: None,
+            request: None,
+        }
+    }
+}
+
+/// The request an example's response answered, as it was sent.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ExampleRequest {
+    /// HTTP method.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub method: String,
+    /// URL. `getman mock` matches incoming requests against it.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub url: String,
+    /// Request headers.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub headers: Vec<KeyValue>,
+    /// The body, when it was text.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub body: String,
+}
+
 fn yes() -> bool {
     true
 }
@@ -511,6 +583,35 @@ mod tests {
         assert!(!yaml.contains("scripts"), "{yaml}");
         let back: Request = serde_yaml_ng::from_str(&yaml).unwrap();
         assert_eq!(back, request);
+    }
+
+    #[test]
+    fn examples_stay_short_in_yaml() {
+        let request = Request {
+            url: "{{baseUrl}}/users/:id".into(),
+            examples: vec![Example {
+                name: "Found".into(),
+                headers: vec![KeyValue::new("Content-Type", "application/json")],
+                body: "{\"id\": 7}\n".into(),
+                ..Example::default()
+            }],
+            ..Request::default()
+        };
+        let yaml = serde_yaml_ng::to_string(&request).unwrap();
+        assert!(
+            yaml.contains("examples:\n- name: Found\n  status: 200\n"),
+            "{yaml}"
+        );
+        assert!(!yaml.contains("body_file"), "{yaml}");
+        assert!(!yaml.contains("request:"), "{yaml}");
+        let back: Request = serde_yaml_ng::from_str(&yaml).unwrap();
+        assert_eq!(back, request);
+
+        let read: Request =
+            serde_yaml_ng::from_str("url: x\nexamples:\n  - name: Gone\n    status: 404\n")
+                .unwrap();
+        assert_eq!(read.examples[0].status, 404);
+        assert_eq!(read.examples[0].body, "");
     }
 
     #[test]

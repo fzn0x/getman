@@ -261,6 +261,7 @@ impl Workspace {
             if file_type.is_dir() {
                 if (rel.is_empty() && file_name == ENVIRONMENTS_DIR)
                     || SKIPPED_DIRS.contains(&file_name.as_str())
+                    || file_name.ends_with(crate::examples::DIR_SUFFIX)
                     || depth >= MAX_DEPTH
                 {
                     continue;
@@ -486,6 +487,7 @@ impl Workspace {
             if new_rel != rel {
                 let old = self.resolve(rel)?;
                 fs::remove_file(&old).map_err(|e| Error::io(&old, e))?;
+                move_examples(&old, &self.resolve(&new_rel)?)?;
             }
             self.replace_in_order(parent, &old_key, &new_key)?;
             Ok(new_rel)
@@ -537,6 +539,9 @@ impl Workspace {
         };
         let dest = dest_dir.join(&new_file);
         fs::rename(&source, &dest).map_err(|e| Error::io(&source, e))?;
+        if is_request {
+            move_examples(&source, &dest)?;
+        }
         self.remove_from_order(parent, key)?;
         self.add_to_order(to_folder, &new_key, None)?;
         Ok(join(to_folder, &new_file))
@@ -551,6 +556,10 @@ impl Workspace {
         if request_stem(file).is_some() {
             let path = self.request_path(rel)?;
             fs::remove_file(&path).map_err(|e| not_found_or_io(rel, &path, e))?;
+            let examples = crate::examples::dir_for(&path);
+            if examples.is_dir() {
+                fs::remove_dir_all(&examples).map_err(|e| Error::io(&examples, e))?;
+            }
         } else {
             let path = self.folder_dir(rel)?;
             fs::remove_dir_all(&path).map_err(|e| Error::io(&path, e))?;
@@ -568,10 +577,12 @@ impl Workspace {
             let name = format!("{} copy", request.name);
             let dir = self.folder_dir(parent)?;
             let stem = unique_stem(&dir, &slugify(&name), None);
-            write_yaml(
-                &dir.join(format!("{stem}.yaml")),
-                &Request { name, ..request },
-            )?;
+            let copy = dir.join(format!("{stem}.yaml"));
+            write_yaml(&copy, &Request { name, ..request })?;
+            let examples = crate::examples::dir_for(&self.resolve(rel)?);
+            if examples.is_dir() {
+                copy_dir(&examples, &crate::examples::dir_for(&copy))?;
+            }
             self.add_to_order(parent, &stem, Some(&key))?;
             Ok(join(parent, &format!("{stem}.yaml")))
         } else {
@@ -957,6 +968,19 @@ fn copy_dir(from: &Path, to: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Moves the directory of example bodies that belongs to a request file
+/// whose file moved from `from` to `to`.
+fn move_examples(from: &Path, to: &Path) -> Result<()> {
+    let (old, new) = (crate::examples::dir_for(from), crate::examples::dir_for(to));
+    if !old.is_dir() || old == new {
+        return Ok(());
+    }
+    if new.exists() {
+        fs::remove_dir_all(&new).map_err(|e| Error::io(&new, e))?;
+    }
+    fs::rename(&old, &new).map_err(|e| Error::io(&old, e))
 }
 
 fn not_found_or_io(rel: &str, path: &Path, e: std::io::Error) -> Error {

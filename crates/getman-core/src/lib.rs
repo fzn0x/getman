@@ -9,6 +9,7 @@ pub mod checks;
 pub mod data;
 pub mod dynamic;
 mod error;
+pub mod examples;
 pub mod execute;
 pub mod export;
 pub mod http;
