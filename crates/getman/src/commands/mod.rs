@@ -3,6 +3,7 @@
 mod export;
 mod import;
 mod init;
+mod mock;
 mod run;
 mod send;
 
@@ -20,6 +21,7 @@ pub(crate) async fn dispatch(cli: Cli) -> Outcome {
         Some(Command::Init(args)) => init::init(&args),
         Some(Command::Import(args)) => import::import(&args),
         Some(Command::Export(args)) => export::export(&args),
+        Some(Command::Mock(args)) => mock::mock(args).await,
         Some(Command::Open(args)) => open(&args).await,
         Some(Command::Tui(args)) => {
             let workspace = crate::workspaces::find_or_personal(args.dir.as_deref())?;

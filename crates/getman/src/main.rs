@@ -8,6 +8,7 @@
 mod cli;
 mod commands;
 mod examples;
+mod mock;
 mod report;
 mod runs;
 mod server;

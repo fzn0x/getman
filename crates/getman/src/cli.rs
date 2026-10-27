@@ -43,6 +43,9 @@ pub(crate) enum Command {
     /// Print a request as code: cURL, HTTPie, PowerShell, fetch, Python,
     /// Go, Rust or Java.
     Export(ExportArgs),
+    /// Serve the saved examples of the workspace or a folder as a mock API
+    /// on 127.0.0.1.
+    Mock(MockArgs),
 }
 
 #[derive(Debug, Args, Default)]
@@ -249,6 +252,24 @@ pub(crate) struct ExportArgs {
     pub(crate) vars: VarArgs,
 }
 
+#[derive(Debug, Args)]
+pub(crate) struct MockArgs {
+    /// Folder whose examples to serve, as a path in the workspace or on
+    /// disk. Serves every example in the workspace when left out.
+    pub(crate) path: Option<String>,
+
+    #[command(flatten)]
+    pub(crate) workspace: WorkspaceArgs,
+
+    /// Port to listen on. Defaults to 7979, or the next free port.
+    #[arg(long, short)]
+    pub(crate) port: Option<u16>,
+
+    /// Milliseconds to wait before each answer.
+    #[arg(long, value_name = "MS", default_value_t = 0)]
+    pub(crate) delay: u64,
+}
+
 fn parse_var(text: &str) -> Result<(String, String), String> {
     let (name, value) = text
         .split_once('=')
@@ -310,6 +331,19 @@ mod tests {
             panic!()
         };
         assert!(args.no_open);
+    }
+
+    #[test]
+    fn mock_takes_a_folder_port_and_delay() {
+        let cli = Cli::try_parse_from([
+            "getman", "mock", "users", "--port", "9001", "--delay", "250",
+        ])
+        .unwrap();
+        let Some(Command::Mock(args)) = cli.command else {
+            panic!()
+        };
+        assert_eq!(args.path.as_deref(), Some("users"));
+        assert_eq!((args.port, args.delay), (Some(9001), 250));
     }
 
     #[test]
