@@ -7,17 +7,23 @@ import type {
   DynamicVar,
   EnvironmentFiles,
   EnvironmentSummary,
+  Example,
   Execution,
   Folder,
   HistoryEntry,
   ImportReport,
   Language,
   LocalState,
+  MockServer,
   Node,
   Outgoing,
+  Payload,
+  ReportFormat,
   Request,
   ResolvedVar,
   RunEvent,
+  RunListing,
+  StoredRun,
   Token,
   WorkspaceInfo,
 } from "./types";
@@ -109,6 +115,8 @@ export interface SendArgs {
 
 export interface RunArgs {
   target: string;
+  /** Folders and requests to run in this order, instead of `target`. */
+  targets?: string[];
   environment?: string | null;
   iterations?: number | null;
   data?: string | null;
@@ -171,6 +179,46 @@ export const api = {
   clearHistory: () => post("/history/clear"),
 
   cancelRun: (id: string) => post("/run/cancel", { id }),
+
+  runs: () => call<RunListing[]>("GET", "/runs"),
+  readRun: (id: string) => post<StoredRun>("/runs/read", { id }),
+  deleteRun: (id: string) => post("/runs/delete", { id }),
+
+  /** A past run's report as a file, with the name the server suggests. */
+  async runReport(id: string, format: ReportFormat): Promise<{ blob: Blob; name: string }> {
+    let response: globalThis.Response;
+    try {
+      response = await fetch("/api/runs/report", {
+        method: "POST",
+        headers: { "x-getman-token": token(), "content-type": "application/json" },
+        body: JSON.stringify({ id, format }),
+      });
+    } catch {
+      throw new ApiError("Getman is not answering.", 0, "offline");
+    }
+    if (!response.ok) {
+      const data = (await response.json().catch(() => ({}))) as { error?: string; code?: string };
+      if (response.status === 401 && data.code === "token") onSignedOut();
+      throw new ApiError(data.error ?? response.statusText, response.status);
+    }
+    const disposition = response.headers.get("content-disposition") ?? "";
+    const name = /filename="([^"]+)"/.exec(disposition)?.[1] ?? `getman-run.${format}`;
+    return { blob: await response.blob(), name };
+  },
+
+  examples: (path: string) => post<Example[]>("/examples", { path }),
+  saveExample: (path: string, example: Example, body: Payload) =>
+    post<Example[]>("/example/save", { path, example, body }),
+  exampleBody: (path: string, name: string) =>
+    post<{ body: Payload }>("/example/body", { path, name }),
+  renameExample: (path: string, from: string, to: string) =>
+    post<Example[]>("/example/rename", { path, from, to }),
+  deleteExample: (path: string, name: string) => post<Example[]>("/example/delete", { path, name }),
+
+  mocks: () => call<MockServer[]>("GET", "/mocks"),
+  startMock: (folder: string, port: number | null = null, delayMs = 0) =>
+    post<MockServer>("/mock/start", { folder, port, delay_ms: delayMs }),
+  stopMock: (folder: string) => post("/mock/stop", { folder }),
 
   /** Starts a run; events arrive as they happen. Resolves when it ends. */
   async run(

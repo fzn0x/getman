@@ -81,6 +81,9 @@ export interface Request {
   checks?: string[];
   captures?: Vars;
   settings?: Settings;
+  /** Saved responses. The editors leave them alone; they change through
+   * their own API calls. */
+  examples?: Example[];
 }
 
 /** A request with every optional part present, as the editors use it. */
@@ -265,6 +268,7 @@ export interface ImportReport {
   path: string;
   requests: number;
   folders: number;
+  examples?: number;
   warnings: string[];
 }
 
@@ -301,4 +305,81 @@ export interface Token {
   token_type: string;
   expires_in: number | null;
   scope: string | null;
+}
+
+// ---- Examples, past runs and mock servers ----------------------------------
+
+/** A saved response, kept with its request. */
+export interface Example {
+  name: string;
+  status: number;
+  headers?: KeyValue[];
+  /** The body, when it is short text. */
+  body?: string;
+  /** A file in the request's `<name>.examples` directory holding the body. */
+  body_file?: string | null;
+  request?: ExampleRequest | null;
+}
+
+export interface ExampleRequest {
+  method?: string;
+  url?: string;
+  headers?: KeyValue[];
+  body?: string;
+}
+
+/** What a run covered, where and when. */
+export interface RunAbout {
+  workspace: string;
+  targets: string[];
+  environment: string | null;
+  /** Milliseconds since the Unix epoch. */
+  started: number;
+}
+
+/** A kept run, as listed. */
+export interface RunListing {
+  id: string;
+  about: RunAbout;
+  iterations: number;
+  requests: number;
+  summary: RunSummary | null;
+}
+
+/** A kept run with its results. Bodies and headers are not kept. */
+export interface StoredRun {
+  id: string;
+  about: RunAbout;
+  iterations: number;
+  items: RunItem[];
+  results: { iteration: number; index: number; execution: Execution }[];
+  summary: RunSummary | null;
+}
+
+export type ReportFormat = "html" | "json" | "junit" | "csv" | "xlsx";
+
+export interface MockedRoute {
+  method: string;
+  path: string;
+  request: string;
+  examples: { name: string; status: number }[];
+}
+
+export interface MockHit {
+  at: number;
+  method: string;
+  path: string;
+  status: number;
+  request: string | null;
+  example: string | null;
+}
+
+/** A mock server started from the UI. */
+export interface MockServer {
+  folder: string;
+  url: string;
+  port: number;
+  delay_ms: number;
+  mocked: MockedRoute[];
+  hits: MockHit[];
 }
