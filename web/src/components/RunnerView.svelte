@@ -1,18 +1,108 @@
 <script lang="ts">
-  import { millis, methodClass, statusClass } from "../lib/format";
+  import { onMount, tick, untrack } from "svelte";
+  import { ago, millis, methodClass, statusClass } from "../lib/format";
+  import { moveTo, planFor, refreshPlan, runTargets } from "../lib/plan";
+  import {
+    REPORT_FORMATS,
+    downloadReport,
+    forgetRun,
+    pastRuns,
+    refreshRuns,
+    runPassed,
+    runTally,
+    runWhat,
+  } from "../lib/runs.svelte";
   import {
     findNode,
     openRequest,
+    reopenRun,
     startRun,
     stopRun,
     ws,
     type RunnerTab,
   } from "../lib/store.svelte";
   import Icon from "./Icon.svelte";
+  import Menu from "./Menu.svelte";
 
   let { tab }: { tab: RunnerTab } = $props();
 
+  let planOpen = $state(untrack(() => tab.results.length === 0));
+  let dragFrom = $state(-1);
+  let dropAt = $state(-1);
+  let reportMenu = $state<{ x: number; y: number; id: string } | null>(null);
+
+  onMount(() => {
+    void refreshRuns();
+    tab.plan = refreshPlan(tab.plan, planFor(ws.tree, tab.target));
+  });
+
   const title = $derived(tab.target === "" ? ws.name : (findNode(tab.target)?.name ?? tab.target));
+  const ticked = $derived(tab.plan.filter((item) => item.include).length);
+
+  async function run(): Promise<void> {
+    await startRun(tab);
+    if (tab.summary) planOpen = false;
+    await refreshRuns();
+  }
+
+  function tickAll(include: boolean): void {
+    tab.plan = tab.plan.map((item) => ({ ...item, include }));
+  }
+
+  function resetPlan(): void {
+    tab.plan = planFor(ws.tree, tab.target);
+  }
+
+  async function move(from: number, to: number): Promise<void> {
+    if (to < 0 || to >= tab.plan.length) return;
+    const path = tab.plan[from]?.path;
+    tab.plan = moveTo(tab.plan, from, to);
+    await tick();
+    document.querySelector<HTMLButtonElement>(`[data-grip="${CSS.escape(path ?? "")}"]`)?.focus();
+  }
+
+  function gripKeys(event: KeyboardEvent, index: number): void {
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      event.preventDefault();
+      void move(index, index + (event.key === "ArrowUp" ? -1 : 1));
+    }
+  }
+
+  function drop(event: DragEvent, index: number): void {
+    event.preventDefault();
+    if (dragFrom >= 0) tab.plan = moveTo(tab.plan, dragFrom, index);
+    dragFrom = -1;
+    dropAt = -1;
+  }
+
+  function openReports(event: MouseEvent, id: string): void {
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    reportMenu = { x: rect.left, y: rect.bottom + 4, id };
+  }
+
+  /** The same run from a terminal. */
+  const cliCommand = $derived.by(() => {
+    const picked = runTargets(tab.target, tab.plan, planFor(ws.tree, tab.target));
+    const paths = picked.targets ?? (tab.target ? [tab.target] : []);
+    return [
+      "getman run",
+      ...paths,
+      tab.environment ? `-e ${tab.environment}` : "",
+      "-r html=report.html",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  });
+
+  const reportItems = $derived(
+    reportMenu
+      ? REPORT_FORMATS.map(({ format, label }) => ({
+          label,
+          icon: "export" as const,
+          action: () => void downloadReport(reportMenu!.id, format),
+        }))
+      : [],
+  );
   const total = $derived(
     Math.max(tab.items.length * Math.max(tab.iterationCount, 1), tab.results.length),
   );
@@ -55,14 +145,18 @@
     <div>
       <h2 class="bitmap">{title}</h2>
       <p class="file mono">
-        {tab.target === "" ? "Every request in the workspace" : `Every request in ${tab.target}`}
+        {ticked === tab.plan.length
+          ? tab.target === ""
+            ? "Every request in the workspace"
+            : `Every request in ${tab.target}`
+          : `${ticked} of ${tab.plan.length} requests ${tab.target === "" ? "in the workspace" : `in ${tab.target}`}`}
       </p>
     </div>
     <div class="go">
       {#if tab.running}
         <button class="btn" onclick={() => void stopRun(tab)}><Icon name="stop" /> Stop</button>
       {:else}
-        <button class="btn primary" onclick={() => void startRun(tab)}
+        <button class="btn primary" onclick={() => void run()} disabled={ticked === 0}
           ><Icon name="play" /> Run</button
         >
       {/if}
@@ -143,6 +237,92 @@
     <p class="error" role="alert">{tab.error}</p>
   {/if}
 
+  <section class="plan" aria-label="Requests to run">
+    <div class="plan-head">
+      <button
+        class="fold"
+        aria-expanded={planOpen}
+        onclick={() => (planOpen = !planOpen)}
+        aria-controls="plan-{tab.id}"
+      >
+        <Icon name={planOpen ? "chevronDown" : "chevronRight"} size={7} />
+        <span class="bitmap">Requests</span>
+        <span class="bitmap muted">{ticked}/{tab.plan.length}</span>
+      </button>
+      {#if planOpen}
+        <span class="plan-tools">
+          <button class="btn quiet" onclick={() => tickAll(true)} disabled={tab.running}>All</button
+          >
+          <button class="btn quiet" onclick={() => tickAll(false)} disabled={tab.running}
+            >None</button
+          >
+          <button class="btn quiet" onclick={resetPlan} disabled={tab.running}>Reset order</button>
+        </span>
+      {/if}
+    </div>
+    {#if planOpen}
+      {#if tab.plan.length === 0}
+        <p class="none">There are no requests here yet.</p>
+      {:else}
+        <p class="hint muted">
+          Untick what to leave out. Drag a request, or focus its handle and press <kbd>↑</kbd>
+          <kbd>↓</kbd>, to change the order. The files are not changed.
+        </p>
+        <ol class="plan-list" id="plan-{tab.id}">
+          {#each tab.plan as item, index (item.path)}
+            <li
+              class:off={!item.include}
+              class:drop={dropAt === index && dragFrom !== index}
+              draggable={!tab.running}
+              ondragstart={(event) => {
+                dragFrom = index;
+                event.dataTransfer?.setData("text/plain", item.path);
+                if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+              }}
+              ondragover={(event) => {
+                event.preventDefault();
+                dropAt = index;
+              }}
+              ondrop={(event) => drop(event, index)}
+              ondragend={() => ((dragFrom = -1), (dropAt = -1))}
+            >
+              <button
+                class="grip"
+                data-grip={item.path}
+                aria-label="Move {item.name}: arrow keys"
+                title="Drag, or press the arrow keys, to move"
+                disabled={tab.running}
+                onkeydown={(event) => gripKeys(event, index)}
+              >
+                <span aria-hidden="true"></span>
+              </button>
+              <label class="pick">
+                <input
+                  type="checkbox"
+                  class="check"
+                  bind:checked={item.include}
+                  disabled={tab.running}
+                />
+                <span class="method {methodClass(item.method)}">{item.method}</span>
+                <span class="name">{item.name}</span>
+                <span class="path mono muted">{item.path}</span>
+              </label>
+            </li>
+          {/each}
+        </ol>
+      {/if}
+    {/if}
+  </section>
+
+  {#if tab.reopened}
+    <p class="past-note">
+      A past run, from {new Date(tab.reopened.started).toLocaleString()}, of
+      {runWhat(tab.reopened, ws.name)}{tab.reopened.environment
+        ? ` with ${tab.reopened.environment}`
+        : ""}. Bodies and headers are not kept; Run starts a new one.
+    </p>
+  {/if}
+
   {#if tab.items.length || tab.results.length}
     <section class="matrix-wrap" aria-label="Results">
       <div class="tally">
@@ -170,6 +350,15 @@
               tab.summary.checks_failed} assertions passed
           {/if}
         </span>
+        {#if tab.shownRun && !tab.running}
+          <button
+            class="btn report"
+            aria-haspopup="menu"
+            onclick={(event) => openReports(event, tab.shownRun)}
+          >
+            <Icon name="export" /> Report
+          </button>
+        {/if}
       </div>
       <div class="matrix" role="grid" aria-label="One cell per request and iteration">
         {#each Array.from({ length: Math.max(tab.iterationCount, 1) }, (_, i) => i) as iteration (iteration)}
@@ -276,23 +465,89 @@
     <div class="empty">
       <h2>Ready to run</h2>
       <p>
-        Every request {tab.target === "" ? "in the workspace" : "in this folder"} runs in order, with
-        its scripts and checks. The same run works in CI:
+        The ticked requests run in the order above, with their scripts and checks. The same run
+        works in CI:
       </p>
-      <pre class="mono">getman run {tab.target || ""}{tab.environment
-          ? ` -e ${tab.environment}`
-          : ""} --reporter junit=report.xml</pre>
+      <pre class="mono">{cliCommand}</pre>
     </div>
   {/if}
+
+  <section class="past" aria-label="Past runs">
+    <h3 class="bitmap">Past runs</h3>
+    {#if pastRuns.list.length === 0}
+      <p class="none">
+        {pastRuns.loaded
+          ? "None yet. Runs from here are kept in .getman/runs, the newest 20, with their reports."
+          : "Loading…"}
+      </p>
+    {:else}
+      <ol>
+        {#each pastRuns.list as past (past.id)}
+          {@const tally = runTally(past.summary)}
+          {@const good = runPassed(past.summary)}
+          <li class:current={tab.shownRun === past.id}>
+            <button
+              class="past-line"
+              onclick={() => void reopenRun(tab, past.id)}
+              disabled={tab.running}
+              title="Show this run's results"
+            >
+              <span class="mark" class:bad={!good} aria-label={good ? "passed" : "failed"}
+                ><Icon name={good ? "check" : "close"} size={7} /></span
+              >
+              <span class="name">{runWhat(past.about, ws.name)}</span>
+              <span class="muted env">{past.about.environment ?? ""}</span>
+              <span class="num" class:bad-text={!good}>{tally.passed}/{tally.total}</span>
+              <span class="num muted">{past.summary ? millis(past.summary.duration_ms) : ""}</span>
+              <span class="muted when" title={new Date(past.about.started).toLocaleString()}
+                >{ago(past.about.started)}</span
+              >
+            </button>
+            <button
+              class="icon-btn"
+              aria-label="Download a report of this run"
+              title="Report"
+              aria-haspopup="menu"
+              onclick={(event) => openReports(event, past.id)}
+            >
+              <Icon name="export" />
+            </button>
+            <button
+              class="icon-btn"
+              aria-label="Forget this run"
+              title="Forget"
+              onclick={() => void forgetRun(past.id)}
+            >
+              <Icon name="trash" />
+            </button>
+          </li>
+        {/each}
+      </ol>
+    {/if}
+  </section>
 </div>
+
+{#if reportMenu}
+  <Menu
+    items={reportItems}
+    x={reportMenu.x}
+    y={reportMenu.y}
+    label="Download a report"
+    onClose={() => (reportMenu = null)}
+  />
+{/if}
 
 <style>
   .runner {
-    display: grid;
-    grid-template-rows: auto auto auto auto minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     height: 100%;
     min-height: 0;
     overflow: auto;
+  }
+
+  .runner > * {
+    flex: none;
   }
 
   header {
@@ -539,6 +794,12 @@
     color: var(--ink-2);
   }
 
+  .empty {
+    height: auto;
+    place-content: start;
+    padding: var(--s5) var(--s4);
+  }
+
   .empty pre {
     margin: 0;
     padding: var(--s2) var(--s3);
@@ -546,5 +807,223 @@
     border: 1px solid var(--rule-3);
     max-width: 100%;
     overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  /* ---- The requests to run ---- */
+
+  .plan {
+    border-bottom: 1px solid var(--rule-2);
+  }
+
+  .plan-head {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    flex-wrap: wrap;
+    padding: var(--s2) var(--s3);
+  }
+
+  .fold {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    height: var(--control);
+    padding: 0 var(--s2);
+    border: 0;
+    background: none;
+    color: var(--ink);
+  }
+
+  .fold:hover {
+    background: var(--sunken);
+  }
+
+  .plan-tools {
+    display: flex;
+    gap: 2px;
+    margin-left: auto;
+  }
+
+  .hint {
+    margin: 0;
+    padding: 0 var(--s4) var(--s2);
+    font-size: var(--fs-meta);
+  }
+
+  .none {
+    margin: 0;
+    padding: 0 var(--s4) var(--s3);
+    color: var(--ink-3);
+  }
+
+  .plan-list {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 var(--s3);
+    max-height: 320px;
+    overflow: auto;
+  }
+
+  .plan-list li {
+    display: flex;
+    align-items: center;
+    gap: var(--s1);
+    padding: 0 var(--s4) 0 var(--s2);
+    border-top: 2px solid transparent;
+  }
+
+  .plan-list li:hover {
+    background: var(--sunken);
+  }
+
+  .plan-list li.drop {
+    border-top-color: var(--accent);
+  }
+
+  .plan-list li.off .name,
+  .plan-list li.off .method {
+    color: var(--ink-3);
+    text-decoration: line-through;
+  }
+
+  .grip {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: var(--control);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ink-3);
+    cursor: grab;
+  }
+
+  .grip span {
+    width: 6px;
+    height: 10px;
+    background-image: radial-gradient(circle, currentColor 0.9px, transparent 1.3px);
+    background-size: 3px 3px;
+  }
+
+  .grip:hover:not(:disabled),
+  .grip:focus-visible {
+    color: var(--ink);
+  }
+
+  .pick {
+    display: grid;
+    grid-template-columns: 14px 56px minmax(0, max-content) minmax(0, 1fr);
+    align-items: center;
+    gap: var(--s3);
+    flex: 1;
+    min-width: 0;
+    height: var(--control);
+  }
+
+  .pick .path {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: var(--fs-meta);
+  }
+
+  .past-note {
+    margin: var(--s3) var(--s4) 0;
+    padding: var(--s2) var(--s3);
+    border-left: 3px solid var(--ink);
+    background: var(--field);
+    color: var(--ink-2);
+  }
+
+  .report {
+    margin-left: auto;
+  }
+
+  /* ---- Past runs ---- */
+
+  .past {
+    padding: var(--s4) 0 var(--s5);
+    border-top: 1px solid var(--rule-2);
+  }
+
+  .past h3 {
+    margin: 0 0 var(--s2);
+    padding: 0 var(--s4);
+    color: var(--ink-3);
+    font-weight: 400;
+  }
+
+  .past ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .past li {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding-right: var(--s3);
+    border-bottom: 1px solid var(--rule-3);
+  }
+
+  .past li.current {
+    background: var(--t1);
+  }
+
+  .past-line {
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr) auto auto 70px 90px;
+    align-items: center;
+    gap: var(--s3);
+    flex: 1;
+    min-width: 0;
+    padding: 6px var(--s4);
+    border: 0;
+    background: none;
+    text-align: left;
+    color: var(--ink);
+  }
+
+  .past-line:hover:not(:disabled) {
+    background: var(--sunken);
+  }
+
+  .past-line .num {
+    text-align: right;
+  }
+
+  .past-line .when {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .env {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    max-width: 16ch;
+  }
+
+  .bad-text {
+    color: var(--error);
+  }
+
+  @media (max-width: 640px) {
+    .pick {
+      grid-template-columns: 14px 48px minmax(0, 1fr);
+    }
+
+    .pick .path,
+    .past-line .env,
+    .past-line .when {
+      display: none;
+    }
+
+    .past-line {
+      grid-template-columns: 14px minmax(0, 1fr) auto 70px;
+    }
   }
 </style>

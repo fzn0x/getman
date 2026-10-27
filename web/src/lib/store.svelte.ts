@@ -4,6 +4,7 @@
 
 import { api, ApiError } from "./api";
 import { clone, fingerprint, newDraft, toDraft, toRequest } from "./draft";
+import { planFor, refreshPlan, runTargets, type PlanItem } from "./plan";
 import type {
   Draft,
   DynamicVar,
@@ -15,6 +16,7 @@ import type {
   Node,
   Request,
   ResolvedVar,
+  RunAbout,
   RunEvent,
   RunItem,
   RunSummary,
@@ -242,6 +244,12 @@ export interface RunnerTab {
   summary: RunSummary | null;
   error: string;
   selected: number;
+  /** The requests to send, ticked or not, in the order they run. */
+  plan: PlanItem[];
+  /** Id of the kept run whose results are shown, for its reports. */
+  shownRun: string;
+  /** What a reopened past run covered; `null` for this tab's own run. */
+  reopened: RunAbout | null;
 }
 
 export type Tab = RequestTab | FolderTab | EnvironmentsTab | RunnerTab;
@@ -475,6 +483,9 @@ export function openRunner(target: string): void {
     summary: null,
     error: "",
     selected: -1,
+    plan: planFor(ws.tree, target),
+    shownRun: "",
+    reopened: null,
   });
 }
 
@@ -638,16 +649,24 @@ export function dropTabs(path: string): void {
 
 export async function startRun(tab: RunnerTab): Promise<void> {
   if (tab.running) return;
+  tab.plan = refreshPlan(tab.plan, planFor(ws.tree, tab.target));
+  if (!tab.plan.some((item) => item.include)) {
+    tab.error = "Tick at least one request to run.";
+    return;
+  }
   tab.running = true;
   tab.results = [];
   tab.summary = null;
   tab.error = "";
   tab.items = [];
   tab.selected = -1;
+  tab.shownRun = "";
+  tab.reopened = null;
+  let id = "";
   try {
     await api.run(
       {
-        target: tab.target,
+        ...runTargets(tab.target, tab.plan, planFor(ws.tree, tab.target)),
         environment: tab.environment || null,
         iterations: tab.iterations,
         data: tab.data || null,
@@ -676,14 +695,36 @@ export async function startRun(tab: RunnerTab): Promise<void> {
             break;
         }
       },
-      (id) => (tab.runId = id),
+      (runId) => {
+        tab.runId = runId;
+        id = runId;
+      },
     );
+    if (tab.summary) tab.shownRun = id;
     void refreshHistory();
   } catch (error) {
     tab.error = message(error);
   } finally {
     tab.running = false;
     tab.runId = "";
+  }
+}
+
+/** Shows a kept run's results in a runner tab. */
+export async function reopenRun(tab: RunnerTab, id: string): Promise<void> {
+  if (tab.running) return;
+  try {
+    const run = await api.readRun(id);
+    tab.items = run.items;
+    tab.iterationCount = run.iterations;
+    tab.results = run.results;
+    tab.summary = run.summary;
+    tab.error = "";
+    tab.selected = -1;
+    tab.shownRun = run.id;
+    tab.reopened = run.about;
+  } catch (error) {
+    notify(message(error), "error");
   }
 }
 
