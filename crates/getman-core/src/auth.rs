@@ -347,7 +347,12 @@ fn digest_header(
         None => url.path().to_owned(),
     };
     let (realm, nonce) = (get("realm"), get("nonce"));
-    let cnonce = format!("{:016x}", fastrand::u64(..));
+    // The client nonce guards against chosen-plaintext attacks by the
+    // server, which only works if the server cannot predict it.
+    let mut random = [0_u8; 8];
+    getrandom::fill(&mut random)
+        .map_err(|e| Error::Http(format!("Could not make a Digest client nonce: {e}")))?;
+    let cnonce = hex::encode(random);
     let nc = "00000001";
     let qops: Vec<&str> = get("qop").split(',').map(str::trim).collect();
     let body_bytes = match &outgoing.body {
