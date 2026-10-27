@@ -3,8 +3,10 @@
   import { api } from "../lib/api";
   import { ago, methodClass } from "../lib/format";
   import { rank } from "../lib/fuzzy";
+  import { sortNodes } from "../lib/tree";
   import {
     allRequests,
+    collapseAll,
     emptyTrash,
     message,
     newRequest,
@@ -17,6 +19,7 @@
     refreshTrash,
     refreshTree,
     setExpanded,
+    setSortTree,
     signals,
     activeTab,
     ws,
@@ -60,6 +63,9 @@
       ? []
       : rank(filter, allRequests(), (r) => `${r.name} ${r.path}`).slice(0, 80),
   );
+
+  const nodes = $derived(ws.sortTree ? sortNodes(ws.tree) : ws.tree);
+  const anyOpen = $derived(Object.values(ws.expanded).some(Boolean));
 
   const current = $derived.by(() => {
     const tab = activeTab();
@@ -130,30 +136,57 @@
     <kbd aria-hidden="true">/</kbd>
   </div>
 
-  <div class="switch tablist" role="tablist" aria-label="Sidebar">
-    <button
-      class="tab"
-      role="tab"
-      aria-selected={view === "requests"}
-      onclick={() => (view = "requests")}>Requests</button
-    >
-    <button
-      class="tab"
-      role="tab"
-      aria-selected={view === "history"}
-      onclick={() => (view = "history")}
-      >History <span class="count">{ws.history.length}</span></button
-    >
-    <button
-      class="tab"
-      role="tab"
-      aria-selected={view === "trash"}
-      onclick={() => {
-        view = "trash";
-        void refreshTrash();
-      }}
-      >Trash {#if ws.trash.length}<span class="count">{ws.trash.length}</span>{/if}</button
-    >
+  <div class="switch-row">
+    <div class="switch tablist" role="tablist" aria-label="Sidebar">
+      <button
+        class="tab"
+        role="tab"
+        aria-selected={view === "requests"}
+        onclick={() => (view = "requests")}>Requests</button
+      >
+      <button
+        class="tab"
+        role="tab"
+        aria-selected={view === "history"}
+        onclick={() => (view = "history")}
+        >History <span class="count">{ws.history.length}</span></button
+      >
+      <button
+        class="tab"
+        role="tab"
+        aria-selected={view === "trash"}
+        onclick={() => {
+          view = "trash";
+          void refreshTrash();
+        }}
+        >Trash {#if ws.trash.length}<span class="count">{ws.trash.length}</span>{/if}</button
+      >
+    </div>
+    {#if view === "requests"}
+      <div class="tools">
+        <button
+          class="icon-btn"
+          aria-label="Collapse all folders"
+          title="Collapse all folders"
+          disabled={!anyOpen}
+          onclick={collapseAll}
+        >
+          <Icon name="collapse" />
+        </button>
+        <button
+          class="icon-btn"
+          class:on={ws.sortTree}
+          aria-label="Sort A to Z"
+          aria-pressed={ws.sortTree}
+          title={ws.sortTree
+            ? "Sorted A to Z; click for each folder's own order"
+            : "Sort A to Z (only here, the files keep their order)"}
+          onclick={() => setSortTree(!ws.sortTree)}
+        >
+          <Icon name="sort" />
+        </button>
+      </div>
+    {/if}
   </div>
 
   <div class="body">
@@ -189,7 +222,7 @@
           </button>
         </div>
       {:else}
-        <Tree nodes={ws.tree} {current} onNewFolder={newFolder} />
+        <Tree {nodes} {current} onNewFolder={newFolder} />
       {/if}
     {:else if view === "trash"}
       <TrashList />
@@ -312,8 +345,28 @@
     right: 6px;
   }
 
+  .switch-row {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--rule-2);
+  }
+
   .switch {
+    flex: 1;
+    min-width: 0;
     padding: 0 var(--s1);
+    border-bottom: 0;
+  }
+
+  .tools {
+    display: flex;
+    gap: 2px;
+    padding-right: var(--s1);
+  }
+
+  .tools .on {
+    background: var(--ink);
+    color: var(--paper);
   }
 
   .body {

@@ -1,14 +1,17 @@
 <script lang="ts">
   import { methodClass, methodShort } from "../lib/format";
   import type { Node } from "../lib/types";
-  import type { MenuItem } from "./Menu.svelte";
   import {
+    clearSelection,
     deleteItem,
+    deleteItems,
     moveItem,
+    moveItems,
     openRequest,
     parentOf,
     renameItem,
     reorderBefore,
+    selection,
     setExpanded,
     ws,
   } from "../lib/store.svelte";
@@ -20,22 +23,44 @@
     depth: number;
     current: string | null;
     onMenu: (x: number, y: number, node: Node) => void;
-    itemsFor: (node: Node) => (MenuItem | "separator")[];
+    pick: (path: string, mode: "toggle" | "range") => void;
   }
 
-  let { node, depth, current, onMenu, itemsFor }: Props = $props();
+  let { node, depth, current, onMenu, pick }: Props = $props();
   let drop = $state<"" | "into" | "before">("");
 
   const open = $derived(node.kind === "folder" && ws.expanded[node.path] === true);
+  const picked = $derived(selection.paths.includes(node.path));
   const DRAG = "application/x-getman-path";
+  const DRAG_MANY = "application/x-getman-paths";
 
   function activate(): void {
     if (node.kind === "folder") setExpanded(node.path, !open);
     else void openRequest(node.path);
   }
 
+  function onClick(event: MouseEvent): void {
+    if (event.ctrlKey || event.metaKey) {
+      pick(node.path, "toggle");
+    } else if (event.shiftKey) {
+      pick(node.path, "range");
+    } else {
+      clearSelection();
+      selection.anchor = node.path;
+      activate();
+    }
+  }
+
+  /** What the row's actions apply to: the picked items if it is one of them. */
+  function targets(): string[] {
+    return picked && selection.paths.length > 1 ? [...selection.paths] : [node.path];
+  }
+
   function onKeydown(event: KeyboardEvent): void {
-    if (event.key === "Enter" || event.key === " ") {
+    if (event.key === " " && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      pick(node.path, "toggle");
+    } else if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       activate();
     } else if (event.key === "ArrowRight" && node.kind === "folder" && !open) {
@@ -58,7 +83,13 @@
       renameItem(node.path, node.kind, node.name);
     } else if (event.key === "Delete") {
       event.preventDefault();
-      deleteItem(node.path, node.kind, node.name);
+      const paths = targets();
+      if (paths.length > 1) {
+        clearSelection();
+        deleteItems(paths);
+      } else {
+        deleteItem(node.path);
+      }
     } else if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
       event.preventDefault();
       const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
@@ -67,27 +98,38 @@
   }
 
   function onDragStart(event: DragEvent): void {
-    event.dataTransfer?.setData(DRAG, node.path);
-    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+    if (!event.dataTransfer) return;
+    event.dataTransfer.setData(DRAG, node.path);
+    const paths = targets();
+    if (paths.length > 1) event.dataTransfer.setData(DRAG_MANY, JSON.stringify(paths));
+    event.dataTransfer.effectAllowed = "move";
   }
 
   function onDragOver(event: DragEvent): void {
     if (!event.dataTransfer?.types.includes(DRAG)) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
-    drop = node.kind === "folder" ? "into" : "before";
+    // A sorted view has no order of its own to drop into.
+    drop = node.kind === "folder" ? "into" : ws.sortTree ? "" : "before";
   }
 
   async function onDrop(event: DragEvent): Promise<void> {
     event.preventDefault();
     const where = drop;
     drop = "";
+    const many = event.dataTransfer?.getData(DRAG_MANY);
+    if (many) {
+      const paths = (JSON.parse(many) as string[]).filter((p) => p !== node.path);
+      clearSelection();
+      await moveItems(paths, where === "into" ? node.path : parentOf(node.path));
+      return;
+    }
     const path = event.dataTransfer?.getData(DRAG);
     if (!path || path === node.path || node.path.startsWith(`${path}/`)) return;
     if (where === "into" && node.kind === "folder") {
       await moveItem(path, node.path);
     } else if (parentOf(path) === parentOf(node.path)) {
-      await reorderBefore(path, node.path);
+      if (!ws.sortTree) await reorderBefore(path, node.path);
     } else {
       await moveItem(path, parentOf(node.path));
     }
@@ -98,6 +140,7 @@
   <div
     class="row"
     class:current={current === node.path}
+    class:picked
     class:into={drop === "into"}
     class:before={drop === "before"}
     class:broken={node.kind === "request" && node.error}
@@ -108,10 +151,10 @@
     role="treeitem"
     aria-level={depth + 1}
     aria-expanded={node.kind === "folder" ? open : undefined}
-    aria-selected={current === node.path}
+    aria-selected={picked || current === node.path}
     draggable="true"
     title={node.kind === "request" ? (node.error ?? node.path) : node.path}
-    onclick={activate}
+    onclick={onClick}
     onkeydown={onKeydown}
     oncontextmenu={(event) => {
       event.preventDefault();
@@ -149,7 +192,7 @@
   {#if node.kind === "folder" && open}
     <ul role="group">
       {#each node.children as child (child.path)}
-        <Self node={child} depth={depth + 1} {current} {onMenu} {itemsFor} />
+        <Self node={child} depth={depth + 1} {current} {onMenu} {pick} />
       {:else}
         <li class="vacant" style:--depth={depth + 1} role="none">Empty folder</li>
       {/each}
@@ -187,9 +230,19 @@
     outline-offset: -2px;
   }
 
+  /* Picked for a group action: a faint fill with an ink bar. */
+  .row.picked {
+    background: var(--t2);
+    box-shadow: inset 3px 0 0 var(--ink);
+  }
+
   .row.current {
     background: var(--ink);
     color: var(--paper);
+  }
+
+  .row.current.picked {
+    box-shadow: inset 3px 0 0 var(--accent);
   }
 
   .row.current .method {

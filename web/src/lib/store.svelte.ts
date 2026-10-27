@@ -90,6 +90,8 @@ export const ws = $state({
   environments: [] as EnvironmentSummary[],
   environment: "",
   expanded: {} as Record<string, boolean>,
+  /** Show the tree sorted A to Z instead of in each folder's order. */
+  sortTree: false,
   history: [] as HistoryEntry[],
   /** Deleted requests and folders, newest first. */
   trash: [] as TrashItem[],
@@ -115,6 +117,7 @@ export async function loadWorkspace(): Promise<void> {
     ws.tree = info.tree;
     ws.environments = info.environments;
     ws.expanded = load(scoped("expanded"), {});
+    ws.sortTree = load(scoped("sortTree"), false);
     const saved = load<string>(scoped("environment"), "");
     ws.environment = info.environments.some((e) => e.id === saved) ? saved : "";
     ws.ready = true;
@@ -171,6 +174,24 @@ export function selectEnvironment(id: string): void {
 export function setExpanded(path: string, open: boolean): void {
   ws.expanded[path] = open;
   store(scoped("expanded"), ws.expanded);
+}
+
+export function collapseAll(): void {
+  ws.expanded = {};
+  store(scoped("expanded"), ws.expanded);
+}
+
+/** Sorts the sidebar A to Z, for this workspace in this browser only. */
+export function setSortTree(on: boolean): void {
+  ws.sortTree = on;
+  store(scoped("sortTree"), on);
+}
+
+/** Items picked in the sidebar with Ctrl or Shift, to act on together. */
+export const selection = $state({ paths: [] as string[], anchor: "" });
+
+export function clearSelection(): void {
+  selection.paths = [];
 }
 
 /** Every request in the tree, in order. */
@@ -1012,7 +1033,8 @@ export type Dialog =
       confirm: string;
       onSubmit: (value: string) => void | Promise<void>;
     }
-  | { kind: "saveAs"; tab: RequestTab };
+  | { kind: "saveAs"; tab: RequestTab }
+  | { kind: "move"; paths: string[] };
 
 export const dialogs = $state({ current: null as Dialog | null });
 
@@ -1177,6 +1199,7 @@ export function deleteItems(paths: string[]): void {
 }
 
 async function trashItems(paths: string[]): Promise<void> {
+  clearSelection();
   const trashed: TrashItem[] = [];
   for (const path of paths) {
     try {
@@ -1243,6 +1266,43 @@ export async function duplicateItem(path: string, kind: "request" | "folder"): P
     if (kind === "request") await openRequest(copy.path);
   } catch (error) {
     notify(message(error), "error");
+  }
+}
+
+/** Copies several items next to their originals. */
+export async function duplicateItems(paths: string[]): Promise<void> {
+  let copies = 0;
+  for (const path of outermost(paths)) {
+    try {
+      await api.duplicate(path);
+      copies++;
+    } catch (error) {
+      notify(message(error), "error");
+    }
+  }
+  await refreshTree();
+  if (copies > 0) notify(copies === 1 ? "Duplicated" : `Duplicated ${copies} items`, "ok");
+}
+
+/** Moves several items into one folder. */
+export async function moveItems(paths: string[], to: string): Promise<void> {
+  clearSelection();
+  let moved = 0;
+  for (const path of outermost(paths)) {
+    if (parentOf(path) === to || to === path || to.startsWith(`${path}/`)) continue;
+    try {
+      const result = await api.move(path, to);
+      retargetTabs(path, result.path);
+      moved++;
+    } catch (error) {
+      notify(message(error), "error");
+    }
+  }
+  if (to) setExpanded(to, true);
+  await refreshTree();
+  if (moved > 0) {
+    const where = to === "" ? ws.name : (findNode(to)?.name ?? to);
+    notify(moved === 1 ? `Moved to ${where}` : `Moved ${moved} items to ${where}`, "ok");
   }
 }
 

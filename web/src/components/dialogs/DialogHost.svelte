@@ -4,6 +4,7 @@
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import CookiesDialog from "./CookiesDialog.svelte";
   import ImportDialog from "./ImportDialog.svelte";
+  import MoveDialog from "./MoveDialog.svelte";
   import Palette from "./Palette.svelte";
   import PromptDialog from "./PromptDialog.svelte";
   import SaveAsDialog from "./SaveAsDialog.svelte";
@@ -30,6 +31,8 @@
       <PromptDialog dialog={current} />
     {:else if current.kind === "saveAs"}
       <SaveAsDialog tab={current.tab} />
+    {:else if current.kind === "move"}
+      <MoveDialog paths={current.paths} />
     {/if}
   {/key}
 {/if}
