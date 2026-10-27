@@ -97,7 +97,7 @@
       it off.
     </p>
   {:else}
-    <div class="grid" role="table" aria-label={label}>
+    <div class="grid" class:toggles role="table" aria-label={label}>
       <div class="head" role="row">
         {#if toggles}<span role="columnheader"><span class="sr-only">On</span></span>{/if}
         <span role="columnheader" class="bitmap">{nameLabel}</span>
@@ -215,11 +215,11 @@
 
   .grid {
     display: grid;
-    grid-template-columns: auto minmax(120px, 2fr) minmax(140px, 3fr) 28px;
+    grid-template-columns: minmax(120px, 2fr) minmax(140px, 3fr) 28px;
   }
 
-  .kv:not(:has(.check)) .grid {
-    grid-template-columns: minmax(120px, 2fr) minmax(140px, 3fr) 28px;
+  .grid.toggles {
+    grid-template-columns: auto minmax(120px, 2fr) minmax(140px, 3fr) 28px;
   }
 
   .head,
