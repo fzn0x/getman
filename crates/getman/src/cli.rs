@@ -158,11 +158,13 @@ pub(crate) struct SendArgs {
     #[command(flatten)]
     pub(crate) vars: VarArgs,
 
-    /// Print the status line and headers before the body.
+    /// Print the status line and headers before the body. For gRPC, the
+    /// headers before the messages and the trailers after them.
     #[arg(long, short = 'i')]
     pub(crate) include: bool,
 
-    /// Print everything that happened as JSON instead of the body.
+    /// Print everything that happened as JSON instead of the body. For
+    /// gRPC, print each response message as one line of JSON.
     #[arg(long)]
     pub(crate) json: bool,
 }

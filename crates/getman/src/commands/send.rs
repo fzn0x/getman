@@ -3,7 +3,7 @@
 use std::io::{IsTerminal as _, Write as _};
 use std::process::ExitCode;
 
-use getman_core::execute::{Context, Executor, Overlay};
+use getman_core::execute::{Context, Execution, Executor, Overlay};
 use getman_core::http::Response;
 use getman_core::vars::missing_reason;
 
@@ -27,6 +27,11 @@ pub(crate) async fn send(args: SendArgs) -> Outcome {
         ..Context::default()
     };
     let executor = Executor::new(workspace);
+    if let Ok(request) = executor.workspace.read_request(&path)
+        && !request.kind.is_http()
+    {
+        return super::send_grpc::send(&executor, &path, &request, &mut context, &args).await;
+    }
     let execution = executor.execute_path(&path, &mut context).await;
 
     if args.json {
@@ -35,18 +40,7 @@ pub(crate) async fn send(args: SendArgs) -> Outcome {
         return Ok(exit(execution.failed()));
     }
 
-    for error in &execution.script_errors {
-        style::error(&format!("script in {}: {}", error.origin, error.message));
-    }
-    for log in &execution.logs {
-        style::note(&format!("[{}] {}", log.level, log.message));
-    }
-    for name in &execution.missing_variables {
-        style::warn(&missing_reason(name));
-    }
-    if let Some(error) = &execution.error {
-        style::error(error);
-    }
+    print_problems(&execution);
     if let Some(response) = &execution.response {
         match print_response(response, args.include) {
             Ok(()) => {}
@@ -64,6 +58,29 @@ pub(crate) async fn send(args: SendArgs) -> Outcome {
             style::size(response.size.body)
         ));
     }
+    print_results(&execution);
+    Ok(exit(execution.failed()))
+}
+
+/// Prints failed scripts, script logs, missing variables and the error,
+/// to stderr.
+pub(super) fn print_problems(execution: &Execution) {
+    for error in &execution.script_errors {
+        style::error(&format!("script in {}: {}", error.origin, error.message));
+    }
+    for log in &execution.logs {
+        style::note(&format!("[{}] {}", log.level, log.message));
+    }
+    for name in &execution.missing_variables {
+        style::warn(&missing_reason(name));
+    }
+    if let Some(error) = &execution.error {
+        style::error(error);
+    }
+}
+
+/// Prints the results of tests and checks, to stderr.
+pub(super) fn print_results(execution: &Execution) {
     for result in execution.tests.iter().chain(&execution.checks) {
         if result.passed {
             anstream::eprintln!("{} {}", paint(style::GREEN, "✓"), paint(DIM, &result.name));
@@ -79,7 +96,6 @@ pub(crate) async fn send(args: SendArgs) -> Outcome {
             );
         }
     }
-    Ok(exit(execution.failed()))
 }
 
 /// Prints the body, after the status line and headers if asked.
@@ -112,7 +128,7 @@ fn print_response(response: &Response, include: bool) -> std::io::Result<()> {
     out.flush()
 }
 
-fn exit(failed: bool) -> ExitCode {
+pub(super) fn exit(failed: bool) -> ExitCode {
     if failed {
         ExitCode::FAILURE
     } else {
