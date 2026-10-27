@@ -51,6 +51,7 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/environment/write", post(write_environment))
         .route("/environment/rename", post(rename_environment))
         .route("/environment/delete", post(delete_environment))
+        .route("/environment/duplicate", post(duplicate_environment))
         .route("/globals", get(read_globals).put(write_globals))
         .route("/send", post(send))
         .route("/prepare", post(prepare))
@@ -319,6 +320,11 @@ async fn rename_environment(State(state): Shared, Json(arg): Json<RenameEnvironm
 async fn delete_environment(State(state): Shared, Json(arg): Json<EnvironmentId>) -> ApiResult {
     state.workspace().delete_environment(&arg.id)?;
     Ok(done())
+}
+
+async fn duplicate_environment(State(state): Shared, Json(arg): Json<EnvironmentId>) -> ApiResult {
+    let id = state.workspace().duplicate_environment(&arg.id)?;
+    Ok(Json(json!({ "id": id })))
 }
 
 async fn read_globals(State(state): Shared) -> ApiResult {
