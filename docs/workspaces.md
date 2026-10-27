@@ -112,8 +112,16 @@ seconds before they expire.
 | `follow_redirects` | true | |
 | `max_redirects` | 10 | |
 | `verify_tls` | true | false accepts self-signed and expired certificates |
+| `http_version` | `auto` | `http1`, `http2` or `http3` |
+| `title_case_headers` | true | HTTP/1.1 header names as `Content-Type` |
+| `proxy` | system | `off`, a proxy URL, or a map with credentials |
+| `client_cert` | none | PEM files or a PKCS#12 file |
+| `ca_certs` | none | Extra certificate authorities, as PEM files |
+| `cookies` | true | false leaves the cookie jar alone |
+| `max_response_mb` | 100 | 0 reads the whole body |
 
-Unset settings come from the folder, then the workspace.
+Unset settings come from the folder, then the workspace. [HTTP and
+connections](http.md) explains each one.
 
 ## Folders and the workspace
 
@@ -185,6 +193,6 @@ login request's token survives a restart without ever being committed.
 
 | Commit | Keep local |
 | --- | --- |
-| `getman.yaml`, `_folder.yaml`, request files, `environments/*.yaml` | `*.local.yaml`, `.getman/` (history) |
+| `getman.yaml`, `_folder.yaml`, request files, `environments/*.yaml` | `*.local.yaml`, `.getman/` (history, cookies) |
 
 `getman init` writes a `.gitignore` with exactly those two lines.

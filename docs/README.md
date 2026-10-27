@@ -13,6 +13,7 @@ These pages are also published at <https://fzn0x.github.io/getman/>.
 - [Variables and environments](variables.md)
 - [Checks and captures](checks.md): tests without code
 - [Scripts](scripts.md): the `gm` JavaScript API
+- [HTTP and connections](http.md): HTTP/3, proxies, TLS certificates, cookies, timing
 - [Running in CI](runner.md): `getman run`, reports, GitHub Actions, GitLab
 - [Import and export](import-export.md): Postman, cURL, code
 - [Terminal UI](terminal.md)
