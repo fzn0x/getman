@@ -59,6 +59,7 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/codegen", post(code))
         .route("/languages", get(languages))
         .route("/variables", post(variables))
+        .route("/variables/set", post(set_variable))
         .route("/dynamic", get(dynamic))
         .route("/run", post(run))
         .route("/run/cancel", post(cancel_run))
@@ -443,6 +444,51 @@ async fn variables(State(state): Shared, Json(arg): Json<PrepareArg>) -> ApiResu
         arg.environment.as_deref().filter(|e| !e.is_empty()),
     )?;
     Ok(Json(json!(resolved)))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum SetScope {
+    Environment,
+    Workspace,
+    Global,
+}
+
+#[derive(Deserialize)]
+struct SetVariable {
+    scope: SetScope,
+    name: String,
+    value: String,
+    #[serde(default)]
+    environment: Option<String>,
+}
+
+/// Saves one variable where a script's `gm.environment.set`,
+/// `gm.collectionVariables.set` or `gm.globals.set` would: the
+/// environment's local file, or the workspace's `getman.local.yaml`.
+async fn set_variable(State(state): Shared, Json(arg): Json<SetVariable>) -> ApiResult {
+    let name = arg.name.trim();
+    if name.is_empty() || name.contains(['{', '}', '\n', '"']) {
+        return Err(bad(
+            "A variable name cannot be empty or hold braces, quotes or line breaks.",
+        ));
+    }
+    let environment = arg.environment.as_deref().filter(|e| !e.is_empty());
+    let scope = match arg.scope {
+        SetScope::Environment if environment.is_none() => {
+            return Err(bad("Choose an environment to save the variable in."));
+        }
+        SetScope::Environment => ChangeScope::Environment,
+        SetScope::Workspace => ChangeScope::Collection,
+        SetScope::Global => ChangeScope::Global,
+    };
+    let change = VarChange {
+        scope,
+        name: name.to_owned(),
+        value: Some(arg.value),
+    };
+    persist_changes(state.workspace(), environment, &[change])?;
+    Ok(done())
 }
 
 async fn dynamic() -> Json<Value> {

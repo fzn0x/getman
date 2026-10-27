@@ -299,6 +299,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn variables_set_from_the_ui_land_in_local_files() {
+        let (_dir, app) = app();
+        let (_, env) = call(&app, "/api/environment/create", r#"{"name":"Dev"}"#).await;
+        assert_eq!(env["id"], "dev");
+        let files = r#"{"id":"dev","environment":{"shared":{"variables":{"token":""},"secrets":["token"]},"local":{"token":"s3cret"}}}"#;
+        call(&app, "/api/environment/write", files).await;
+
+        let set = r#"{"scope":"environment","name":"id","value":"42","environment":"dev"}"#;
+        let (status, _) = call(&app, "/api/variables/set", set).await;
+        assert_eq!(status, StatusCode::OK);
+        let (_, read) = call(&app, "/api/environment/read", r#"{"id":"dev"}"#).await;
+        assert_eq!(read["local"]["id"], "42");
+
+        let nowhere = r#"{"scope":"environment","name":"id","value":"42"}"#;
+        let (status, _) = call(&app, "/api/variables/set", nowhere).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        let global = r#"{"scope":"global","name":"who","value":"me"}"#;
+        call(&app, "/api/variables/set", global).await;
+        let (_, globals) = call(&app, "/api/globals", "").await;
+        assert_eq!(globals["globals"]["who"], "me");
+    }
+
+    #[tokio::test]
     async fn the_page_is_served_without_the_token() {
         let (_dir, app) = app();
         let response = app.oneshot(get("/", "127.0.0.1:7878")).await.unwrap();
