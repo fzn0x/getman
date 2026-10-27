@@ -434,6 +434,13 @@ pub(super) async fn begin(s: OAuth2) -> Result<(Pending, Authorization)> {
             s.auth_url
         ))
     })?;
+    // The URL is opened with the system's handler, which must be a browser.
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(Error::Invalid(format!(
+            "The authorization URL must start with https:// or http://, not {}:",
+            url.scheme()
+        )));
+    }
     let callback = Callback::bind(&s.callback_url).await?;
     let state = URL_SAFE_NO_PAD.encode(random_bytes::<16>()?);
     let verifier = if s.grant == OAuth2Grant::AuthorizationCode && !s.pkce.is_off() {
@@ -687,6 +694,18 @@ mod tests {
             true,
         );
         assert_eq!(huge.expires_at, Some(i64::MAX));
+    }
+
+    #[tokio::test]
+    async fn only_web_addresses_are_opened() {
+        let settings = OAuth2 {
+            grant: OAuth2Grant::Implicit,
+            auth_url: "file:///etc/passwd".into(),
+            client_id: "app".into(),
+            ..OAuth2::default()
+        };
+        let error = begin(settings).await.unwrap_err();
+        assert!(error.to_string().contains("https://"), "{error}");
     }
 
     #[test]
