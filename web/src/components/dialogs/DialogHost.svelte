@@ -9,6 +9,7 @@
   import Palette from "./Palette.svelte";
   import PromptDialog from "./PromptDialog.svelte";
   import SaveAsDialog from "./SaveAsDialog.svelte";
+  import SetVariableDialog from "./SetVariableDialog.svelte";
   import ShortcutsDialog from "./ShortcutsDialog.svelte";
 
   const current = $derived(dialogs.current);
@@ -36,6 +37,8 @@
       <MoveDialog paths={current.paths} />
     {:else if current.kind === "headerPresets"}
       <HeaderPresetsDialog />
+    {:else if current.kind === "setVariable"}
+      <SetVariableDialog value={current.value} name={current.name} tab={current.tab} />
     {/if}
   {/key}
 {/if}

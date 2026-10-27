@@ -143,7 +143,7 @@
     <div class="pane" class:fill={tab.responsePane === "body"}>
       {#if tab.responsePane === "body"}
         {#if response}
-          <BodyViewer {response} />
+          <BodyViewer {response} {tab} />
         {:else}
           <p class="none">No response arrived.</p>
         {/if}

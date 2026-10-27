@@ -1,14 +1,16 @@
 <script lang="ts">
+  import { pickedValue, suggestName } from "../../lib/bytes";
   import { copyText } from "../../lib/clipboard";
   import { bodyKind, bytes, payloadBytes, payloadText, prettyJson } from "../../lib/format";
   import { parsePath, walk } from "../../lib/jsonpath";
   import { keyLabel } from "../../lib/keys";
+  import { openDialog, type RequestTab } from "../../lib/store.svelte";
   import type { Response } from "../../lib/types";
   import Editor from "../Editor.svelte";
   import Icon from "../Icon.svelte";
   import HexView from "./HexView.svelte";
 
-  let { response }: { response: Response } = $props();
+  let { response, tab = null }: { response: Response; tab?: RequestTab | null } = $props();
 
   const contentType = $derived(
     response.headers.find((h) => h.name.toLowerCase() === "content-type")?.value,
@@ -21,6 +23,7 @@
   let wrap = $state(false);
   let filter = $state("");
   let editor = $state<ReturnType<typeof Editor>>();
+  let selected = $state({ text: "", line: "" });
 
   const previewable = $derived(kind === "html" || kind === "image" || kind === "pdf");
   $effect(() => {
@@ -33,6 +36,15 @@
   const showsText = $derived(
     mode !== "hex" && mode !== "preview" && kind !== "binary" && text !== "",
   );
+
+  function setAsVariable(): void {
+    openDialog({
+      kind: "setVariable",
+      value: pickedValue(selected.text),
+      name: suggestName(selected.line),
+      tab,
+    });
+  }
 
   const language = $derived(
     kind === "json"
@@ -152,6 +164,17 @@
     {#if showsText}
       <button
         class="icon-btn"
+        aria-label="Set the selected text as a variable"
+        title={selected.text
+          ? "Set the selected text as a variable"
+          : "Select a value in the body to set it as a variable"}
+        disabled={!selected.text.trim()}
+        onclick={setAsVariable}
+      >
+        <Icon name="pencil" />
+      </button>
+      <button
+        class="icon-btn"
         aria-label="Find in the body"
         title="Find: match case, whole word, regex ({keyLabel('mod+f').join(' ')})"
         onclick={() => editor?.openSearch()}
@@ -222,6 +245,7 @@
         {wrap}
         links
         label="Response body"
+        onSelection={(text, line) => (selected = { text, line })}
       />
     {/if}
   </div>
