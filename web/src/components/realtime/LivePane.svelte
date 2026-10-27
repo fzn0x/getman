@@ -23,11 +23,12 @@
   let list: HTMLOListElement | undefined = $state();
   let pinned = true;
 
-  const all = $derived(entries(conn));
-  const visible = $derived.by(() => {
-    void conn.version;
-    return all.filter((entry) => matches(entry, conn.search, conn.direction));
-  });
+  // The log array itself stays the same as it grows, so derive what
+  // changes from it: its length, and a filtered copy.
+  const total = $derived(entries(conn).length);
+  const visible = $derived(
+    entries(conn).filter((entry) => matches(entry, conn.search, conn.direction)),
+  );
   const selected = $derived(
     visible.find((entry) => entry.seq === conn.selected && entry.event.type === "message"),
   );
@@ -186,7 +187,7 @@
       onclick={() => (pane = "messages")}
     >
       Messages
-      {#if all.length}<span class="count">{conn.sent + conn.received}</span>{/if}
+      {#if total}<span class="count">{conn.sent + conn.received}</span>{/if}
     </button>
     <button
       class="tab"
@@ -217,18 +218,18 @@
           <option value="received">Received</option>
           <option value="sent">Sent</option>
         </select>
-        <span class="muted shown">{visible.length} of {all.length}</span>
+        <span class="muted shown">{visible.length} of {total}</span>
         <button
           class="btn quiet"
           onclick={() => clearLog(conn)}
-          disabled={all.length === 0}
+          disabled={total === 0}
           title="Clear the log"
         >
           <Icon name="trash" /> Clear
         </button>
       </div>
 
-      {#if all.length === 0}
+      {#if total === 0}
         <div class="empty-log">
           {#if conn.status === "idle" || conn.status === "closed"}
             <p>

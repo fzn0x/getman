@@ -264,6 +264,12 @@ export async function connect(tab: RequestTab): Promise<void> {
       request: toRequest(tab.draft),
       environment: ws.environment || null,
     });
+    if (state.status !== "connecting") {
+      // Cancelled while the server was starting it.
+      void api.realtimeClose(id).catch(() => {});
+      early.delete(id);
+      return;
+    }
     state.session = id;
     sessions.set(id, state);
     const first = early.get(id);
