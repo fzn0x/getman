@@ -23,6 +23,11 @@ mod schema;
 mod status;
 mod transport;
 
+#[cfg(test)]
+mod test_server;
+#[cfg(test)]
+mod tests;
+
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 

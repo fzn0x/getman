@@ -51,5 +51,10 @@ workspace = true
 
 [dev-dependencies]
 axum = "0.8"
+rcgen = "0.14"
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "net", "macros"] }
+tokio-stream = { version = "0.1", features = ["net"] }
+tonic = { version = "0.14", default-features = false, features = ["server", "router", "codegen", "tls-ring"] }
+tonic-prost = "0.14"
+tonic-reflection = "0.14"
