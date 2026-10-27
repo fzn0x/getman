@@ -35,6 +35,8 @@
   import AuthPane from "./AuthPane.svelte";
   import BodyPane from "./BodyPane.svelte";
   import ChecksPane from "./ChecksPane.svelte";
+  import ExamplesPane from "./ExamplesPane.svelte";
+  import { examples } from "../../lib/examples.svelte";
   import KeyValueTable from "./KeyValueTable.svelte";
   import ParamsPane from "./ParamsPane.svelte";
   import ScriptsPane from "./ScriptsPane.svelte";
@@ -129,6 +131,14 @@
       mark: Object.values(draft.settings).some((v) => v !== null && v !== undefined),
     },
     { id: "docs", label: "Docs", note: "", mark: draft.description.trim() !== "" },
+    {
+      id: "examples",
+      label: "Examples",
+      note:
+        tab.path && examples.byPath[tab.path]?.length
+          ? String(examples.byPath[tab.path]!.length)
+          : "",
+    },
   ]);
 
   const HEADER_NAMES = [
@@ -436,6 +446,8 @@
             bind:value={draft.description}
             placeholder="What this request is for, in Markdown. Saved in the request file."
             aria-label="Description"></textarea>
+        {:else if tab.requestPane === "examples"}
+          <ExamplesPane {tab} />
         {/if}
       </div>
     </section>

@@ -4,6 +4,7 @@
 
 import { api, ApiError } from "./api";
 import { clone, fingerprint, newDraft, toDraft, toRequest } from "./draft";
+import { examples } from "./examples.svelte";
 import { planFor, refreshPlan, runTargets, type PlanItem } from "./plan";
 import type {
   Draft,
@@ -372,6 +373,7 @@ function requestTab(
   request: Request,
   inheritPath: string | null = null,
 ): RequestTab {
+  if (path) examples.byPath[path] = request.examples ?? [];
   const draft = toDraft(request);
   return {
     kind: "request",

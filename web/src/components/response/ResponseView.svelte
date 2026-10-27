@@ -1,8 +1,18 @@
 <script lang="ts">
   import { overflowFade } from "../../lib/actions";
   import { copyText } from "../../lib/clipboard";
+  import { api } from "../../lib/api";
+  import { exampleFrom, exampleName } from "../../lib/example";
+  import { examples } from "../../lib/examples.svelte";
   import { payloadText } from "../../lib/format";
-  import { openDialog, openEnvironments, type RequestTab } from "../../lib/store.svelte";
+  import {
+    message,
+    notify,
+    openDialog,
+    openEnvironments,
+    promptDialog,
+    type RequestTab,
+  } from "../../lib/store.svelte";
   import Icon from "../Icon.svelte";
   import BodyViewer from "./BodyViewer.svelte";
   import Specimen from "./Specimen.svelte";
@@ -71,6 +81,31 @@
     return "";
   }
 
+  /** Keeps the response with the request as a named example. */
+  function saveAsExample(): void {
+    const path = tab.path;
+    const shown = tab.execution;
+    if (!path || !shown?.response) return;
+    const taken = (examples.byPath[path] ?? []).map((e) => e.name);
+    promptDialog({
+      title: "Save as example",
+      label: "Example name (a name in use is replaced)",
+      value: exampleName(shown.response, taken),
+      confirm: "Save example",
+      onSubmit: async (value) => {
+        const name = value.trim();
+        const made = exampleFrom(tab.draft, shown, name);
+        if (!made || !name) return;
+        try {
+          examples.byPath[path] = await api.saveExample(path, made.example, made.body);
+          notify(`Saved the example ${name}`, "ok");
+        } catch (error) {
+          notify(message(error), "error");
+        }
+      },
+    });
+  }
+
   const sentBody = $derived.by(() => {
     const body = execution?.request?.body;
     if (!body || body.type === "none") return "";
@@ -116,19 +151,36 @@
   {/if}
 
   {#if response || (execution && !tab.sending && (results.length || execution.logs.length || execution.script_errors.length || execution.request))}
-    <div class="tablist" use:overflowFade role="tablist" aria-label="Response parts">
-      {#each panes as pane (pane.id)}
-        <button
-          class="tab"
-          role="tab"
-          aria-selected={tab.responsePane === pane.id}
-          onclick={() => (tab.responsePane = pane.id)}
-        >
-          {pane.label}
-          {#if pane.note}<span class="count" class:bad={"bad" in pane && pane.bad}>{pane.note}</span
-            >{/if}
-        </button>
-      {/each}
+    <div class="tabs-row">
+      <div class="tablist" use:overflowFade role="tablist" aria-label="Response parts">
+        {#each panes as pane (pane.id)}
+          <button
+            class="tab"
+            role="tab"
+            aria-selected={tab.responsePane === pane.id}
+            onclick={() => (tab.responsePane = pane.id)}
+          >
+            {pane.label}
+            {#if pane.note}<span class="count" class:bad={"bad" in pane && pane.bad}
+                >{pane.note}</span
+              >{/if}
+          </button>
+        {/each}
+      </div>
+      {#if response && execution}
+        <div class="keep">
+          <button
+            class="btn quiet"
+            onclick={saveAsExample}
+            disabled={!tab.path}
+            title={tab.path
+              ? "Keep this response with the request, to look at later and to mock"
+              : "Save the request first; examples are kept in its file"}
+          >
+            <Icon name="save" /> Save as example
+          </button>
+        </div>
+      {/if}
     </div>
     <div class="pane" class:fill={tab.responsePane === "body"}>
       {#if tab.responsePane === "body"}
@@ -327,8 +379,27 @@
     font-family: var(--font-code);
   }
 
+  .tabs-row {
+    display: flex;
+    min-width: 0;
+  }
+
   .tablist {
+    flex: 1;
+    min-width: 0;
     padding: 0 var(--s2);
+  }
+
+  .keep {
+    display: flex;
+    align-items: center;
+    padding: 0 var(--s2);
+    border-bottom: 1px solid var(--rule-2);
+  }
+
+  .keep .btn {
+    height: 26px;
+    white-space: nowrap;
   }
 
   .pane {
