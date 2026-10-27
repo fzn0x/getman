@@ -4,7 +4,18 @@
   import { keyLabel } from "../../lib/keys";
   import type { Execution } from "../../lib/types";
 
-  let { execution, sending }: { execution: Execution | null; sending: boolean } = $props();
+  interface Props {
+    execution: Execution | null;
+    sending: boolean;
+    /** The tone, when the status code is not HTTP's. */
+    tone?: ReturnType<typeof statusClass>;
+    /** What to say while the request is out. */
+    busy?: string;
+    /** The button that sends, for the hint. */
+    action?: string;
+  }
+
+  let { execution, sending, tone, busy = "Sending", action = "Send" }: Props = $props();
 
   let field: HTMLDivElement;
   let width = $state(480);
@@ -22,7 +33,7 @@
 
   const response = $derived(execution?.response ?? null);
   const kind = $derived(
-    response ? statusClass(response.status) : execution?.error ? "server" : "info",
+    response ? (tone ?? statusClass(response.status)) : execution?.error ? "server" : "info",
   );
   const results = $derived(execution ? [...execution.tests, ...execution.checks] : []);
   const passed = $derived(results.filter((r) => r.passed && !r.skipped).length);
@@ -74,7 +85,7 @@
     <div class="line">
       <span class="numeral bitmap" aria-live="polite">
         {#if sending}
-          <span class="dots" aria-label="Sending"></span>
+          <span class="dots" aria-label={busy}></span>
         {:else if response}
           {response.status}
         {:else if execution?.skipped}
@@ -87,7 +98,7 @@
       </span>
       <span class="reason bitmap">
         {#if sending}
-          Sending
+          {busy}
         {:else if response}
           {response.status_text || "Status"}
         {:else if execution?.skipped}
@@ -129,7 +140,7 @@
       </dl>
     {:else if !execution && !sending}
       <p class="hint">
-        Press {#each keyLabel("mod+enter") as key (key)}<kbd>{key}</kbd>{" "}{/each}or Send.
+        Press {#each keyLabel("mod+enter") as key (key)}<kbd>{key}</kbd>{" "}{/each}or {action}.
       </p>
     {/if}
   </div>

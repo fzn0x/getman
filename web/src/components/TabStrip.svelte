@@ -1,6 +1,7 @@
 <script lang="ts">
   import { overflowFade } from "../lib/actions";
   import { methodClass, methodShort } from "../lib/format";
+  import { requestMark } from "../lib/grpc";
   import { closeTab, isDirty, newRequest, selectTab, tabs, tabTitle } from "../lib/store.svelte";
   import Icon from "./Icon.svelte";
 
@@ -48,8 +49,8 @@
           onkeydown={(event) => onKeydown(event, tab.id)}
         >
           {#if tab.kind === "request"}
-            <span class="method {methodClass(tab.draft.method)}"
-              >{methodShort(tab.draft.method)}</span
+            <span class="method {methodClass(requestMark(tab.draft))}"
+              >{methodShort(requestMark(tab.draft))}</span
             >
           {:else if tab.kind === "folder"}
             <Icon name="folder" />

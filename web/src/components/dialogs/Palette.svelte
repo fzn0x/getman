@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from "svelte";
+  import { newGrpcDraft, toRequest } from "../../lib/draft";
   import { methodClass } from "../../lib/format";
   import { rank } from "../../lib/fuzzy";
   import type { IconName } from "../../lib/icons";
@@ -41,6 +42,13 @@
     const tab = activeTab();
     const entries: Entry[] = [
       { id: "new", title: "New request", icon: "plus", keys: "alt+n", run: () => newRequest() },
+      {
+        id: "new-grpc",
+        title: "New gRPC request",
+        detail: "Call a gRPC method, from .proto files or server reflection",
+        icon: "plus",
+        run: () => newRequest(toRequest(newGrpcDraft())),
+      },
       {
         id: "import",
         title: "Import a cURL command or Postman export",
