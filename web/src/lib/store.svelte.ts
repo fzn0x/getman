@@ -204,6 +204,8 @@ export interface RequestTab {
   saved: string;
   execution: Execution | null;
   sending: boolean;
+  /** Names the send in flight, for cancelling it. */
+  sendId?: string;
   requestPane: string;
   responsePane: string;
 }
@@ -560,11 +562,13 @@ export async function saveAs(tab: RequestTab, folder: string, name: string): Pro
 export async function send(tab: RequestTab): Promise<void> {
   if (tab.sending) return;
   tab.sending = true;
+  tab.sendId = sendId();
   try {
     const execution = await api.send({
       path: contextPath(tab),
       request: toRequest(tab.draft),
       environment: ws.environment || null,
+      id: tab.sendId,
     });
     tab.execution = execution;
     const failing =
@@ -599,7 +603,22 @@ export async function send(tab: RequestTab): Promise<void> {
     };
   } finally {
     tab.sending = false;
+    tab.sendId = undefined;
   }
+}
+
+function sendId(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+/** Stops the request a tab is sending; the response pane then says so. */
+export async function cancelSend(tab: RequestTab): Promise<void> {
+  if (!tab.sending || !tab.sendId) return;
+  await api.cancelSend(tab.sendId).catch(() => {});
 }
 
 /** Points tabs at an item's new path after a rename or move. */

@@ -7,6 +7,7 @@
   import { keyLabel } from "../../lib/keys";
   import { copyText } from "../../lib/clipboard";
   import {
+    cancelSend,
     deleteItem,
     duplicateItem,
     findNode,
@@ -346,11 +347,11 @@
     <button
       class="btn primary send"
       class:sending={tab.sending}
-      onclick={() => void send(tab)}
-      disabled={tab.sending}
+      onclick={() => void (tab.sending ? cancelSend(tab) : send(tab))}
+      title={tab.sending ? `Cancel (${keyLabel("escape").join(" ")})` : undefined}
     >
       {#if tab.sending}
-        <span class="scan" aria-hidden="true"></span> Sending
+        <span class="scan" aria-hidden="true"></span> Cancel
       {:else}
         <Icon name="play" /> Send
       {/if}

@@ -15,6 +15,7 @@
   import { matches, typing } from "./lib/keys";
   import {
     activeTab,
+    cancelSend,
     closeTab,
     cycleTab,
     dialogs,
@@ -82,6 +83,8 @@
     };
     if (matches(event, "mod+enter")) {
       if (current?.kind === "request") handle(() => void send(current));
+    } else if (matches(event, "escape") && current?.kind === "request" && current.sending) {
+      if (!event.defaultPrevented) handle(() => void cancelSend(current));
     } else if (matches(event, "mod+s")) {
       handle(() => void save(current));
     } else if (matches(event, "mod+k") || matches(event, "mod+p")) {

@@ -56,6 +56,7 @@ export function typing(event: KeyboardEvent): boolean {
 
 export const SHORTCUTS: { combo: string; action: string }[] = [
   { combo: "mod+enter", action: "Send the request" },
+  { combo: "escape", action: "Cancel the request being sent" },
   { combo: "mod+s", action: "Save" },
   { combo: "mod+k", action: "Find requests and commands" },
   { combo: "alt+n", action: "New request" },
