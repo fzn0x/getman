@@ -5,6 +5,7 @@ mod import;
 mod init;
 mod run;
 mod send;
+mod stream;
 
 use std::process::ExitCode;
 use std::time::Duration;
