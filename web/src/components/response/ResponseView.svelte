@@ -2,6 +2,7 @@
   import { overflowFade } from "../../lib/actions";
   import { copyText } from "../../lib/clipboard";
   import { payloadText } from "../../lib/format";
+  import { watchAsStream } from "../../lib/realtime.svelte";
   import { openDialog, openEnvironments, type RequestTab } from "../../lib/store.svelte";
   import Icon from "../Icon.svelte";
   import BodyViewer from "./BodyViewer.svelte";
@@ -111,6 +112,16 @@
       <div class="warning">
         <Icon name="warning" />
         <p>{execution.warnings.join(" ")}</p>
+      </div>
+    {/if}
+    {#if response?.stream_open}
+      <div class="warning">
+        <Icon name="warning" />
+        <p>
+          This is an event stream, still open when the request timed out. The body holds the events
+          that arrived until then.
+        </p>
+        <button class="btn quiet" onclick={() => void watchAsStream(tab)}>Watch it live</button>
       </div>
     {/if}
   {/if}

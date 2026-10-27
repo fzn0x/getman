@@ -28,9 +28,23 @@
   } from "../../lib/store.svelte";
   import type { Header } from "../../lib/types";
   import { splitUrl, syncPathParams } from "../../lib/url";
+  import {
+    fromPicker,
+    isLive,
+    livePanes,
+    pickerLabel,
+    pickerValue,
+    STREAM_CHOICES,
+  } from "../../lib/realtime";
+  import { connected, live, toggle } from "../../lib/realtime.svelte";
+  import { stopSending } from "../../lib/store.svelte";
   import Editor from "../Editor.svelte";
   import Icon from "../Icon.svelte";
   import Menu, { type MenuItem } from "../Menu.svelte";
+  import LivePane from "../realtime/LivePane.svelte";
+  import MessagePane from "../realtime/MessagePane.svelte";
+  import SocketIoPane from "../realtime/SocketIoPane.svelte";
+  import StreamSettings from "../realtime/StreamSettings.svelte";
   import ResponseView from "../response/ResponseView.svelte";
   import AuthPane from "./AuthPane.svelte";
   import BodyPane from "./BodyPane.svelte";
@@ -130,6 +144,59 @@
     },
     { id: "docs", label: "Docs", note: "", mark: draft.description.trim() !== "" },
   ]);
+
+  // WebSocket, event stream and Socket.IO requests: their own panes, a
+  // connection instead of a response, and a connect button.
+  const liveKind = $derived(isLive(draft.kind));
+  $effect.pre(() => {
+    if (liveKind && !tab.live) live(tab);
+  });
+  const shownPanes = $derived.by(() => {
+    if (!liveKind) return panesList;
+    const extra = [
+      {
+        id: "message",
+        label: "Message",
+        note: String(
+          (draft.kind === "socketio" ? draft.socketio.messages : draft.websocket.messages).length ||
+            "",
+        ),
+      },
+      { id: "socketio", label: "Socket.IO", note: draft.socketio.namespace.trim() },
+    ];
+    return livePanes(draft.kind).flatMap((id) => {
+      const pane = panesList.find((p) => p.id === id) ?? extra.find((p) => p.id === id);
+      return pane ? [pane] : [];
+    });
+  });
+  $effect(() => {
+    const ids = shownPanes.map((p) => p.id);
+    if (!ids.includes(tab.requestPane)) tab.requestPane = ids[0] ?? "params";
+  });
+  const linked = $derived(liveKind && connected(tab));
+  const picker = $derived(pickerValue(draft.kind, draft.method));
+  const known_picker = $derived(
+    METHODS.includes(picker as (typeof METHODS)[number]) ||
+      STREAM_CHOICES.some((c) => c.value === picker),
+  );
+
+  function pick(value: string): void {
+    if (value === "__custom") {
+      if (draft.kind !== "sse") draft.kind = "http";
+      customMethod();
+      return;
+    }
+    const chosen = fromPicker(value);
+    draft.kind = chosen.kind;
+    if (chosen.method) draft.method = chosen.method;
+    else draft.method = "GET";
+  }
+
+  function primaryClick(): void {
+    if (liveKind) void toggle(tab);
+    else if (tab.sending) stopSending(tab);
+    else void send(tab);
+  }
 
   const HEADER_NAMES = [
     "Accept",
@@ -309,26 +376,29 @@
   </div>
 
   <div class="line">
-    <label class="method-pick method {methodClass(draft.method)}">
-      <span class="sr-only">Method</span>
+    <label class="method-pick method {liveKind ? 'other' : methodClass(draft.method)}">
+      <span class="sr-only">Method or kind of request</span>
       <select
-        value={METHODS.includes(draft.method as (typeof METHODS)[number])
-          ? draft.method
-          : "__custom"}
-        onchange={(event) => {
-          const value = event.currentTarget.value;
-          if (value === "__custom") customMethod();
-          else draft.method = value;
-        }}
+        value={known_picker ? picker : "__custom"}
+        disabled={linked}
+        title={linked ? "Disconnect to change the kind of request" : undefined}
+        onchange={(event) => pick(event.currentTarget.value)}
       >
-        {#each METHODS as method (method)}
-          <option value={method}>{method}</option>
-        {/each}
-        {#if !METHODS.includes(draft.method as (typeof METHODS)[number])}
-          <option value="__custom">{draft.method}</option>
-        {:else}
-          <option value="__custom">Custom…</option>
-        {/if}
+        <optgroup label="HTTP">
+          {#each METHODS as method (method)}
+            <option value={method}>{method}</option>
+          {/each}
+          {#if !known_picker}
+            <option value="__custom">{pickerLabel(picker)}</option>
+          {:else}
+            <option value="__custom">Custom…</option>
+          {/if}
+        </optgroup>
+        <optgroup label="Streams">
+          {#each STREAM_CHOICES as choice (choice.value)}
+            <option value={choice.value}>{choice.label}</option>
+          {/each}
+        </optgroup>
       </select>
     </label>
     <div class="url">
@@ -338,19 +408,33 @@
         singleLine
         {known}
         label="URL"
-        placeholder="https://api.example.com/users — or paste a cURL command"
+        placeholder={draft.kind === "websocket"
+          ? "wss://echo.example.com/socket"
+          : draft.kind === "socketio"
+            ? "https://chat.example.com — the path is the namespace"
+            : draft.kind === "sse"
+              ? "https://api.example.com/events"
+              : "https://api.example.com/users — or paste a cURL command"}
         onSubmit={() => void send(tab)}
         {onPaste}
       />
     </div>
     <button
       class="btn primary send"
-      class:sending={tab.sending}
-      onclick={() => void send(tab)}
-      disabled={tab.sending}
+      class:sending={tab.sending || tab.live?.status === "connecting"}
+      onclick={primaryClick}
+      title={!liveKind && tab.sending ? "Stop waiting for the response" : undefined}
     >
-      {#if tab.sending}
-        <span class="scan" aria-hidden="true"></span> Sending
+      {#if liveKind}
+        {#if tab.live?.status === "connecting"}
+          <span class="scan" aria-hidden="true"></span> Cancel
+        {:else if linked}
+          <Icon name="stop" /> {draft.kind === "sse" ? "Stop" : "Disconnect"}
+        {:else}
+          <Icon name="play" /> Connect
+        {/if}
+      {:else if tab.sending}
+        <span class="scan" aria-hidden="true"></span> Stop
       {:else}
         <Icon name="play" /> Send
       {/if}
@@ -360,7 +444,7 @@
   <div class="panes" bind:this={panes} class:dragging style:--split={prefs.split}>
     <section class="editor-side" aria-label="Request">
       <div class="tablist" use:overflowFade role="tablist" aria-label="Request parts">
-        {#each panesList as pane (pane.id)}
+        {#each shownPanes as pane (pane.id)}
           <button
             class="tab"
             role="tab"
@@ -373,8 +457,16 @@
           </button>
         {/each}
       </div>
-      <div class="pane" class:fill={tab.requestPane === "body" || tab.requestPane === "scripts"}>
-        {#if tab.requestPane === "params"}
+      <div
+        class="pane"
+        class:fill={tab.requestPane === "body" || tab.requestPane === "scripts"}
+        class:flush={tab.requestPane === "message"}
+      >
+        {#if tab.requestPane === "message"}
+          {#if tab.live}<MessagePane {tab} conn={tab.live} />{/if}
+        {:else if tab.requestPane === "socketio"}
+          <SocketIoPane bind:settings={draft.socketio} />
+        {:else if tab.requestPane === "params"}
           <ParamsPane {draft} />
         {:else if tab.requestPane === "headers"}
           <div class="stack">
@@ -429,6 +521,7 @@
             />
           </div>
         {:else if tab.requestPane === "settings"}
+          {#if liveKind}<StreamSettings {draft} />{/if}
           <SettingsPane bind:settings={draft.settings} />
         {:else if tab.requestPane === "docs"}
           <textarea
@@ -454,8 +547,12 @@
       onkeydown={splitKeys}
     ></div>
 
-    <section class="response-side" aria-label="Response">
-      <ResponseView {tab} />
+    <section class="response-side" aria-label={liveKind ? "Connection" : "Response"}>
+      {#if liveKind}
+        {#if tab.live}<LivePane {tab} conn={tab.live} />{/if}
+      {:else}
+        <ResponseView {tab} />
+      {/if}
     </section>
   </div>
 </div>
@@ -666,6 +763,11 @@
 
   .pane.fill {
     overflow: hidden;
+  }
+
+  .pane.flush {
+    overflow: hidden;
+    padding: 0;
   }
 
   .divider {
