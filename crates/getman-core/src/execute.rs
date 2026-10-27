@@ -13,7 +13,7 @@ use crate::auth::Authenticator;
 use crate::checks::{TestResult, as_text, run_captures, run_checks};
 use crate::error::Result;
 use crate::http::{CookieInfo, HttpClient, Outgoing, Response};
-use crate::model::{Body, Folder, Request, Vars};
+use crate::model::{Body, Folder, Request, RequestKind, Vars};
 use crate::prepare::{Effective, Prepared, prepare};
 use crate::script::{
     self, ChangeScope, Event, LogEntry, NextRequest, ScriptBody, ScriptError, ScriptHost,
@@ -126,6 +126,9 @@ pub struct Execution {
     pub skipped: bool,
     /// Where a run goes next, if a script said.
     pub next_request: Option<NextRequest>,
+    /// The call, for a gRPC request.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grpc: Option<crate::grpc::GrpcCall>,
 }
 
 impl Execution {
@@ -167,6 +170,12 @@ impl Executor {
         request: &Request,
         context: &Context,
     ) -> Result<Prepared> {
+        if !request.kind.is_http() {
+            return Err(crate::Error::Invalid(format!(
+                "this is a {} request, not HTTP",
+                request.kind.name()
+            )));
+        }
         let chain = match path {
             Some(path) => self.workspace.folder_chain(path)?,
             None => vec![self.workspace.read_folder("")?],
@@ -226,6 +235,12 @@ impl Executor {
         context: &mut Context,
         execution: &mut Execution,
     ) -> Result<()> {
+        match request.kind {
+            RequestKind::Http => {}
+            RequestKind::Grpc => {
+                return crate::grpc::execute(self, path, request, context, execution, None).await;
+            }
+        }
         let chain = match path {
             Some(path) => self.workspace.folder_chain(path)?,
             None => vec![self.workspace.read_folder("")?],
@@ -341,7 +356,7 @@ impl Executor {
         Ok(())
     }
 
-    fn file_vars(&self, environment: Option<&str>) -> Result<FileVars> {
+    pub(crate) fn file_vars(&self, environment: Option<&str>) -> Result<FileVars> {
         let local = self.workspace.read_local_state()?;
         let meta = self.workspace.read_folder("")?;
         let mut collection = meta.variables;
@@ -391,7 +406,11 @@ impl Executor {
 }
 
 /// Takes in what scripts did. Returns whether a script failed.
-fn absorb(output: ScriptOutput, context: &mut Context, execution: &mut Execution) -> bool {
+pub(crate) fn absorb(
+    output: ScriptOutput,
+    context: &mut Context,
+    execution: &mut Execution,
+) -> bool {
     for change in &output.changes {
         context.overlay.apply(change);
     }
@@ -409,7 +428,7 @@ fn absorb(output: ScriptOutput, context: &mut Context, execution: &mut Execution
 
 /// Values from the workspace's files, before anything set while running.
 #[derive(Debug, Clone, Default)]
-struct FileVars {
+pub(crate) struct FileVars {
     globals: Vars,
     collection: Vars,
     environment: Vars,
@@ -420,7 +439,12 @@ fn data_vars(data: &serde_json::Map<String, Value>) -> Vars {
     data.iter().map(|(k, v)| (k.clone(), as_text(v))).collect()
 }
 
-fn var_stack(files: &FileVars, chain: &[Folder], request: &Request, context: &Context) -> VarStack {
+pub(crate) fn var_stack(
+    files: &FileVars,
+    chain: &[Folder],
+    request: &Request,
+    context: &Context,
+) -> VarStack {
     let overlay = &context.overlay;
     let mut stack = VarStack::new();
     stack.push(Scope::Global, overlaid(&files.globals, &overlay.globals));
@@ -441,7 +465,7 @@ fn var_stack(files: &FileVars, chain: &[Folder], request: &Request, context: &Co
     stack
 }
 
-fn script_scopes(
+pub(crate) fn script_scopes(
     files: &FileVars,
     chain: &[Folder],
     request: &Request,
@@ -525,7 +549,7 @@ fn apply_body_text(body: &mut Body, text: &str) {
     }
 }
 
-async fn run_scripts(
+pub(crate) async fn run_scripts(
     host: ScriptHost,
     scripts: Vec<crate::prepare::Script>,
     input: ScriptInput,
