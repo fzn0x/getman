@@ -3,11 +3,13 @@
 ```text
 getman [DIR]                   open the browser UI (the default)
 getman tui [DIR]               open the terminal UI
-getman run [TARGET]            run a folder or the workspace, for CI
+getman run [TARGET]...         run folders, requests or the workspace, for CI
 getman send REQUEST            send one request, print the body
 getman init [DIR]              create a workspace
 getman import FILE | --curl    import from Postman or cURL
 getman export REQUEST --to X   print a request as code
+getman mock [FOLDER]           serve saved examples as a mock API
+getman mcp [DIR]               let AI agents use the workspace
 ```
 
 Every command finds the workspace by looking for `getman.yaml` in the
@@ -47,9 +49,15 @@ Opens the [terminal UI](terminal.md). Takes the same `DIR`.
 Runs requests and reports the results. See [Running in CI](runner.md).
 
 ```sh
-getman run [TARGET] [-e ENV] [--var NAME=VALUE]... [-d DATA] [-n N]
+getman run [TARGET]... [-e ENV] [--var NAME=VALUE]... [-d DATA] [-n N]
            [--delay MS] [--bail] [-r REPORTER[=PATH]]... [-v] [--persist]
+           [--save]
 ```
+
+Each `TARGET` is a folder or a request; several run in the order given,
+and none runs the whole workspace. Reporters are `cli`, `json`, `junit`,
+`html`, `csv` and `xlsx`. `--save` keeps the run in `.getman/runs` for
+the UI's Runner.
 
 ## getman send
 
@@ -95,6 +103,31 @@ Prints a request as code, with variables replaced.
 | `REQUEST` | The request |
 | `-t`, `--to LANGUAGE` | `curl` (default), `httpie`, `powershell`, `fetch`, `python`, `go`, `rust` or `java` |
 | `-e`, `--env NAME`, `--var NAME=VALUE` | As for `send` |
+
+## getman mock
+
+Serves the saved examples of the workspace, or of a folder, as a mock API
+on 127.0.0.1, and prints each request it answers. See
+[Examples and mocks](examples-and-mocks.md).
+
+| Option | |
+| --- | --- |
+| `FOLDER` | A folder of the workspace, or a directory on disk. Without one, every example in the workspace |
+| `-p`, `--port PORT` | Port to listen on. Default 7979, or the next free one |
+| `--delay MS` | Wait before each answer, to try slow responses |
+| `-w`, `--workspace DIR` | The workspace |
+
+It runs until <kbd>Ctrl</kbd> <kbd>C</kbd>.
+
+## getman mcp
+
+Serves the workspace to AI agents over the Model Context Protocol, on
+standard input and output. Your agent's app starts it; see
+[AI agents](mcp.md) for the setup.
+
+| Option | |
+| --- | --- |
+| `DIR` | The workspace. Default: the one around the current directory |
 
 ## Exit status
 
