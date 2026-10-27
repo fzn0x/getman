@@ -1245,6 +1245,18 @@ mod tests {
         assert!(error.to_string().contains("no HTTP/3 support"), "{error}");
     }
 
+    #[test]
+    fn ci_builds_include_http3() {
+        // A RUSTFLAGS variable in a workflow would replace the cfg that
+        // .cargo/config.toml sets, and releases would lose HTTP/3.
+        if std::env::var_os("CI").is_some() {
+            assert!(
+                cfg!(reqwest_unstable),
+                "build with --cfg reqwest_unstable (see .cargo/config.toml)"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn alt_svc_offers_http3_without_switching() {
         let server = test_server::spawn().await;

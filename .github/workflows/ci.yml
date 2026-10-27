@@ -12,6 +12,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# No RUSTFLAGS here: it would replace the `--cfg reqwest_unstable` that
+# .cargo/config.toml sets, and builds would lose HTTP/3 (a test checks).
 env:
   CARGO_TERM_COLOR: always
 
