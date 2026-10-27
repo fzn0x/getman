@@ -94,15 +94,16 @@
       .join(" ");
   });
 
-  const reportItems = $derived(
-    reportMenu
-      ? REPORT_FORMATS.map(({ format, label }) => ({
-          label,
-          icon: "export" as const,
-          action: () => void downloadReport(reportMenu!.id, format),
-        }))
-      : [],
-  );
+  const reportItems = $derived.by(() => {
+    // The menu closes before its action runs, so hold on to the id.
+    const id = reportMenu?.id;
+    if (!id) return [];
+    return REPORT_FORMATS.map(({ format, label }) => ({
+      label,
+      icon: "export" as const,
+      action: () => void downloadReport(id, format),
+    }));
+  });
   const total = $derived(
     Math.max(tab.items.length * Math.max(tab.iterationCount, 1), tab.results.length),
   );
