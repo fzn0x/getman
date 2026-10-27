@@ -11,6 +11,7 @@ repository = "https://github.com/fzn0x/getman"
 homepage = "https://fzn0x.github.io/getman/"
 
 [workspace.dependencies]
+getman = { path = "crates/getman" }
 getman-core = { path = "crates/getman-core" }
 
 [workspace.lints.rust]

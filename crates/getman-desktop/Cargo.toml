@@ -1,0 +1,40 @@
+[package]
+name = "getman-desktop"
+description = "Getman as a desktop app: the browser UI in its own window, with in-app updates"
+version.workspace = true
+edition.workspace = true
+# Tauri 2.12 needs Rust 1.90. The other crates keep the workspace's 1.88.
+rust-version = "1.90"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+
+[dependencies]
+getman.workspace = true
+getman-core.workspace = true
+open = "5"
+rfd = { version = "0.17", default-features = false, features = ["gtk3", "common-controls-v6"] }
+semver = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Tauri's defaults without `compression`, which only shrinks assets built
+# into the app; Getman's UI comes from its own server instead.
+tauri = { version = "2.12", default-features = false, features = ["wry", "common-controls-v6", "dynamic-acl", "x11", "dbus"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-updater = { version = "2", default-features = false, features = ["rustls-tls", "system-proxy"] }
+tauri-plugin-window-state = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
+
+# A macOS update is the app bundle packed in a .tar.gz.
+[target.'cfg(target_os = "macos")'.dependencies]
+tauri-plugin-updater = { version = "2", default-features = false, features = ["rustls-tls", "system-proxy", "zip"] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name={{name}}
+Comment={{comment}}
+Categories={{categories}}
+Icon={{icon}}
+Exec={{exec}} desktop
+StartupWMClass={{exec}}
+Terminal=false
