@@ -4,6 +4,15 @@
   import { closeTab, isDirty, newRequest, selectTab, tabs, tabTitle } from "../lib/store.svelte";
   import Icon from "./Icon.svelte";
 
+  // A tab opened or chosen from elsewhere may sit past the edge of a
+  // strip that overflows, so bring it into view.
+  $effect(() => {
+    void tabs.list.length;
+    document
+      .getElementById(`tab-${tabs.active}`)
+      ?.parentElement?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  });
+
   function onKeydown(event: KeyboardEvent, id: string): void {
     const at = tabs.list.findIndex((tab) => tab.id === id);
     if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
