@@ -15,6 +15,7 @@ pub mod export;
 pub mod http;
 pub mod import;
 mod lenient;
+pub mod mock;
 pub mod model;
 pub mod prepare;
 pub mod runner;
