@@ -4,6 +4,15 @@
 
 import { api, ApiError } from "./api";
 import { clone, fingerprint, newDraft, toDraft, toRequest } from "./draft";
+import {
+  closeTargets,
+  findMoved,
+  moveTo,
+  pushClosed,
+  readSession,
+  type SavedSession,
+  type SavedTab,
+} from "./session";
 import type {
   Draft,
   DynamicVar,
@@ -322,6 +331,7 @@ export function closeTab(id: string, force = false): void {
     });
     return;
   }
+  rememberClosed([tab]);
   tabs.list.splice(at, 1);
   if (tabs.active === id) {
     const next = tabs.list[Math.min(at, tabs.list.length - 1)];
@@ -330,45 +340,314 @@ export function closeTab(id: string, force = false): void {
   persistTabs();
 }
 
-function persistTabs(): void {
-  if (!ws.root) return;
-  const open = tabs.list
-    .map((tab) =>
-      tab.kind === "request" && tab.path
-        ? `r:${tab.path}`
-        : tab.kind === "folder"
-          ? `f:${tab.path}`
-          : tab.kind === "environments"
-            ? "e:"
-            : "",
-    )
-    .filter(Boolean);
-  store(scoped("tabs"), { open, active: tabs.active });
+/** Closes several tabs, asking once if any has changes that are not saved. */
+export function closeTabs(ids: string[], force = false): void {
+  const closing = tabs.list.filter((tab) => ids.includes(tab.id));
+  if (closing.length === 0) return;
+  const dirty = closing.filter(isDirty);
+  if (!force && dirty.length > 0) {
+    confirmDialog({
+      title:
+        closing.length === 1 ? `Close ${tabTitle(closing[0]!)}?` : `Close ${closing.length} tabs?`,
+      body:
+        dirty.length === 1
+          ? `${tabTitle(dirty[0]!)} has changes that are not saved.`
+          : `${dirty.length} of them have changes that are not saved.`,
+      confirm: "Close without saving",
+      danger: true,
+      onConfirm: () => closeTabs(ids, true),
+    });
+    return;
+  }
+  rememberClosed(closing);
+  const before = tabs.list;
+  const at = before.findIndex((tab) => tab.id === tabs.active);
+  const stays = (tab: Tab) => !ids.includes(tab.id);
+  tabs.list = before.filter(stays);
+  if (!tabs.list.some((tab) => tab.id === tabs.active)) {
+    const next =
+      before.slice(at + 1).find(stays) ?? before.slice(0, Math.max(0, at)).reverse().find(stays);
+    tabs.active = next?.id ?? "";
+  }
+  persistTabs();
+}
+
+/** Closes the other tabs, those to the right of one, or all of them. */
+export function closeTabsFrom(id: string, mode: "others" | "right" | "all"): void {
+  closeTabs(
+    closeTargets(
+      tabs.list.map((tab) => tab.id),
+      id,
+      mode,
+    ),
+  );
+}
+
+/** Puts a tab at another place in the strip. */
+export function moveTab(id: string, to: number): void {
+  const from = tabs.list.findIndex((tab) => tab.id === id);
+  if (from < 0 || from === to) return;
+  tabs.list = moveTo(tabs.list, from, to);
+  persistTabs();
+}
+
+/** Opens a copy of a request tab as a new, unsaved request. */
+export function duplicateTab(id: string): void {
+  const tab = tabs.list.find((t) => t.id === id);
+  if (tab?.kind !== "request") return;
+  const copy = toRequest(clone(tab.draft));
+  copy.name = `${tab.draft.name || "Untitled request"} copy`;
+  newRequest(copy, contextPath(tab));
+}
+
+// ---- Remembering tabs ----------------------------------------------------------
+//
+// Open tabs and their unsaved drafts are kept in this browser, per workspace,
+// so they survive a reload or a restart. Closed tabs go on a short stack that
+// Alt+Shift+T (or Ctrl+Shift+T where the browser lets it through) reopens.
+
+export const closedTabs = $state({ list: [] as SavedTab[] });
+
+function saveTab(tab: Tab): SavedTab {
+  switch (tab.kind) {
+    case "request": {
+      const keep = !tab.path || isDirty(tab);
+      return {
+        kind: "request",
+        path: tab.path,
+        inheritPath: tab.inheritPath,
+        name: tab.draft.name,
+        method: tab.draft.method,
+        ...(keep ? { draft: clone(tab.draft), base: tab.saved } : {}),
+        requestPane: tab.requestPane,
+        responsePane: tab.responsePane,
+      };
+    }
+    case "folder":
+      return {
+        kind: "folder",
+        path: tab.path,
+        name: tab.draft.name,
+        ...(isDirty(tab) ? { draft: clone(tab.draft), base: tab.saved } : {}),
+        pane: tab.pane,
+      };
+    case "environments":
+      return { kind: "environments", selected: tab.selected };
+    case "runner":
+      return { kind: "runner", target: tab.target };
+  }
+}
+
+function rememberClosed(list: Tab[]): void {
+  for (const tab of list) closedTabs.list = pushClosed(closedTabs.list, saveTab(tab));
+}
+
+/** Writes the open tabs down; false if the drafts did not fit. */
+function persistTabs(): boolean {
+  if (!ws.root || !sessionRestored) return true;
+  const session: SavedSession = {
+    version: 2,
+    tabs: tabs.list.map(saveTab),
+    active: tabs.list.findIndex((tab) => tab.id === tabs.active),
+  };
+  try {
+    localStorage.setItem(`getman.${scoped("tabs")}`, JSON.stringify(session));
+    return true;
+  } catch {
+    // Too big for the browser's storage: keep the tabs without drafts.
+    const light = session.tabs.map((tab) =>
+      tab.kind === "request" || tab.kind === "folder" ? { ...tab, draft: undefined } : tab,
+    );
+    store(scoped("tabs"), { ...session, tabs: light });
+    return false;
+  }
+}
+
+let sessionRestored = false;
+let persistTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Saves the tabs now, as the page goes away; false if drafts were lost. */
+export function flushSession(): boolean {
+  clearTimeout(persistTimer);
+  return persistTabs();
+}
+
+/** Saves the tabs a moment after any draft changes. */
+function watchSession(): void {
+  $effect.root(() => {
+    $effect(() => {
+      JSON.stringify(
+        tabs.list.map((tab) =>
+          tab.kind === "request"
+            ? [tab.draft, tab.requestPane, tab.responsePane]
+            : tab.kind === "folder"
+              ? [tab.draft, tab.pane]
+              : tab.kind === "environments"
+                ? tab.selected
+                : tab.target,
+        ),
+      );
+      void tabs.active;
+      clearTimeout(persistTimer);
+      persistTimer = setTimeout(persistTabs, 400);
+    });
+  });
+  window.addEventListener("pagehide", flushSession);
+}
+
+function savedId(saved: SavedTab): string {
+  switch (saved.kind) {
+    case "request":
+      return saved.path ? `r:${saved.path}` : "";
+    case "folder":
+      return `f:${saved.path}`;
+    case "environments":
+      return "environments";
+    case "runner":
+      return `run:${saved.target}`;
+  }
+}
+
+const restoreNotes = { lost: 0, changed: 0 };
+
+/** Opens a remembered tab, coping with files moved or deleted meanwhile. */
+async function openSaved(saved: SavedTab, taken: Set<string>): Promise<Tab | null> {
+  switch (saved.kind) {
+    case "request": {
+      const asNew = (inheritPath: string | null) => {
+        const tab = requestTab(null, toRequest(newDraft()), inheritPath);
+        tab.draft = toDraft(saved.draft as unknown as Request);
+        tab.requestPane = saved.requestPane;
+        tab.responsePane = saved.responsePane;
+        return tab;
+      };
+      const folderExists = (path: string | null) =>
+        path !== null && (path === "" || findNode(path)?.kind === "folder");
+      if (saved.path === null) {
+        if (!saved.draft) return null;
+        return asNew(folderExists(saved.inheritPath) ? saved.inheritPath : null);
+      }
+      let path = saved.path;
+      let request = await api.readRequest(path).catch(() => null);
+      if (!request) {
+        const moved = findMoved(
+          { path, name: saved.draft?.name ?? saved.name, method: saved.method },
+          allRequests(),
+          taken,
+        );
+        if (moved) {
+          path = moved;
+          request = await api.readRequest(moved).catch(() => null);
+        }
+      }
+      if (!request) {
+        if (!saved.draft) return null;
+        // The file is gone; keep the unsaved work as a new request.
+        restoreNotes.lost++;
+        const folder = parentOf(saved.path);
+        return asNew(folderExists(folder) ? folder : null);
+      }
+      const tab = requestTab(path, request);
+      if (saved.draft) {
+        if (saved.base !== undefined && saved.base !== tab.saved) restoreNotes.changed++;
+        tab.draft = toDraft(saved.draft as unknown as Request);
+      }
+      tab.requestPane = saved.requestPane;
+      tab.responsePane = saved.responsePane;
+      return tab;
+    }
+    case "folder": {
+      const folder = await api.readFolder(saved.path).catch(() => null);
+      if (!folder) {
+        if (saved.draft) restoreNotes.lost++;
+        return null;
+      }
+      const tab = folderTab(saved.path, folder);
+      if (saved.draft) {
+        if (saved.base !== undefined && saved.base !== tab.saved) restoreNotes.changed++;
+        tab.draft = normalizeFolder(saved.draft);
+      }
+      tab.pane = saved.pane;
+      return tab;
+    }
+    case "environments":
+      return { kind: "environments", id: "environments", selected: saved.selected };
+    case "runner":
+      return saved.target === "" || findNode(saved.target) ? runnerTab(saved.target) : null;
+  }
 }
 
 async function restoreTabs(): Promise<void> {
-  const saved = load<{ open: string[]; active: string }>(scoped("tabs"), { open: [], active: "" });
-  for (const entry of saved.open) {
-    const kind = entry.slice(0, 2);
-    const path = entry.slice(2);
+  const saved = readSession(load<unknown>(scoped("tabs"), null));
+  const taken = new Set<string>();
+  let active = "";
+  restoreNotes.lost = 0;
+  restoreNotes.changed = 0;
+  for (const [i, entry] of saved.tabs.entries()) {
     try {
-      if (kind === "r:") {
-        const request = await api.readRequest(path);
-        tabs.list.push(requestTab(path, request));
-      } else if (kind === "f:") {
-        const folder = await api.readFolder(path);
-        tabs.list.push(folderTab(path, folder));
-      } else if (kind === "e:") {
-        tabs.list.push({ kind: "environments", id: "environments", selected: "" });
-      }
+      const tab = await openSaved(entry, taken);
+      if (!tab || tabs.list.some((t) => t.id === tab.id)) continue;
+      tabs.list.push(tab);
+      if (tab.kind === "request" && tab.path) taken.add(tab.path);
+      if (i === saved.active) active = tab.id;
     } catch {
-      // The file is gone; skip it.
+      // A tab that cannot be read back is left closed.
     }
   }
-  tabs.active = tabs.list.some((t) => t.id === saved.active)
-    ? saved.active
-    : (tabs.list[0]?.id ?? "");
+  tabs.active = active || (tabs.list[0]?.id ?? "");
+  sessionRestored = true;
+  watchSession();
+  if (restoreNotes.lost > 0) {
+    notify(
+      restoreNotes.lost === 1
+        ? "A file with unsaved changes is gone; its changes are open as a new request."
+        : `${restoreNotes.lost} files with unsaved changes are gone; their changes are open as new requests.`,
+      "info",
+    );
+  } else if (restoreNotes.changed > 0) {
+    notify(
+      "Some files changed on disk since your unsaved edits; saving keeps your version.",
+      "info",
+    );
+  }
   void refreshVariables();
+}
+
+/** Reopens the tab closed last. */
+export async function reopenClosedTab(): Promise<void> {
+  const saved = closedTabs.list.at(-1);
+  if (!saved) {
+    notify("No closed tabs to reopen.");
+    return;
+  }
+  closedTabs.list = closedTabs.list.slice(0, -1);
+  const id = savedId(saved);
+  if (id && tabs.list.some((tab) => tab.id === id)) {
+    focusTab(id);
+    return;
+  }
+  const open = new Set(
+    tabs.list.flatMap((tab) => (tab.kind === "request" && tab.path ? [tab.path] : [])),
+  );
+  try {
+    const tab = await openSaved(saved, open);
+    if (tab) addTab(tab);
+    else notify("That tab's file is gone.", "error");
+  } catch (error) {
+    notify(message(error), "error");
+  }
+}
+
+/** Shows an item in the sidebar: opens it and its folders, and focuses it. */
+export function revealInTree(path: string): void {
+  prefs.sidebarOpen = true;
+  let folder = parentOf(path);
+  while (folder) {
+    setExpanded(folder, true);
+    folder = parentOf(folder);
+  }
+  signals.revealPath = path;
+  signals.reveal++;
 }
 
 function requestTab(
@@ -468,9 +747,13 @@ export function openRunner(target: string): void {
     focusTab(id);
     return;
   }
-  addTab({
+  addTab(runnerTab(target));
+}
+
+function runnerTab(target: string): RunnerTab {
+  return {
     kind: "runner",
-    id,
+    id: `run:${target}`,
     target,
     environment: ws.environment,
     iterations: null,
@@ -487,7 +770,7 @@ export function openRunner(target: string): void {
     summary: null,
     error: "",
     selected: -1,
-  });
+  };
 }
 
 /** Path whose folder settings a request tab inherits. */
@@ -638,10 +921,12 @@ export function retargetTabs(from: string, to: string): void {
 
 /** Closes tabs of an item that no longer exists. */
 export function dropTabs(path: string): void {
-  tabs.list = tabs.list.filter((tab) => {
+  const inside = (tab: Tab) => {
     const own = tab.kind === "request" ? tab.path : tab.kind === "folder" ? tab.path : null;
-    return !(own && (own === path || own.startsWith(`${path}/`)));
-  });
+    return !!own && (own === path || own.startsWith(`${path}/`));
+  };
+  rememberClosed(tabs.list.filter(inside));
+  tabs.list = tabs.list.filter((tab) => !inside(tab));
   if (!tabs.list.some((t) => t.id === tabs.active)) tabs.active = tabs.list[0]?.id ?? "";
   persistTabs();
 }
@@ -802,7 +1087,14 @@ export function message(error: unknown): string {
 }
 
 /** Requests to move focus, counted so the same request can repeat. */
-export const signals = $state({ focusUrl: 0, focusEnvironment: 0, focusFilter: 0 });
+export const signals = $state({
+  focusUrl: 0,
+  focusEnvironment: 0,
+  focusFilter: 0,
+  /** Asks the sidebar to show `revealPath`. */
+  reveal: 0,
+  revealPath: "",
+});
 
 // ---- Item actions -------------------------------------------------------------------
 

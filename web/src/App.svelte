@@ -18,12 +18,14 @@
     closeTab,
     cycleTab,
     dialogs,
+    flushSession,
     isDirty,
     loadWorkspace,
     newRequest,
     openDialog,
     prefs,
     refreshTree,
+    reopenClosedTab,
     runNoticeAction,
     save,
     selectTab,
@@ -56,8 +58,9 @@
       if (ws.ready) void refreshTree();
     };
     window.addEventListener("focus", onFocus);
+    // Unsaved drafts are kept for the next visit; warn only if they did not fit.
     const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (tabs.list.some(isDirty)) event.preventDefault();
+      if (!flushSession() && tabs.list.some(isDirty)) event.preventDefault();
     };
     window.addEventListener("beforeunload", beforeUnload);
     return () => {
@@ -91,6 +94,8 @@
       handle(() => newRequest());
     } else if (matches(event, "alt+w")) {
       if (current) handle(() => closeTab(current.id));
+    } else if (matches(event, "alt+shift+t") || matches(event, "mod+shift+t")) {
+      handle(() => void reopenClosedTab());
     } else if (matches(event, "alt+]")) {
       handle(() => cycleTab(1));
     } else if (matches(event, "alt+[")) {
