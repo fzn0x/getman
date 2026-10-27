@@ -24,6 +24,7 @@ pub(crate) async fn send(args: SendArgs) -> Outcome {
         environment,
         overlay,
         script_timeout: super::script_timeout(&args.vars),
+        settings: args.net.settings(),
         ..Context::default()
     };
     let executor = Executor::new(workspace);
@@ -63,6 +64,11 @@ pub(crate) async fn send(args: SendArgs) -> Outcome {
             style::duration(response.time_ms),
             style::size(response.size.body)
         ));
+        if args.include {
+            for line in details(response) {
+                style::note(&line);
+            }
+        }
     }
     for result in execution.tests.iter().chain(&execution.checks) {
         if result.passed {
@@ -110,6 +116,61 @@ fn print_response(response: &Response, include: bool) -> std::io::Result<()> {
         writeln!(out)?;
     }
     out.flush()
+}
+
+/// Where the time went, the TLS connection, and whether HTTP/3 is on
+/// offer, one line each.
+fn details(response: &Response) -> Vec<String> {
+    let mut lines = Vec::new();
+    if let Some(timings) = &response.timings {
+        let setup = if timings.reused {
+            "reused connection".to_owned()
+        } else {
+            let connect = timings.connect_ms.map_or_else(
+                || "connect in first byte (QUIC)".to_owned(),
+                |ms| format!("connect {}", fine(ms)),
+            );
+            format!("DNS {} · {connect}", fine(timings.dns_ms))
+        };
+        lines.push(format!(
+            "Timing: {setup} · first byte {} · download {}",
+            fine(timings.first_byte_ms),
+            fine(timings.download_ms)
+        ));
+    }
+    if let Some(tls) = &response.tls {
+        let mut line = format!(
+            "TLS: {}",
+            tls.version.as_deref().unwrap_or("unknown version")
+        );
+        if let Some(cert) = &tls.certificate {
+            line.push_str(&format!(
+                " · {} · issued by {} · expires {}",
+                cert.subject,
+                cert.issuer,
+                getman_core::time::iso8601_millis(cert.not_after)
+                    .split('T')
+                    .next()
+                    .unwrap_or_default()
+            ));
+        }
+        lines.push(line);
+    }
+    if response.http3_available {
+        lines.push(
+            "The server offers HTTP/3 (Alt-Svc); try it with --http-version http3.".to_owned(),
+        );
+    }
+    lines
+}
+
+/// Milliseconds with a decimal while they are small.
+fn fine(ms: f64) -> String {
+    if ms < 10.0 {
+        format!("{ms:.1} ms")
+    } else {
+        style::duration(ms)
+    }
 }
 
 fn exit(failed: bool) -> ExitCode {
