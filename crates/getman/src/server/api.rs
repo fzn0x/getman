@@ -8,14 +8,14 @@ use std::time::Duration;
 use axum::Json;
 use axum::Router;
 use axum::body::{Body, Bytes};
-use axum::extract::State;
+use axum::extract::{DefaultBodyLimit, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use getman_core::Error;
 use getman_core::execute::{Context, persist_changes, resolved_variables};
 use getman_core::export::codegen;
-use getman_core::import::{curl, postman};
+use getman_core::import::{self, SourceFile, curl};
 use getman_core::model::{Auth, Folder, Request};
 use getman_core::runner::{self, RunEvent, RunOptions};
 use getman_core::script::{ChangeScope, VarChange};
@@ -57,7 +57,14 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/dynamic", get(dynamic))
         .route("/run", post(run))
         .route("/run/cancel", post(cancel_run))
-        .route("/import", post(import))
+        .route(
+            "/import",
+            post(import).layer(DefaultBodyLimit::max(IMPORT_LIMIT)),
+        )
+        .route(
+            "/import/files",
+            post(import_files).layer(DefaultBodyLimit::max(IMPORT_LIMIT)),
+        )
         .route("/parse-curl", post(parse_curl))
         .route("/cookies", get(cookies))
         .route("/cookies/delete", post(delete_cookie))
@@ -579,31 +586,46 @@ async fn cancel_run(State(state): Shared, Json(arg): Json<RunId>) -> ApiResult {
 
 // ---- Import -------------------------------------------------------------------
 
+/// Largest import accepted: big API specs run to tens of megabytes.
+const IMPORT_LIMIT: usize = 64 * 1024 * 1024;
+
 #[derive(Deserialize)]
 struct ImportArg {
     text: String,
+    /// File name, which tells `.bru` files apart.
+    #[serde(default)]
+    name: String,
     #[serde(default)]
     folder: String,
     #[serde(default)]
     root: bool,
 }
 
+/// Imports one text in any format Getman reads.
 async fn import(State(state): Shared, Json(arg): Json<ImportArg>) -> ApiResult {
-    let ws = state.workspace();
-    if arg.text.trim_start().starts_with("curl") {
-        let request = curl::parse(&arg.text)?;
-        let path = ws.create_request(&arg.folder, &request.name, &request)?;
-        return Ok(Json(json!({
-            "kind": "request",
-            "name": request.name,
-            "path": path,
-            "requests": 1,
-            "folders": 0,
-            "warnings": [],
-        })));
-    }
-    let report = postman::import(ws, &arg.folder, &arg.text, arg.root)?;
+    let report = import::import_text(
+        state.workspace(),
+        &arg.folder,
+        &arg.name,
+        &arg.text,
+        arg.root,
+    )?;
     Ok(Json(json!(report)))
+}
+
+#[derive(Deserialize)]
+struct ImportFilesArg {
+    files: Vec<SourceFile>,
+    #[serde(default)]
+    folder: String,
+    #[serde(default)]
+    root: bool,
+}
+
+/// Imports dropped files, or a folder such as a Bruno collection.
+async fn import_files(State(state): Shared, Json(arg): Json<ImportFilesArg>) -> ApiResult {
+    let reports = import::import_files(state.workspace(), &arg.folder, &arg.files, arg.root)?;
+    Ok(Json(json!(reports)))
 }
 
 #[derive(Deserialize)]
