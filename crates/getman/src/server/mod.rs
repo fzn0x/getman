@@ -380,4 +380,76 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
     }
+
+    #[tokio::test]
+    async fn examples_are_saved_listed_and_kept_on_save() {
+        use serde_json::json;
+
+        let (dir, app) = app();
+        let workspace = Workspace::open(dir.path()).unwrap();
+        let path = workspace
+            .create_request("", "Get user", &getman_core::model::Request::default())
+            .unwrap();
+        let call = |route: &str, body: serde_json::Value| {
+            let app = app.clone();
+            let route = route.to_owned();
+            async move { read(app.oneshot(api(&route, Some(body))).await.unwrap()).await }
+        };
+
+        let (status, list) = call(
+            "/api/example/save",
+            json!({
+                "path": path,
+                "example": {
+                    "name": "Found",
+                    "status": 200,
+                    "headers": [
+                        { "name": "Content-Type", "value": "image/png" },
+                        { "name": "Set-Cookie", "value": "session=s3cret" }
+                    ],
+                    "request": { "method": "GET", "url": "{{baseUrl}}/users/:id" }
+                },
+                "body": { "base64": "iVBORw0K" }
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{list}");
+        assert_eq!(list[0]["body_file"], "found.png");
+        assert_eq!(list[0]["headers"].as_array().unwrap().len(), 1);
+
+        let (_, body) = call(
+            "/api/example/body",
+            json!({ "path": path, "name": "Found" }),
+        )
+        .await;
+        assert_eq!(body["body"]["base64"], "iVBORw0K");
+
+        // Saving the request from the editor keeps its examples.
+        let (status, _) = call(
+            "/api/request/write",
+            json!({ "path": path, "request": { "name": "Get user", "method": "GET", "url": "x" } }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(workspace.read_request(&path).unwrap().examples.len(), 1);
+
+        let (_, list) = call(
+            "/api/example/rename",
+            json!({ "path": path, "from": "Found", "to": "Here" }),
+        )
+        .await;
+        assert_eq!(list[0]["name"], "Here");
+        let (_, list) = call(
+            "/api/example/delete",
+            json!({ "path": path, "name": "Here" }),
+        )
+        .await;
+        assert_eq!(list, json!([]));
+        let (status, _) = call(
+            "/api/example/delete",
+            json!({ "path": path, "name": "Here" }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
 }

@@ -15,8 +15,9 @@ use axum::routing::{get, post};
 use getman_core::Error;
 use getman_core::execute::{Context, persist_changes, resolved_variables};
 use getman_core::export::codegen;
+use getman_core::http::Payload;
 use getman_core::import::{curl, postman};
-use getman_core::model::{Auth, Folder, Request};
+use getman_core::model::{Auth, Example, Folder, Request};
 use getman_core::runner::{self, RunEvent, RunOptions};
 use getman_core::script::{ChangeScope, VarChange};
 use getman_core::workspace::{EnvironmentFiles, LocalState};
@@ -71,6 +72,11 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/history", get(history))
         .route("/history/clear", post(clear_history))
         .route("/oauth2/token", post(oauth2_token))
+        .route("/examples", post(list_examples))
+        .route("/example/save", post(save_example))
+        .route("/example/body", post(example_body))
+        .route("/example/rename", post(rename_example))
+        .route("/example/delete", post(delete_example))
 }
 
 /// An error answered as `{"error": "..."}` with a fitting status.
@@ -185,7 +191,13 @@ async fn read_request(State(state): Shared, Json(arg): Json<PathArg>) -> ApiResu
 }
 
 async fn write_request(State(state): Shared, Json(arg): Json<WriteRequest>) -> ApiResult {
-    state.workspace().write_request(&arg.path, &arg.request)?;
+    let mut request = arg.request;
+    // Examples change through their own calls; the editor does not hold
+    // them, so keep the ones on disk.
+    if let Ok(saved) = state.workspace().read_request(&arg.path) {
+        request.examples = saved.examples;
+    }
+    state.workspace().write_request(&arg.path, &request)?;
     Ok(done())
 }
 
@@ -658,6 +670,69 @@ async fn delete_run(State(state): Shared, Json(arg): Json<RunId>) -> ApiResult {
 
 fn not_found(message: String) -> ApiError {
     ApiError(StatusCode::NOT_FOUND, message)
+}
+
+// ---- Examples -------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct SaveExample {
+    path: String,
+    example: Example,
+    /// The body, as `{"text": ...}` or `{"base64": ...}`.
+    #[serde(default)]
+    body: Payload,
+}
+
+#[derive(Deserialize)]
+struct ExampleName {
+    path: String,
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct RenameExample {
+    path: String,
+    from: String,
+    to: String,
+}
+
+fn examples_of(state: &AppState, path: &str) -> ApiResult {
+    Ok(Json(json!(state.workspace().read_request(path)?.examples)))
+}
+
+async fn list_examples(State(state): Shared, Json(arg): Json<PathArg>) -> ApiResult {
+    examples_of(&state, &arg.path)
+}
+
+async fn save_example(State(state): Shared, Json(arg): Json<SaveExample>) -> ApiResult {
+    let mut example = arg.example;
+    // Session cookies do not belong in a file that is committed.
+    example
+        .headers
+        .retain(|h| !h.name.eq_ignore_ascii_case("set-cookie"));
+    getman_core::examples::save(state.workspace(), &arg.path, example, &arg.body.0)?;
+    examples_of(&state, &arg.path)
+}
+
+async fn example_body(State(state): Shared, Json(arg): Json<ExampleName>) -> ApiResult {
+    let request = state.workspace().read_request(&arg.path)?;
+    let example = request
+        .examples
+        .iter()
+        .find(|e| e.name == arg.name)
+        .ok_or_else(|| Error::NotFound(format!("the example {:?}", arg.name)))?;
+    let body = getman_core::examples::body(state.workspace(), &arg.path, example)?;
+    Ok(Json(json!({ "body": Payload(body) })))
+}
+
+async fn rename_example(State(state): Shared, Json(arg): Json<RenameExample>) -> ApiResult {
+    getman_core::examples::rename(state.workspace(), &arg.path, &arg.from, &arg.to)?;
+    examples_of(&state, &arg.path)
+}
+
+async fn delete_example(State(state): Shared, Json(arg): Json<ExampleName>) -> ApiResult {
+    getman_core::examples::delete(state.workspace(), &arg.path, &arg.name)?;
+    examples_of(&state, &arg.path)
 }
 
 // ---- Import -------------------------------------------------------------------
