@@ -9,6 +9,7 @@ mod cli;
 mod commands;
 mod examples;
 mod report;
+mod runs;
 mod server;
 mod style;
 mod tui;

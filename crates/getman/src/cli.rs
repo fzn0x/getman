@@ -92,6 +92,7 @@ pub(crate) struct VarArgs {
 }
 
 #[derive(Debug, Args)]
+#[allow(clippy::struct_excessive_bools)]
 pub(crate) struct RunArgs {
     /// Folders or requests to run, as paths in the workspace or on disk.
     /// Several run one after another, in the order given. Runs the whole
@@ -135,6 +136,11 @@ pub(crate) struct RunArgs {
     /// as the UI does.
     #[arg(long)]
     pub(crate) persist: bool,
+
+    /// Keep the run in the workspace's git-ignored .getman folder, where
+    /// the browser UI's Runner lists past runs. The newest 20 are kept.
+    #[arg(long)]
+    pub(crate) save: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -325,10 +331,11 @@ mod tests {
         assert_eq!(args.vars.env.as_deref(), Some("staging"));
         assert_eq!(args.reporters[0].kind, ReporterKind::Junit);
 
-        let cli = Cli::try_parse_from(["getman", "run", "login.yaml", "orders"]).unwrap();
+        let cli = Cli::try_parse_from(["getman", "run", "login.yaml", "orders", "--save"]).unwrap();
         let Some(Command::Run(args)) = cli.command else {
             panic!()
         };
         assert_eq!(args.targets, ["login.yaml", "orders"]);
+        assert!(args.save);
     }
 }

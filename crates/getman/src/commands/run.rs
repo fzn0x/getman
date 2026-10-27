@@ -64,6 +64,9 @@ pub(crate) async fn run(args: RunArgs) -> Outcome {
         },
         ..Recorded::default()
     };
+    let mut stored = args.save.then(|| {
+        crate::runs::StoredRun::new(getman_core::dynamic::uuid_v4(), recorded.about.clone())
+    });
     let cancel = Arc::new(AtomicBool::new(false));
     {
         let cancel = Arc::clone(&cancel);
@@ -77,6 +80,9 @@ pub(crate) async fn run(args: RunArgs) -> Outcome {
     let report = runner::run(&executor, &options, &cancel, |event| {
         if show_cli {
             pretty.event(&event);
+        }
+        if let Some(stored) = &mut stored {
+            stored.record(&event);
         }
         recorded.record(event);
     })
@@ -113,6 +119,15 @@ pub(crate) async fn run(args: RunArgs) -> Outcome {
                     })
                     .map_err(|e| e.to_string())?;
             }
+        }
+    }
+
+    if let Some(stored) = &stored {
+        match crate::runs::save(&workspace, stored) {
+            Ok(()) => {
+                crate::style::note("Kept the run in .getman/runs; the Runner in the UI lists it");
+            }
+            Err(e) => crate::style::warn(&format!("the run could not be kept: {e}")),
         }
     }
 

@@ -77,8 +77,15 @@ pub(crate) struct About {
 impl About {
     /// What ran, in words.
     pub(crate) fn what(&self) -> String {
+        const SHOWN: usize = 3;
         if self.targets.iter().all(String::is_empty) {
             "every request in the workspace".to_owned()
+        } else if self.targets.len() > SHOWN + 1 {
+            format!(
+                "{} and {} more",
+                self.targets[..SHOWN].join(", "),
+                self.targets.len() - SHOWN
+            )
         } else {
             self.targets.join(", ")
         }

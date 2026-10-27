@@ -269,4 +269,115 @@ mod tests {
                 .contains("default-src 'self'")
         );
     }
+
+    /// A call to the API with the token, and JSON when a body is given.
+    pub(super) fn api(path: &str, body: Option<serde_json::Value>) -> HttpRequest<Body> {
+        let builder = HttpRequest::builder()
+            .method(if body.is_some() { "POST" } else { "GET" })
+            .uri(path)
+            .header("host", "127.0.0.1:7878")
+            .header("x-getman-token", "secret-token");
+        match body {
+            Some(body) => builder
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+            None => builder.body(Body::empty()).unwrap(),
+        }
+    }
+
+    pub(super) async fn read(response: Response) -> (StatusCode, serde_json::Value) {
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        (status, serde_json::from_slice(&bytes).unwrap_or_default())
+    }
+
+    #[tokio::test]
+    async fn runs_are_kept_and_give_reports() {
+        use getman_core::model::{Request, Scripts};
+        use serde_json::json;
+
+        let (dir, app) = app();
+        let workspace = Workspace::open(dir.path()).unwrap();
+        let skipped = Request {
+            url: "http://127.0.0.1:9/".into(),
+            scripts: Scripts {
+                pre_request: "gm.execution.skipRequest();".into(),
+                post_response: String::new(),
+            },
+            ..Request::default()
+        };
+        workspace.create_request("", "Skip me", &skipped).unwrap();
+        workspace.create_request("", "Me too", &skipped).unwrap();
+
+        let response = app
+            .clone()
+            .oneshot(api(
+                "/api/run",
+                Some(json!({ "targets": ["me-too.yaml", "skip-me.yaml"] })),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let id = response.headers()["x-run-id"].to_str().unwrap().to_owned();
+        let lines = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(String::from_utf8_lossy(&lines).contains("\"finish\""));
+
+        let (_, list) = read(app.clone().oneshot(api("/api/runs", None)).await.unwrap()).await;
+        assert_eq!(list[0]["id"], id.as_str());
+        assert_eq!(list[0]["requests"], 2);
+        let (_, run) = read(
+            app.clone()
+                .oneshot(api("/api/runs/read", Some(json!({ "id": id }))))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(run["results"][0]["execution"]["name"], "Me too");
+        assert_eq!(run["items"][1]["path"], "skip-me.yaml");
+
+        let response = app
+            .clone()
+            .oneshot(api(
+                "/api/runs/report",
+                Some(json!({ "id": id, "format": "csv" })),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            response.headers()["content-disposition"]
+                .to_str()
+                .unwrap()
+                .ends_with(".csv\"")
+        );
+        let csv = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(String::from_utf8_lossy(&csv).contains(",skipped,"));
+
+        let (status, _) = read(
+            app.clone()
+                .oneshot(api(
+                    "/api/runs/report",
+                    Some(json!({ "id": id, "format": "pdf" })),
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        let (status, _) = read(
+            app.clone()
+                .oneshot(api("/api/runs/read", Some(json!({ "id": "../x" }))))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
 }

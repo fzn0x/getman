@@ -24,6 +24,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::AppState;
+use crate::report::{About, Format};
+use crate::runs::{self, StoredRun};
 
 type Shared = State<Arc<AppState>>;
 
@@ -57,6 +59,10 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/dynamic", get(dynamic))
         .route("/run", post(run))
         .route("/run/cancel", post(cancel_run))
+        .route("/runs", get(list_runs))
+        .route("/runs/read", post(read_run))
+        .route("/runs/report", post(run_report))
+        .route("/runs/delete", post(delete_run))
         .route("/import", post(import))
         .route("/parse-curl", post(parse_curl))
         .route("/cookies", get(cookies))
@@ -506,6 +512,22 @@ async fn run(State(state): Shared, Json(arg): Json<RunArg>) -> ApiResult<Respons
     runner::planned(&state.workspace().tree()?, &options)?;
 
     let id = getman_core::dynamic::uuid_v4();
+    let about = About {
+        workspace: state.workspace().name(),
+        targets: if options.targets.is_empty() {
+            vec![options.target.clone()]
+        } else {
+            options.targets.clone()
+        },
+        environment: environment.as_ref().map(|id| {
+            state
+                .workspace()
+                .read_environment(id)
+                .map_or_else(|_| id.clone(), |files| files.shared.name)
+        }),
+        started: getman_core::time::now_millis(),
+    };
+    let mut stored = StoredRun::new(id.clone(), about);
     let cancel = Arc::new(AtomicBool::new(false));
     state
         .runs
@@ -524,8 +546,14 @@ async fn run(State(state): Shared, Json(arg): Json<RunArg>) -> ApiResult<Respons
         };
         let result = runner::run(&task_state.executor, &options, &cancel, |event| {
             send(&event);
+            stored.record(&event);
         })
         .await;
+        if result.is_ok()
+            && let Err(e) = runs::save(task_state.workspace(), &stored)
+        {
+            crate::style::warn(&format!("the run could not be kept: {e}"));
+        }
         match result {
             Ok(report) if arg.persist => {
                 let overlay = &report.overlay;
@@ -579,6 +607,57 @@ async fn cancel_run(State(state): Shared, Json(arg): Json<RunId>) -> ApiResult {
         cancel.store(true, Ordering::Relaxed);
     }
     Ok(done())
+}
+
+// ---- Past runs ------------------------------------------------------------------
+
+async fn list_runs(State(state): Shared) -> Json<Value> {
+    Json(json!(runs::list(state.workspace())))
+}
+
+async fn read_run(State(state): Shared, Json(arg): Json<RunId>) -> ApiResult {
+    let run = runs::read(state.workspace(), &arg.id).map_err(not_found)?;
+    Ok(Json(json!(run)))
+}
+
+#[derive(Deserialize)]
+struct ReportArg {
+    id: String,
+    format: String,
+}
+
+/// A past run's report as a file to download.
+async fn run_report(State(state): Shared, Json(arg): Json<ReportArg>) -> ApiResult<Response> {
+    let format = Format::from_name(&arg.format).ok_or_else(|| {
+        bad(format!(
+            "{:?} is not a report format; use one of {}",
+            arg.format,
+            Format::ALL.map(Format::name).join(", ")
+        ))
+    })?;
+    let run = runs::read(state.workspace(), &arg.id).map_err(not_found)?;
+    let bytes = format
+        .render(&run.recorded())
+        .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    let name = runs::report_name(&run, format.extension());
+    Ok(Response::builder()
+        .header(header::CONTENT_TYPE, format.content_type())
+        .header(
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{name}\""),
+        )
+        .header(header::CACHE_CONTROL, "no-store")
+        .body(Body::from(bytes))
+        .unwrap_or_default())
+}
+
+async fn delete_run(State(state): Shared, Json(arg): Json<RunId>) -> ApiResult {
+    runs::delete(state.workspace(), &arg.id).map_err(bad)?;
+    Ok(done())
+}
+
+fn not_found(message: String) -> ApiError {
+    ApiError(StatusCode::NOT_FOUND, message)
 }
 
 // ---- Import -------------------------------------------------------------------
