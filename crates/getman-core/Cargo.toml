@@ -19,11 +19,14 @@ hmac = "0.13"
 indexmap = { version = "2", features = ["serde"] }
 md-5 = "0.11"
 mime_guess = "2"
+p256 = "0.14"
+p384 = "0.14"
 percent-encoding = "2"
 regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "cookies", "gzip", "brotli", "deflate", "multipart", "system-proxy", "socks", "stream"] }
 reqwest_cookie_store = "0.10"
 rquickjs = "0.14"
+rsa = { version = "=0.10.0-rc.19", features = ["getrandom"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
