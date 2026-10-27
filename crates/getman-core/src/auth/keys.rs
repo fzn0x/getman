@@ -7,6 +7,7 @@ use rsa::RsaPrivateKey;
 use rsa::pkcs1::DecodeRsaPrivateKey as _;
 use rsa::pkcs8::DecodePrivateKey as _;
 use rsa::signature::{SignatureEncoding as _, Signer as _};
+use sha1::Sha1;
 use sha2::{Sha256, Sha384, Sha512};
 
 use crate::error::{Error, Result};
@@ -36,6 +37,8 @@ impl PrivateKey {
 /// A way of signing with a private key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Scheme {
+    /// RSA PKCS#1 v1.5 with SHA-1, for OAuth 1.0a's RSA-SHA1 only.
+    RsaSha1,
     /// RSA PKCS#1 v1.5 with SHA-256.
     RsaSha256,
     /// RSA PKCS#1 v1.5 with SHA-384.
@@ -142,6 +145,9 @@ pub(super) fn sign(key: &PrivateKey, scheme: Scheme, message: &[u8]) -> Result<V
         (_, PrivateKey::Rsa(rsa)) => {
             let rsa = rsa.as_ref().clone();
             let signature = match scheme {
+                Scheme::RsaSha1 => Pkcs1::<Sha1>::new(rsa)
+                    .try_sign(message)
+                    .map(|s| s.to_vec()),
                 Scheme::RsaSha256 => Pkcs1::<Sha256>::new(rsa)
                     .try_sign(message)
                     .map(|s| s.to_vec()),
@@ -186,6 +192,8 @@ pub(super) mod tests {
             PrivateKey::Rsa(rsa) => {
                 let public = rsa.to_public_key();
                 let ok = match scheme {
+                    Scheme::RsaSha1 => rsa::pkcs1v15::VerifyingKey::<Sha1>::new(public)
+                        .verify(message, &signature.try_into().unwrap()),
                     Scheme::RsaSha256 => rsa::pkcs1v15::VerifyingKey::<Sha256>::new(public)
                         .verify(message, &signature.try_into().unwrap()),
                     Scheme::RsaSha512 => rsa::pkcs1v15::VerifyingKey::<Sha512>::new(public)
@@ -239,6 +247,7 @@ pub(super) mod tests {
     fn signatures_verify_and_keys_must_fit() {
         let rsa = parse(RSA_PKCS1).unwrap();
         for scheme in [
+            Scheme::RsaSha1,
             Scheme::RsaSha256,
             Scheme::RsaSha512,
             Scheme::PssSha256,

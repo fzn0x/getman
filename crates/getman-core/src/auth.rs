@@ -5,6 +5,7 @@
 
 mod jwt;
 mod keys;
+mod oauth1;
 mod sigv4;
 
 use std::borrow::Cow;
@@ -53,6 +54,9 @@ pub(crate) fn sign(
         Auth::Asap(settings) => {
             jwt::apply_asap(&jwt::render_asap(settings, render), outgoing, root, now)
         }
+        Auth::Oauth1(settings) => {
+            oauth1::apply(&oauth1::render(settings, render), outgoing, root, now)
+        }
         _ => Ok(()),
     }
 }
@@ -79,6 +83,14 @@ fn hmac<M: Mac + KeyInit>(key: &[u8], data: &[u8]) -> Vec<u8> {
 
 fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
     hmac::<Hmac<Sha256>>(key, data)
+}
+
+/// `N` bytes from the operating system's random generator.
+fn random_bytes<const N: usize>() -> Result<[u8; N]> {
+    let mut bytes = [0_u8; N];
+    getrandom::fill(&mut bytes)
+        .map_err(|e| Error::Http(format!("Could not get random bytes from the system: {e}")))?;
+    Ok(bytes)
 }
 
 /// Seconds since the Unix epoch.

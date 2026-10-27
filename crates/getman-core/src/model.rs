@@ -269,6 +269,8 @@ pub enum Auth {
     Jwt(Jwt),
     /// Atlassian ASAP: a short-lived JWT signed with a private key.
     Asap(Asap),
+    /// OAuth 1.0a, signed when the request is sent.
+    Oauth1(OAuth1),
 }
 
 impl Auth {
@@ -510,6 +512,135 @@ pub struct Asap {
     /// Seconds the token is valid. Default 3600.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expires_in: Option<u64>,
+}
+
+/// OAuth 1.0a settings.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OAuth1 {
+    /// How the request is signed. Default `HMAC-SHA1`.
+    #[serde(skip_serializing_if = "OAuth1Method::is_default")]
+    pub signature_method: OAuth1Method,
+    /// Consumer key.
+    #[serde(deserialize_with = "lenient::string")]
+    pub consumer_key: String,
+    /// Consumer secret, for the HMAC and PLAINTEXT methods.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub consumer_secret: String,
+    /// Access token.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub token: String,
+    /// Token secret.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub token_secret: String,
+    /// PEM private key for the RSA methods, usually a `{{variable}}`.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub private_key: String,
+    /// A PEM private key file in the workspace, used instead of
+    /// `private_key`.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub private_key_file: String,
+    /// `realm`, sent in the header only.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub realm: String,
+    /// `oauth_callback`, when asking for a request token.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub callback: String,
+    /// `oauth_verifier`, when exchanging a request token.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub verifier: String,
+    /// `oauth_version`. `1.0` when empty.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub version: String,
+    /// A fixed `oauth_timestamp`, instead of the current time.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub timestamp: String,
+    /// A fixed `oauth_nonce`, instead of a random one.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub nonce: String,
+    /// Sign the body with `oauth_body_hash`, for bodies that are not forms.
+    #[serde(skip_serializing_if = "is_false")]
+    pub body_hash: bool,
+    /// Where the parameters go.
+    #[serde(rename = "in", skip_serializing_if = "OAuth1Location::is_default")]
+    pub location: OAuth1Location,
+}
+
+/// An OAuth 1.0a signature method.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OAuth1Method {
+    /// HMAC with SHA-1.
+    #[default]
+    #[serde(rename = "HMAC-SHA1")]
+    HmacSha1,
+    /// HMAC with SHA-256.
+    #[serde(rename = "HMAC-SHA256")]
+    HmacSha256,
+    /// HMAC with SHA-512.
+    #[serde(rename = "HMAC-SHA512")]
+    HmacSha512,
+    /// The secrets themselves, for use over TLS only.
+    #[serde(rename = "PLAINTEXT")]
+    Plaintext,
+    /// RSA with SHA-1.
+    #[serde(rename = "RSA-SHA1")]
+    RsaSha1,
+    /// RSA with SHA-256.
+    #[serde(rename = "RSA-SHA256")]
+    RsaSha256,
+    /// RSA with SHA-512.
+    #[serde(rename = "RSA-SHA512")]
+    RsaSha512,
+}
+
+impl OAuth1Method {
+    /// Whether this is the default, `HMAC-SHA1`.
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// Where OAuth 1.0a parameters go.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OAuth1Location {
+    /// The `Authorization` header.
+    #[default]
+    Header,
+    /// The query string.
+    Query,
+    /// A URL-encoded form body.
+    Body,
+}
+
+impl OAuth1Location {
+    /// Whether this is the default, the header.
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 /// JavaScript run around a request.
