@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { api } from "../lib/api";
   import { ago, methodClass } from "../lib/format";
   import { rank } from "../lib/fuzzy";
@@ -36,6 +37,22 @@
       filterInput?.focus();
       filterInput?.select();
     }
+  });
+
+  let revealed = signals.reveal;
+  $effect(() => {
+    if (signals.reveal === revealed) return;
+    revealed = signals.reveal;
+    view = "requests";
+    filter = "";
+    const path = signals.revealPath;
+    void tick().then(() => {
+      const row = [...document.querySelectorAll<HTMLElement>(".sidebar [data-row]")].find(
+        (element) => element.dataset.path === path,
+      );
+      row?.scrollIntoView({ block: "nearest" });
+      row?.focus();
+    });
   });
 
   const matches = $derived(

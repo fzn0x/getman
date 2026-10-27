@@ -1,8 +1,30 @@
 <script lang="ts">
   import { overflowFade } from "../lib/actions";
+  import { copyText } from "../lib/clipboard";
   import { methodClass, methodShort } from "../lib/format";
-  import { closeTab, isDirty, newRequest, selectTab, tabs, tabTitle } from "../lib/store.svelte";
+  import { keyLabel } from "../lib/keys";
+  import {
+    closedTabs,
+    closeTab,
+    closeTabsFrom,
+    duplicateTab,
+    isDirty,
+    moveTab,
+    newRequest,
+    reopenClosedTab,
+    revealInTree,
+    selectTab,
+    tabs,
+    tabTitle,
+    type Tab,
+  } from "../lib/store.svelte";
   import Icon from "./Icon.svelte";
+  import Menu, { type MenuItem } from "./Menu.svelte";
+
+  const DRAG = "application/x-getman-tab";
+  let menu = $state<{ x: number; y: number; items: (MenuItem | "separator")[] } | null>(null);
+  let dragging = $state("");
+  let drop = $state<{ id: string; side: "before" | "after" } | null>(null);
 
   // A tab opened or chosen from elsewhere may sit past the edge of a
   // strip that overflows, so bring it into view.
@@ -13,19 +35,115 @@
       ?.parentElement?.scrollIntoView({ block: "nearest", inline: "nearest" });
   });
 
-  function onKeydown(event: KeyboardEvent, id: string): void {
-    const at = tabs.list.findIndex((tab) => tab.id === id);
+  function pathOf(tab: Tab): string | null {
+    return tab.kind === "request" || tab.kind === "folder" ? tab.path : null;
+  }
+
+  function itemsFor(tab: Tab): (MenuItem | "separator")[] {
+    const at = tabs.list.indexOf(tab);
+    const path = pathOf(tab);
+    return [
+      {
+        label: "Close",
+        icon: "close",
+        hint: keyLabel("alt+w").join(" "),
+        action: () => closeTab(tab.id),
+      },
+      {
+        label: "Close others",
+        disabled: tabs.list.length < 2,
+        action: () => closeTabsFrom(tab.id, "others"),
+      },
+      {
+        label: "Close to the right",
+        disabled: at === tabs.list.length - 1,
+        action: () => closeTabsFrom(tab.id, "right"),
+      },
+      { label: "Close all", action: () => closeTabsFrom(tab.id, "all") },
+      {
+        label: "Reopen closed tab",
+        hint: keyLabel("alt+shift+t").join(" "),
+        disabled: closedTabs.list.length === 0,
+        action: () => void reopenClosedTab(),
+      },
+      "separator",
+      {
+        label: "Duplicate",
+        icon: "copy",
+        disabled: tab.kind !== "request",
+        action: () => duplicateTab(tab.id),
+      },
+      {
+        label: "Reveal in sidebar",
+        icon: "sidebar",
+        disabled: !path,
+        action: () => path && revealInTree(path),
+      },
+      {
+        label: "Copy path",
+        disabled: !path,
+        action: () => path && void copyText(path, "Path copied"),
+      },
+    ];
+  }
+
+  function openMenu(tab: Tab, x: number, y: number): void {
+    menu = { x, y, items: itemsFor(tab) };
+  }
+
+  function onKeydown(event: KeyboardEvent, tab: Tab): void {
+    const at = tabs.list.indexOf(tab);
     if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
       event.preventDefault();
-      const next = tabs.list[at + (event.key === "ArrowRight" ? 1 : -1)];
+      const step = event.key === "ArrowRight" ? 1 : -1;
+      if (event.shiftKey) {
+        // Shift moves the tab itself.
+        moveTab(tab.id, Math.max(0, at + step));
+        requestAnimationFrame(() => document.getElementById(`tab-${tab.id}`)?.focus());
+        return;
+      }
+      const next = tabs.list[at + step];
       if (next) {
         selectTab(next.id);
         document.getElementById(`tab-${next.id}`)?.focus();
       }
     } else if (event.key === "Delete") {
       event.preventDefault();
-      closeTab(id);
+      closeTab(tab.id);
+    } else if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+      event.preventDefault();
+      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+      openMenu(tab, rect.left + 8, rect.bottom);
     }
+  }
+
+  function onDragStart(event: DragEvent, tab: Tab): void {
+    if (!event.dataTransfer) return;
+    event.dataTransfer.setData(DRAG, tab.id);
+    event.dataTransfer.effectAllowed = "move";
+    dragging = tab.id;
+  }
+
+  function onDragOver(event: DragEvent, tab: Tab): void {
+    if (!event.dataTransfer?.types.includes(DRAG)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const side = event.clientX < rect.left + rect.width / 2 ? "before" : "after";
+    drop = { id: tab.id, side };
+  }
+
+  function onDrop(event: DragEvent, tab: Tab): void {
+    event.preventDefault();
+    const id = event.dataTransfer?.getData(DRAG);
+    const side = drop?.side ?? "before";
+    drop = null;
+    dragging = "";
+    if (!id || id === tab.id) return;
+    const from = tabs.list.findIndex((t) => t.id === id);
+    let to = tabs.list.indexOf(tab) + (side === "after" ? 1 : 0);
+    if (from < to) to--;
+    moveTab(id, to);
   }
 </script>
 
@@ -33,7 +151,29 @@
   <div class="list" role="tablist" aria-label="Open tabs" use:overflowFade>
     {#each tabs.list as tab (tab.id)}
       {@const dirty = isDirty(tab)}
-      <div class="item" class:active={tab.id === tabs.active}>
+      <div
+        class="item"
+        class:active={tab.id === tabs.active}
+        class:lifted={dragging === tab.id}
+        class:drop-before={drop?.id === tab.id && drop.side === "before"}
+        class:drop-after={drop?.id === tab.id && drop.side === "after"}
+        role="presentation"
+        draggable="true"
+        ondragstart={(event) => onDragStart(event, tab)}
+        ondragover={(event) => onDragOver(event, tab)}
+        ondragleave={() => {
+          if (drop?.id === tab.id) drop = null;
+        }}
+        ondrop={(event) => onDrop(event, tab)}
+        ondragend={() => {
+          dragging = "";
+          drop = null;
+        }}
+        oncontextmenu={(event) => {
+          event.preventDefault();
+          openMenu(tab, event.clientX, event.clientY);
+        }}
+      >
         <button
           id="tab-{tab.id}"
           class="open"
@@ -45,7 +185,7 @@
           onauxclick={(event) => {
             if (event.button === 1) closeTab(tab.id);
           }}
-          onkeydown={(event) => onKeydown(event, tab.id)}
+          onkeydown={(event) => onKeydown(event, tab)}
         >
           {#if tab.kind === "request"}
             <span class="method {methodClass(tab.draft.method)}"
@@ -85,6 +225,16 @@
     <Icon name="plus" />
   </button>
 </div>
+
+{#if menu}
+  <Menu
+    items={menu.items}
+    x={menu.x}
+    y={menu.y}
+    label="Tab actions"
+    onClose={() => (menu = null)}
+  />
+{/if}
 
 <style>
   .strip {
@@ -140,6 +290,20 @@
     bottom: -1px;
     height: 1px;
     background: var(--paper);
+  }
+
+  .item.lifted {
+    opacity: 0.45;
+  }
+
+  /* Where a dragged tab lands: a 2px red line, as between tree rows. */
+  .item.drop-before,
+  .item.drop-after {
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+
+  .item.drop-after {
+    box-shadow: inset -2px 0 0 var(--accent);
   }
 
   .open {

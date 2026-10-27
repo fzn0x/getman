@@ -103,6 +103,7 @@
     class:broken={node.kind === "request" && node.error}
     style:--depth={depth}
     data-row
+    data-path={node.path}
     tabindex="0"
     role="treeitem"
     aria-level={depth + 1}
