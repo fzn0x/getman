@@ -1,8 +1,10 @@
 # Security and privacy
 
-Getman has no account, no cloud and no telemetry. It does not check for
-updates or send anything anywhere except the requests you send. Your
-requests, responses, tokens and history stay in files on your machine.
+Getman has no account, no cloud and no telemetry. It sends nothing
+anywhere except the requests you send, with one exception you can turn
+off: the [desktop app](desktop.md) looks for a new version once a day.
+Your requests, responses, tokens and history stay in files on your
+machine.
 
 ## The local server
 
@@ -26,6 +28,26 @@ Getman's server defends itself against them:
 
 If you open the address without its token, the UI asks you to use the link
 the terminal printed.
+
+## The desktop app
+
+The [desktop app](desktop.md) runs the same server, with the same checks,
+inside its own process, and opens its window on the address with the
+token. Only that page may call the app's own functions (the folder
+picker, updates, restart); links that lead elsewhere open in your browser,
+not in the window.
+
+**The update check is the only request the app makes on its own.** Once a
+day it downloads `latest.json` from the newest release on GitHub, which
+names the newest version and its files; GitHub sees your IP address and
+an app user agent, as for any download, and nothing else is sent. To
+stop it, untick **Check for updates automatically** in
+**Settings › About**. Copies that cannot update themselves (development
+builds, the .deb and .rpm packages, the portable zip) never check.
+
+Updates are signed when they are released, with a key kept out of the
+repository, and the app installs a download only if its signature
+matches the public key built into it.
 
 ## Files
 
