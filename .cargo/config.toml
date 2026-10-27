@@ -1,0 +1,7 @@
+# reqwest keeps HTTP/3 behind an unstable cfg. Builds from this repository
+# turn it on here; a build without it still works, without HTTP/3.
+#
+# A RUSTFLAGS or CARGO_ENCODED_RUSTFLAGS environment variable replaces
+# these flags, so add `--cfg reqwest_unstable` to it if you set one.
+[build]
+rustflags = ["--cfg", "reqwest_unstable"]
