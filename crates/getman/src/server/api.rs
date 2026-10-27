@@ -66,6 +66,7 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/cookies/delete", post(delete_cookie))
         .route("/cookies/clear", post(clear_cookies))
         .route("/history", get(history))
+        .route("/history/read", post(read_history))
         .route("/history/clear", post(clear_history))
         .route("/oauth2/token", post(oauth2_token))
 }
@@ -667,6 +668,25 @@ async fn clear_cookies(State(state): Shared) -> ApiResult {
 
 async fn history(State(state): Shared) -> Json<Value> {
     Json(json!(state.history.list()))
+}
+
+#[derive(Deserialize)]
+struct HistoryId {
+    id: String,
+}
+
+/// An entry with the response kept with it.
+async fn read_history(State(state): Shared, Json(arg): Json<HistoryId>) -> ApiResult {
+    let (entry, stored) = state
+        .history
+        .read(&arg.id)
+        .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "That history entry is gone.".into()))?;
+    let mut value = json!(entry);
+    value["response"] = stored
+        .as_ref()
+        .map_or(Value::Null, |stored| json!(stored.response));
+    value["body_cut"] = json!(stored.is_some_and(|stored| stored.body_cut));
+    Ok(Json(value))
 }
 
 async fn clear_history(State(state): Shared) -> ApiResult {
