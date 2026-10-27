@@ -1,0 +1,22 @@
+meta {
+  name: Upload
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/upload
+  body: multipartForm
+  auth: apikey
+}
+
+auth:apikey {
+  key: key
+  value: {{apiKey}}
+  placement: queryparams
+}
+
+body:multipart-form {
+  photo: @file(files/cat.png) @contentType(image/png)
+  ~caption: Tom
+}

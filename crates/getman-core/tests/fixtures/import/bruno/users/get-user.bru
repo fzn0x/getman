@@ -1,0 +1,57 @@
+meta {
+  name: Get user
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/users/:id?page=1&verbose=true
+  body: none
+  auth: inherit
+}
+
+params:query {
+  page: 1
+  ~verbose: true
+}
+
+params:path {
+  id: 7
+}
+
+headers {
+  Accept: application/json
+}
+
+vars:pre-request {
+  userId: 7
+}
+
+vars:post-response {
+  userName: res.body.name
+}
+
+assert {
+  res.status: eq 200
+  res.body.name: isString
+  res.headers["content-type"]: contains json
+  res.body.items: length 3
+  res.body.active: isTruthy
+  ~res.body.skip: eq 1
+}
+
+script:pre-request {
+  bru.setVar("started", Date.now());
+}
+
+tests {
+  test("ok", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}
+
+docs {
+  # Get user
+
+  Fetches one user.
+}

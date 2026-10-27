@@ -1,0 +1,22 @@
+meta {
+  name: Create user
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/users
+  body: json
+  auth: inherit
+}
+
+headers {
+  X-Trace: {{process.env.TRACE_ID}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Ada"
+  }
+}

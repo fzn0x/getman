@@ -4,8 +4,9 @@
 //! requests and environments in memory, with a warning for each thing
 //! that could not be carried over. [`save`] then writes it into the
 //! workspace. [`detect`] tells the formats apart by their content, so
-//! [`import_text`] takes any of them.
+//! [`import_text`] and [`import_files`] take any of them.
 
+pub mod bruno;
 pub mod curl;
 pub mod har;
 pub mod hoppscotch;
@@ -41,6 +42,8 @@ pub enum Format {
     Insomnia,
     /// Hoppscotch collections or environments.
     Hoppscotch,
+    /// A Bruno collection: a folder of `.bru` files, or one of them.
+    Bruno,
 }
 
 impl Format {
@@ -54,6 +57,7 @@ impl Format {
             Self::Har => "HAR file",
             Self::Insomnia => "Insomnia export",
             Self::Hoppscotch => "Hoppscotch export",
+            Self::Bruno => "Bruno collection",
         }
     }
 }
@@ -128,11 +132,23 @@ pub struct NewEnvironment {
     pub secrets: Vec<String>,
 }
 
+/// A file of a folder being imported, such as a Bruno collection.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+pub struct SourceFile {
+    /// Path of the file inside the folder, with `/` separators.
+    pub path: String,
+    /// The file's text.
+    pub text: String,
+}
+
 /// Tells which format `text` is in. `name` is the file name, if known.
-pub fn detect(_name: &str, text: &str) -> Option<Format> {
+pub fn detect(name: &str, text: &str) -> Option<Format> {
     let trimmed = text.trim_start_matches('\u{feff}').trim_start();
     if trimmed.starts_with("curl ") || trimmed.starts_with("curl\n") || trimmed == "curl" {
         return Some(Format::Curl);
+    }
+    if has_extension(name, "bru") || bruno::looks_like_bru(trimmed) {
+        return Some(Format::Bruno);
     }
     let value = parse_document(trimmed).ok()?;
     detect_value(&value)
@@ -192,7 +208,7 @@ pub fn import_text(
             .map(|e| format!(" ({e})"))
             .unwrap_or_default();
         return Err(Error::Invalid(format!(
-            "this is not a format Getman imports{reason}; use a Postman, Insomnia or Hoppscotch export, an OpenAPI or Swagger document, a HAR file or a cURL command"
+            "this is not a format Getman imports{reason}; use a Postman, Insomnia or Hoppscotch export, an OpenAPI or Swagger document, a HAR file, a Bruno collection or a cURL command"
         )));
     };
     let import = match format {
@@ -209,12 +225,93 @@ pub fn import_text(
             });
         }
         Format::Postman => return postman::import(workspace, parent, text, into_root),
+        Format::Bruno => {
+            let file = SourceFile {
+                path: if name.is_empty() {
+                    "request.bru".into()
+                } else {
+                    name.to_owned()
+                },
+                text: text.to_owned(),
+            };
+            bruno::parse(&[file])?
+        }
         Format::Openapi | Format::Swagger => openapi::parse(&parse_document(text)?)?,
         Format::Har => har::parse(&parse_document(text)?)?,
         Format::Insomnia => insomnia::parse(&parse_document(text)?)?,
         Format::Hoppscotch => hoppscotch::parse(&parse_document(text)?)?,
     };
     save(workspace, parent, import, into_root, format)
+}
+
+/// Imports several files at once. A folder holding `.bru` files or a
+/// `bruno.json` is one Bruno collection; anything else is imported file
+/// by file.
+pub fn import_files(
+    workspace: &Workspace,
+    parent: &str,
+    files: &[SourceFile],
+    into_root: bool,
+) -> Result<Vec<ImportReport>> {
+    let files: Vec<SourceFile> = strip_common_folder(files);
+    let is_bruno = files.iter().any(|f| {
+        let lower = f.path.to_ascii_lowercase();
+        lower == "bruno.json" || has_extension(&lower, "bru")
+    });
+    if is_bruno {
+        let import = bruno::parse(&files)?;
+        return Ok(vec![save(
+            workspace,
+            parent,
+            import,
+            into_root,
+            Format::Bruno,
+        )?]);
+    }
+    let mut reports = Vec::new();
+    for file in &files {
+        let report = import_text(workspace, parent, &file.path, &file.text, into_root)
+            .map_err(|e| Error::Invalid(format!("{}: {e}", file.path)))?;
+        reports.push(report);
+    }
+    if reports.is_empty() {
+        return Err(Error::Invalid("there are no files to import".into()));
+    }
+    Ok(reports)
+}
+
+/// Drops the folder every path starts with, as a browser's folder upload
+/// adds the folder's own name in front.
+fn strip_common_folder(files: &[SourceFile]) -> Vec<SourceFile> {
+    let normalized: Vec<SourceFile> = files
+        .iter()
+        .map(|f| SourceFile {
+            path: f
+                .path
+                .replace('\\', "/")
+                .trim_start_matches("./")
+                .to_owned(),
+            text: f.text.clone(),
+        })
+        .collect();
+    let first = normalized
+        .first()
+        .and_then(|f| f.path.split_once('/'))
+        .map(|(head, _)| format!("{head}/"));
+    let Some(prefix) = first else {
+        return normalized;
+    };
+    if normalized.iter().all(|f| f.path.starts_with(&prefix)) {
+        normalized
+            .into_iter()
+            .map(|f| SourceFile {
+                path: f.path[prefix.len()..].to_owned(),
+                text: f.text,
+            })
+            .collect()
+    } else {
+        normalized
+    }
 }
 
 /// Writes what was read into the workspace.
@@ -564,6 +661,13 @@ pub(crate) fn with_query(base: &str, params: &[KeyValue]) -> String {
     format!("{base}{separator}{}", enabled.join("&"))
 }
 
+/// Whether a file name ends with `.extension`, in any case.
+pub(crate) fn has_extension(name: &str, extension: &str) -> bool {
+    std::path::Path::new(name)
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case(extension))
+}
+
 /// Adds a warning once.
 pub(crate) fn warn_once(warnings: &mut Vec<String>, warning: String) {
     if !warnings.contains(&warning) {
@@ -625,6 +729,12 @@ mod tests {
                 "",
                 r#"[{"name": "env", "variables": [{"key": "a", "value": "1"}]}]"#,
                 Some(Format::Hoppscotch),
+            ),
+            ("get.bru", "meta {\n  name: x\n}\n", Some(Format::Bruno)),
+            (
+                "",
+                "meta {\n  name: x\n  type: http\n}\n\nget {\n  url: x\n}\n",
+                Some(Format::Bruno),
             ),
             ("", "{\"just\": \"json\"}", None),
             ("", "hello", None),
@@ -701,6 +811,23 @@ mod tests {
         let env = ws.read_environment("live").unwrap();
         assert_eq!(env.shared.variables["token"], "");
         assert_eq!(env.local["token"], "s3cret");
+    }
+
+    #[test]
+    fn a_folder_upload_loses_its_own_name() {
+        let files = vec![
+            SourceFile {
+                path: "api/bruno.json".into(),
+                text: String::new(),
+            },
+            SourceFile {
+                path: "api\\users\\get.bru".into(),
+                text: String::new(),
+            },
+        ];
+        let stripped = strip_common_folder(&files);
+        assert_eq!(stripped[0].path, "bruno.json");
+        assert_eq!(stripped[1].path, "users/get.bru");
     }
 
     #[test]
