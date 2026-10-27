@@ -6,6 +6,7 @@
   import Editor from "../Editor.svelte";
   import Icon from "../Icon.svelte";
   import KeyValueTable from "./KeyValueTable.svelte";
+  import VarInput from "./VarInput.svelte";
 
   let { body = $bindable() }: { body: Body } = $props();
 
@@ -166,12 +167,12 @@
                     oninput={(event) => setField(i, { file: event.currentTarget.value })}
                   />
                 {:else}
-                  <input
-                    class="input mono"
+                  <VarInput
                     value={field.value ?? ""}
+                    onValue={(value) => setField(i, { value })}
                     placeholder="value"
-                    aria-label="Value of {field.name || 'field'}"
-                    oninput={(event) => setField(i, { value: event.currentTarget.value })}
+                    label="Value of {field.name || 'field'}"
+                    off={field.enabled === false}
                   />
                 {/if}
               </span>

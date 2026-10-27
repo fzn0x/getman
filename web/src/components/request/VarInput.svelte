@@ -177,7 +177,7 @@
   const info = $derived(tip ? describeVariable(tip.name) : null);
 </script>
 
-<span class="var-input" class:marked>
+<span class="var-input" class:marked class:off>
   {#if marked}
     <span class="mirror mono" class:off aria-hidden="true" bind:this={mirror}
       >{#each parts as part (part.from)}{#if part.name !== undefined}<span
@@ -314,6 +314,12 @@
   .var-input input {
     position: relative;
     width: 100%;
+  }
+
+  .var-input.off input {
+    color: var(--ink-3);
+    text-decoration: line-through;
+    text-decoration-color: var(--t4);
   }
 
   /* The input keeps the caret and the selection; the copy behind shows the
