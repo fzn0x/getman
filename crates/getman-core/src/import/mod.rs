@@ -677,6 +677,8 @@ pub(crate) fn warn_once(warnings: &mut Vec<String>, warning: String) {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::Map;
+
     use super::*;
 
     fn workspace() -> (tempfile::TempDir, Workspace) {
@@ -828,6 +830,194 @@ mod tests {
         let stripped = strip_common_folder(&files);
         assert_eq!(stripped[0].path, "bruno.json");
         assert_eq!(stripped[1].path, "users/get.bru");
+    }
+
+    const FIXTURES: &[(&str, &str)] = &[
+        (
+            "petstore-openapi-3.1.yaml",
+            include_str!("../../tests/fixtures/import/petstore-openapi-3.1.yaml"),
+        ),
+        (
+            "petstore-swagger-2.0.json",
+            include_str!("../../tests/fixtures/import/petstore-swagger-2.0.json"),
+        ),
+        (
+            "browser.har",
+            include_str!("../../tests/fixtures/import/browser.har"),
+        ),
+        (
+            "insomnia-v4.json",
+            include_str!("../../tests/fixtures/import/insomnia-v4.json"),
+        ),
+        (
+            "insomnia-v5.yaml",
+            include_str!("../../tests/fixtures/import/insomnia-v5.yaml"),
+        ),
+        (
+            "hoppscotch-collection.json",
+            include_str!("../../tests/fixtures/import/hoppscotch-collection.json"),
+        ),
+        (
+            "hoppscotch-environments.json",
+            include_str!("../../tests/fixtures/import/hoppscotch-environments.json"),
+        ),
+        (
+            "get-user.bru",
+            include_str!("../../tests/fixtures/import/bruno/users/get-user.bru"),
+        ),
+    ];
+
+    /// Runs the parser for a format directly, without writing anything.
+    fn parse_as(format: Format, name: &str, text: &str) -> Result<Import> {
+        let document = || parse_document(text);
+        match format {
+            Format::Openapi | Format::Swagger => openapi::parse(&document()?),
+            Format::Har => har::parse(&document()?),
+            Format::Insomnia => insomnia::parse(&document()?),
+            Format::Hoppscotch => hoppscotch::parse(&document()?),
+            Format::Bruno => bruno::parse(&[SourceFile {
+                path: name.into(),
+                text: text.into(),
+            }]),
+            Format::Curl | Format::Postman => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn every_fixture_imports_into_a_workspace() {
+        for (name, text) in FIXTURES {
+            let (_dir, ws) = workspace();
+            let report =
+                import_text(&ws, "", name, text, false).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert!(
+                report.requests > 0 || !report.environments.is_empty(),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn truncated_and_garbage_input_gives_errors_not_panics() {
+        let (_dir, ws) = workspace();
+        for (name, text) in FIXTURES {
+            let format = detect(name, text).unwrap();
+            // Every cut point along the file.
+            let cuts: Vec<usize> = (1..40).map(|i| text.len() * i / 40).collect();
+            for cut in cuts {
+                let mut end = cut;
+                while !text.is_char_boundary(end) {
+                    end -= 1;
+                }
+                let truncated = &text[..end];
+                let _ = parse_as(format, name, truncated);
+                let result = import_text(&ws, "", name, truncated, false);
+                if has_extension(name, "json") || has_extension(name, "har") {
+                    assert!(result.is_err(), "{name} cut at {end} was accepted");
+                }
+            }
+        }
+        let garbage: &[&str] = &[
+            "",
+            "{",
+            "[",
+            "null",
+            "42",
+            "\"text\"",
+            "[]",
+            "{}",
+            "[1, 2, 3]",
+            "{\"openapi\": 3}",
+            "{\"openapi\": \"3.0.0\"}",
+            "{\"log\": {\"entries\": [1, null, {\"request\": \"x\"}, {\"request\": {\"url\": 5}}]}}",
+            "{\"_type\": \"export\", \"resources\": [{\"_type\": \"workspace\", \"_id\": \"w\"}, {\"_type\": \"request_group\", \"_id\": \"g\", \"parentId\": \"g\"}]}",
+            "type: collection.insomnia.rest/5.0\ncollection: 5\nenvironments: [1]\n",
+            "type: spec.insomnia.rest/5.0\n",
+            "[{\"variables\": 5}]",
+            "meta {\n  name: x\n",
+            "get {\n  url: '''\n}\n",
+            "\u{feff}\u{0}\u{1}garbage\u{7f}",
+            "- just\n- a\n- list\n",
+            "key: [unclosed\n",
+            "&a [*a]",
+        ];
+        for text in garbage {
+            assert!(
+                import_text(&ws, "", "", text, false).is_err(),
+                "{text:?} was accepted"
+            );
+        }
+        // Odd but readable: these import what they can, without panicking.
+        let odd: &[&str] = &[
+            "{\"openapi\": \"3.0.0\", \"paths\": {\"/a\": 5, \"/b\": {\"get\": 7, \"post\": {\"parameters\": [1, null, \"x\", {\"in\": 5}], \"requestBody\": {\"$ref\": 9}}}}}",
+            "{\"swagger\": \"2.0\", \"paths\": {\"/a\": {\"get\": {\"parameters\": [{\"in\": \"body\", \"schema\": {\"$ref\": \"#/definitions/X\"}}]}}}, \"definitions\": {\"X\": {\"$ref\": \"#/definitions/X\"}}}",
+            "{\"_type\": \"export\", \"resources\": [1, null, {\"_type\": \"request\", \"parentId\": 5}]}",
+            "{\"folders\": [1, null], \"requests\": [null, 5, {\"auth\": 5, \"body\": [], \"params\": {}}]}",
+        ];
+        for text in odd {
+            let _ = import_text(&ws, "", "", text, false);
+        }
+        // Random bytes.
+        let mut rng = fastrand::Rng::with_seed(7);
+        for _ in 0..200 {
+            let length = rng.usize(0..400);
+            let bytes: Vec<u8> = (0..length).map(|_| rng.u8(..)).collect();
+            let text = String::from_utf8_lossy(&bytes);
+            let _ = import_text(&ws, "", "", &text, false);
+            let _ = bruno::parse(&[SourceFile {
+                path: "x.bru".into(),
+                text: text.clone().into_owned(),
+            }]);
+        }
+    }
+
+    #[test]
+    fn values_of_the_wrong_type_anywhere_give_errors_not_panics() {
+        // Replaces each part of each fixture, one at a time, with values
+        // of other types, and parses the result.
+        fn paths(value: &Value, at: &str, out: &mut Vec<String>) {
+            out.push(at.to_owned());
+            match value {
+                Value::Object(map) => {
+                    for (key, child) in map {
+                        let key = key.replace('~', "~0").replace('/', "~1");
+                        paths(child, &format!("{at}/{key}"), out);
+                    }
+                }
+                Value::Array(list) => {
+                    for (index, child) in list.iter().enumerate() {
+                        paths(child, &format!("{at}/{index}"), out);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let replacements = [
+            Value::Null,
+            Value::from(7),
+            Value::from("x"),
+            Value::Array(Vec::new()),
+            Value::Object(Map::new()),
+        ];
+        for (name, text) in FIXTURES {
+            let Ok(original) = parse_document(text) else {
+                continue;
+            };
+            let format = detect(name, text).unwrap();
+            let mut all = Vec::new();
+            paths(&original, "", &mut all);
+            for path in all {
+                for replacement in &replacements {
+                    let mut mutated = original.clone();
+                    if path.is_empty() {
+                        mutated = replacement.clone();
+                    } else if let Some(slot) = mutated.pointer_mut(&path) {
+                        *slot = replacement.clone();
+                    }
+                    let text = serde_json::to_string(&mutated).unwrap();
+                    let _ = parse_as(format, name, &text);
+                }
+            }
+        }
     }
 
     #[test]
