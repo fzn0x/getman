@@ -492,6 +492,9 @@ mod tests {
                 body: body.len() as u64,
             },
             remote_addr: None,
+            timings: None,
+            tls: None,
+            http3_available: false,
         }
     }
 

@@ -365,7 +365,7 @@ impl Scripts {
 
 /// Transport settings. Unset values fall back to the enclosing folder, then
 /// to the defaults.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
     /// Give up after this many milliseconds. Default 30 000; 0 waits forever.
@@ -380,6 +380,33 @@ pub struct Settings {
     /// Check TLS certificates. Default true.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verify_tls: Option<bool>,
+    /// HTTP version to speak. Default `auto`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub http_version: Option<HttpVersion>,
+    /// Send HTTP/1.1 header names in Title-Case, such as `Content-Type`.
+    /// Default true. HTTP/2 and HTTP/3 always send them in lowercase.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title_case_headers: Option<bool>,
+    /// Proxy to send requests through. Default: the system's proxy
+    /// settings and the `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`
+    /// environment variables.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proxy: Option<Proxy>,
+    /// Certificate to present when a server asks for one. An empty one
+    /// stops a folder's from being used.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_cert: Option<ClientCert>,
+    /// Extra certificate authorities to trust: PEM files, relative to the
+    /// workspace root, trusted besides the system's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ca_certs: Option<Vec<String>>,
+    /// Send and store cookies with the cookie jar. Default true.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cookies: Option<bool>,
+    /// Largest response body to read, in MiB; the rest is cut off. Default
+    /// 100; 0 reads everything.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_response_mb: Option<u64>,
 }
 
 impl Settings {
@@ -396,7 +423,158 @@ impl Settings {
             follow_redirects: self.follow_redirects.or(parent.follow_redirects),
             max_redirects: self.max_redirects.or(parent.max_redirects),
             verify_tls: self.verify_tls.or(parent.verify_tls),
+            http_version: self.http_version.or(parent.http_version),
+            title_case_headers: self.title_case_headers.or(parent.title_case_headers),
+            proxy: self.proxy.or(parent.proxy),
+            client_cert: self.client_cert.or(parent.client_cert),
+            ca_certs: self.ca_certs.or(parent.ca_certs),
+            cookies: self.cookies.or(parent.cookies),
+            max_response_mb: self.max_response_mb.or(parent.max_response_mb),
         }
+    }
+}
+
+/// The HTTP version a request is sent with.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HttpVersion {
+    /// HTTP/2 when the server offers it over TLS, HTTP/1.1 otherwise.
+    #[default]
+    Auto,
+    /// HTTP/1.1 only.
+    Http1,
+    /// HTTP/2 only; over plain `http://` without asking first (prior
+    /// knowledge).
+    Http2,
+    /// HTTP/3, over QUIC. Needs an `https://` URL.
+    Http3,
+}
+
+/// A proxy, written as just its URL (`proxy: off`) when that is all it
+/// has, and as a map otherwise.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Proxy {
+    /// `system` (the system's and the environment's proxies), `off` (no
+    /// proxy), or the proxy's URL: `http://`, `https://`, `socks5://`, or
+    /// `socks5h://` to let the proxy look up host names. May contain
+    /// `{{variables}}`.
+    pub url: String,
+    /// User name for the proxy. May contain `{{variables}}`.
+    pub username: String,
+    /// Password for the proxy. Use a `{{variable}}` kept in a git-ignored
+    /// `*.local.yaml` file.
+    pub password: String,
+    /// Hosts reached without the proxy, separated by commas, as in
+    /// `NO_PROXY`: `localhost, .internal.example.com, 10.0.0.0/8`.
+    pub bypass: String,
+}
+
+impl Serialize for Proxy {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap as _;
+        if self.username.is_empty() && self.password.is_empty() && self.bypass.is_empty() {
+            return serializer.serialize_str(&self.url);
+        }
+        let mut map = serializer.serialize_map(None)?;
+        map.serialize_entry("url", &self.url)?;
+        for (key, value) in [
+            ("username", &self.username),
+            ("password", &self.password),
+            ("bypass", &self.bypass),
+        ] {
+            if !value.is_empty() {
+                map.serialize_entry(key, value)?;
+            }
+        }
+        map.end()
+    }
+}
+
+impl Proxy {
+    /// Whether this means "use no proxy".
+    pub fn is_off(&self) -> bool {
+        self.url.trim().eq_ignore_ascii_case("off")
+    }
+
+    /// Whether this means "use the system's proxies", the default.
+    pub fn is_system(&self) -> bool {
+        let url = self.url.trim();
+        url.is_empty() || url.eq_ignore_ascii_case("system")
+    }
+}
+
+impl<'de> Deserialize<'de> for Proxy {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Default, Deserialize)]
+        #[serde(default)]
+        struct Full {
+            #[serde(deserialize_with = "lenient::string")]
+            url: String,
+            #[serde(deserialize_with = "lenient::string")]
+            username: String,
+            #[serde(deserialize_with = "lenient::string")]
+            password: String,
+            #[serde(deserialize_with = "lenient::string")]
+            bypass: String,
+        }
+
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Repr {
+            // `proxy: false` reads as `off`, for YAML 1.1 habits.
+            Switch(bool),
+            Url(String),
+            Full(Full),
+        }
+
+        Ok(match Repr::deserialize(deserializer)? {
+            Repr::Switch(on) => Self {
+                url: if on { "system" } else { "off" }.to_owned(),
+                ..Self::default()
+            },
+            Repr::Url(url) => Self {
+                url,
+                ..Self::default()
+            },
+            Repr::Full(full) => Self {
+                url: full.url,
+                username: full.username,
+                password: full.password,
+                bypass: full.bypass,
+            },
+        })
+    }
+}
+
+/// A TLS client certificate, from PEM files or a PKCS#12 bundle. Paths are
+/// relative to the workspace root and may contain `{{variables}}`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ClientCert {
+    /// PEM file with the certificate, and any intermediates after it.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub cert: String,
+    /// PEM file with the unencrypted private key. May be the same file as
+    /// `cert`.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub key: String,
+    /// PKCS#12 file (`.p12` or `.pfx`) with the certificate and key, used
+    /// instead of `cert` and `key`.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub pkcs12: String,
+    /// Passphrase of the PKCS#12 file. Use a `{{variable}}` kept in a
+    /// git-ignored `*.local.yaml` file.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub passphrase: String,
+}
+
+impl ClientCert {
+    /// Whether no certificate is named, which means "present none".
+    pub fn is_empty(&self) -> bool {
+        self.cert.trim().is_empty() && self.key.trim().is_empty() && self.pkcs12.trim().is_empty()
     }
 }
 
@@ -554,5 +732,54 @@ mod tests {
         assert_eq!(merged.timeout_ms, Some(10));
         assert_eq!(merged.verify_tls, Some(false));
         assert_eq!(merged.follow_redirects, None);
+    }
+
+    #[test]
+    fn transport_settings_read_and_write_compactly() {
+        let settings: Settings = serde_yaml_ng::from_str(
+            "http_version: http3\nproxy: off\ncookies: false\nmax_response_mb: 5\nca_certs: [certs/ca.pem]\nclient_cert:\n  pkcs12: certs/me.p12\n  passphrase: '{{p12Pass}}'\n",
+        )
+        .unwrap();
+        assert_eq!(settings.http_version, Some(HttpVersion::Http3));
+        assert!(settings.proxy.as_ref().unwrap().is_off());
+        assert_eq!(settings.cookies, Some(false));
+        assert_eq!(settings.max_response_mb, Some(5));
+        assert_eq!(
+            settings.ca_certs.as_deref(),
+            Some(&["certs/ca.pem".to_owned()][..])
+        );
+        assert_eq!(
+            settings.client_cert.as_ref().unwrap().pkcs12,
+            "certs/me.p12"
+        );
+
+        let yaml = serde_yaml_ng::to_string(&settings).unwrap();
+        assert!(yaml.contains("proxy: off\n"), "{yaml}");
+        assert!(
+            !yaml.contains(" cert:"),
+            "empty fields are left out: {yaml}"
+        );
+        let back: Settings = serde_yaml_ng::from_str(&yaml).unwrap();
+        assert_eq!(back, settings);
+    }
+
+    #[test]
+    fn a_proxy_is_a_url_or_a_map() {
+        let proxy: Proxy = serde_yaml_ng::from_str(
+            "url: socks5h://127.0.0.1:1080\nusername: '{{user}}'\npassword: '{{pass}}'\nbypass: localhost\n",
+        )
+        .unwrap();
+        assert_eq!(proxy.url, "socks5h://127.0.0.1:1080");
+        assert_eq!(proxy.password, "{{pass}}");
+        let yaml = serde_yaml_ng::to_string(&proxy).unwrap();
+        assert!(yaml.contains("bypass: localhost"), "{yaml}");
+        assert_eq!(serde_yaml_ng::from_str::<Proxy>(&yaml).unwrap(), proxy);
+
+        let short: Proxy = serde_json::from_str(r#""http://proxy:3128""#).unwrap();
+        assert_eq!(short.url, "http://proxy:3128");
+        assert_eq!(serde_json::to_value(&short).unwrap(), "http://proxy:3128");
+        let off: Proxy = serde_yaml_ng::from_str("false").unwrap();
+        assert!(off.is_off());
+        assert!(Proxy::default().is_system());
     }
 }

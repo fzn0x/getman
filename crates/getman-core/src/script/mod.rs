@@ -485,7 +485,7 @@ fn natives<'js>(ctx: &Ctx<'js>, host: &ScriptHost) -> rquickjs::Result<Object<'j
         })?,
     )?;
     let http = host.http.clone();
-    let transport = host.transport;
+    let transport = host.transport.clone();
     native.set(
         "send",
         Function::new(ctx.clone(), move |json: String| -> String {
@@ -495,7 +495,7 @@ fn natives<'js>(ctx: &Ctx<'js>, host: &ScriptHost) -> rquickjs::Result<Object<'j
                     serde_json::json!({ "error": format!("the request is not valid: {e}") })
                 }
                 (Some((client, handle)), Ok(outgoing)) => {
-                    match handle.block_on(client.send(&outgoing, transport)) {
+                    match handle.block_on(client.send(&outgoing, transport.clone())) {
                         Ok(response) => {
                             serde_json::json!({ "response": ScriptResponse::from(&response) })
                         }

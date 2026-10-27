@@ -519,7 +519,7 @@ fn settings(behavior: &Value) -> Settings {
             .as_u64()
             .and_then(|n| u32::try_from(n).ok()),
         verify_tls: behavior["strictSSL"].as_bool(),
-        timeout_ms: None,
+        ..Settings::default()
     }
 }
 

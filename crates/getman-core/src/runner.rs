@@ -9,7 +9,7 @@ use serde::Serialize;
 use crate::data::Row;
 use crate::error::{Error, Result};
 use crate::execute::{Context, Execution, Executor, Overlay};
-use crate::model::Vars;
+use crate::model::{Settings, Vars};
 use crate::script::NextRequest;
 use crate::workspace::Node;
 
@@ -33,6 +33,8 @@ pub struct RunOptions {
     pub vars: Vars,
     /// How long one script may run.
     pub script_timeout: Duration,
+    /// Transport settings that override every file's.
+    pub settings: Settings,
 }
 
 impl Default for RunOptions {
@@ -46,6 +48,7 @@ impl Default for RunOptions {
             bail: false,
             vars: Vars::new(),
             script_timeout: crate::script::DEFAULT_TIMEOUT,
+            settings: Settings::default(),
         }
     }
 }
@@ -227,6 +230,8 @@ pub async fn run(
             iteration,
             iteration_count: iterations,
             script_timeout: options.script_timeout,
+            settings: options.settings.clone(),
+            cancel: None,
         };
         let mut index = 0;
         let mut steps = 0;

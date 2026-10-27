@@ -12,9 +12,9 @@ use serde_json::Value;
 use crate::auth::Authenticator;
 use crate::checks::{TestResult, as_text, run_captures, run_checks};
 use crate::error::Result;
-use crate::http::{CookieInfo, HttpClient, Outgoing, Response};
-use crate::model::{Body, Folder, Request, Vars};
-use crate::prepare::{Effective, Prepared, prepare};
+use crate::http::{CookieInfo, HttpClient, Outgoing, Response, Transport};
+use crate::model::{Body, Folder, Request, Settings, Vars};
+use crate::prepare::{Effective, Prepared, prepare, transport};
 use crate::script::{
     self, ChangeScope, Event, LogEntry, NextRequest, ScriptBody, ScriptError, ScriptHost,
     ScriptInfo, ScriptInput, ScriptOutput, ScriptRequest, ScriptResponse, ScriptScopes, VarChange,
@@ -80,6 +80,11 @@ pub struct Context {
     pub iteration_count: usize,
     /// How long one script may run.
     pub script_timeout: Duration,
+    /// Transport settings that override every file's, such as ones given
+    /// on the command line.
+    pub settings: Settings,
+    /// Stops the request while it is being sent.
+    pub cancel: Option<Cancel>,
 }
 
 impl Default for Context {
@@ -91,9 +96,47 @@ impl Default for Context {
             iteration: 0,
             iteration_count: 1,
             script_timeout: script::DEFAULT_TIMEOUT,
+            settings: Settings::default(),
+            cancel: None,
         }
     }
 }
+
+/// Stops a request that is being sent. Clones share the same switch.
+#[derive(Debug, Clone)]
+pub struct Cancel(Arc<tokio::sync::watch::Sender<bool>>);
+
+impl Default for Cancel {
+    fn default() -> Self {
+        Self(Arc::new(tokio::sync::watch::channel(false).0))
+    }
+}
+
+impl Cancel {
+    /// A switch that is not flipped yet.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Stops the request, now or as soon as it starts.
+    pub fn cancel(&self) {
+        self.0.send_replace(true);
+    }
+
+    /// Whether [`Cancel::cancel`] was called.
+    pub fn is_cancelled(&self) -> bool {
+        *self.0.borrow()
+    }
+
+    /// Finishes once [`Cancel::cancel`] is called.
+    pub async fn cancelled(&self) {
+        let mut receiver = self.0.subscribe();
+        let _ = receiver.wait_for(|cancelled| *cancelled).await;
+    }
+}
+
+/// What a cancelled request reports as its error.
+pub const CANCELLED: &str = "The request was cancelled.";
 
 /// Everything that happened when a request ran.
 #[derive(Debug, Clone, Default, Serialize)]
@@ -126,6 +169,9 @@ pub struct Execution {
     pub skipped: bool,
     /// Where a run goes next, if a script said.
     pub next_request: Option<NextRequest>,
+    /// Whether the request was cancelled while it was being sent.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub cancelled: bool,
 }
 
 impl Execution {
@@ -156,6 +202,40 @@ impl Executor {
             http: Arc::new(HttpClient::new()),
             authenticator: Arc::new(Authenticator::new()),
         }
+    }
+
+    /// An executor whose cookie jar is kept in the workspace's git-ignored
+    /// state directory, so cookies last from one run to the next.
+    pub fn with_saved_cookies(workspace: Workspace) -> Self {
+        let file = workspace.state_dir().join(crate::http::COOKIE_FILE);
+        Self {
+            workspace,
+            http: Arc::new(HttpClient::with_cookie_file(file)),
+            authenticator: Arc::new(Authenticator::new()),
+        }
+    }
+
+    /// The transport settings a request is sent with: inherited from its
+    /// folders, overridden by `context`, variables replaced and
+    /// certificate files read.
+    pub fn transport(
+        &self,
+        path: Option<&str>,
+        request: &Request,
+        context: &Context,
+    ) -> Result<Transport> {
+        let chain = match path {
+            Some(path) => self.workspace.folder_chain(path)?,
+            None => vec![self.workspace.read_folder("")?],
+        };
+        let files = self.file_vars(context.environment.as_deref())?;
+        let effective = Effective::new(&chain, request);
+        let vars = var_stack(&files, &chain, request, context);
+        transport(
+            &context.settings.clone().or(effective.settings),
+            &vars,
+            self.workspace.root(),
+        )
     }
 
     /// Builds a request as it would be sent, without running its scripts or
@@ -233,6 +313,7 @@ impl Executor {
         let files = self.file_vars(context.environment.as_deref())?;
         let mut request = request.clone();
         let effective = Effective::new(&chain, &request);
+        let settings = context.settings.clone().or(effective.settings.clone());
         let mut headers = effective.headers.clone();
 
         let info = ScriptInfo {
@@ -241,9 +322,16 @@ impl Executor {
             iteration: context.iteration,
             iteration_count: context.iteration_count,
         };
-        let host = ScriptHost {
+        // Scripts may set the variables the settings use, so the request
+        // itself reads them again after its pre-request scripts.
+        let early = transport(
+            &settings,
+            &var_stack(&files, &chain, &request, context),
+            self.workspace.root(),
+        );
+        let mut host = ScriptHost {
             http: Some((Arc::clone(&self.http), tokio::runtime::Handle::current())),
-            transport: effective.transport,
+            transport: early.unwrap_or_default(),
             timeout: context.script_timeout,
         };
 
@@ -288,21 +376,40 @@ impl Executor {
         )?;
         execution.missing_variables = prepared.missing;
         let mut outgoing = prepared.outgoing;
-        let sent = self
-            .authenticator
-            .send(
-                &self.http,
-                &effective.auth,
-                &vars,
-                &mut outgoing,
-                effective.transport,
-            )
-            .await;
+        let transport = match transport(&settings, &vars, self.workspace.root()) {
+            Ok(transport) => transport,
+            Err(e) => {
+                execution.request = Some(outgoing);
+                execution.error = Some(e.to_string());
+                return Ok(());
+            }
+        };
+        host.transport = transport.clone();
+        let cancel = context.cancel.clone().unwrap_or_default();
+        let sent = if cancel.is_cancelled() {
+            None
+        } else {
+            tokio::select! {
+                sent = self.authenticator.send(
+                    &self.http,
+                    &effective.auth,
+                    &vars,
+                    &mut outgoing,
+                    transport,
+                ) => Some(sent),
+                () = cancel.cancelled() => None,
+            }
+        };
         execution.request = Some(outgoing);
         let response = match sent {
-            Ok(response) => response,
-            Err(e) => {
+            Some(Ok(response)) => response,
+            Some(Err(e)) => {
                 execution.error = Some(e.to_string());
+                return Ok(());
+            }
+            None => {
+                execution.error = Some(CANCELLED.into());
+                execution.cancelled = true;
                 return Ok(());
             }
         };
@@ -754,6 +861,70 @@ mod tests {
                 .starts_with("Could not connect")
         );
         assert_eq!(execution.missing_variables, ["nope"]);
+        assert!(execution.request.is_some());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_request_can_be_cancelled_while_it_is_sent() {
+        let server = test_server::spawn().await;
+        let (_dir, executor) = setup();
+        let request = Request {
+            url: server.url("/slow"),
+            ..Request::default()
+        };
+        let cancel = Cancel::new();
+        let mut context = Context {
+            cancel: Some(cancel.clone()),
+            ..Context::default()
+        };
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            cancel.cancel();
+        });
+        let started = std::time::Instant::now();
+        let execution = executor.execute(None, &request, &mut context).await;
+        assert!(execution.cancelled);
+        assert_eq!(execution.error.as_deref(), Some(CANCELLED));
+        assert!(execution.request.is_some());
+        assert!(execution.response.is_none());
+        assert!(started.elapsed() < Duration::from_secs(4));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn context_settings_override_the_files() {
+        let server = test_server::spawn().await;
+        let (_dir, executor) = setup();
+        let request = Request {
+            url: server.url("/echo"),
+            settings: crate::model::Settings {
+                http_version: Some(crate::model::HttpVersion::Http1),
+                ..crate::model::Settings::default()
+            },
+            ..Request::default()
+        };
+        let mut context = Context {
+            settings: crate::model::Settings {
+                http_version: Some(crate::model::HttpVersion::Http2),
+                ..crate::model::Settings::default()
+            },
+            ..Context::default()
+        };
+        let execution = executor.execute(None, &request, &mut context).await;
+        assert_eq!(execution.response.unwrap().http_version, "HTTP/2");
+
+        let broken = Request {
+            url: server.url("/echo"),
+            settings: crate::model::Settings {
+                ca_certs: Some(vec!["missing.pem".into()]),
+                ..crate::model::Settings::default()
+            },
+            ..Request::default()
+        };
+        let execution = executor
+            .execute(None, &broken, &mut Context::default())
+            .await;
+        let error = execution.error.unwrap();
+        assert!(error.contains("missing.pem"), "{error}");
         assert!(execution.request.is_some());
     }
 

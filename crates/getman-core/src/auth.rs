@@ -73,7 +73,7 @@ impl Authenticator {
     ) -> Result<Response> {
         match auth {
             Auth::Digest { username, password } => {
-                let first = http.send(outgoing, transport).await?;
+                let first = http.send(outgoing, transport.clone()).await?;
                 if first.status != 401 {
                     return Ok(first);
                 }
@@ -95,7 +95,9 @@ impl Authenticator {
                 http.send(outgoing, transport).await
             }
             Auth::Oauth2(settings) => {
-                let token = self.token(http, settings, vars, transport, false).await?;
+                let token = self
+                    .token(http, settings, vars, transport.clone(), false)
+                    .await?;
                 let scheme = if token.token_type.eq_ignore_ascii_case("bearer")
                     || token.token_type.is_empty()
                 {
