@@ -24,6 +24,7 @@
     openDialog,
     prefs,
     refreshTree,
+    runNoticeAction,
     save,
     selectTab,
     send,
@@ -107,6 +108,9 @@
     } else if (/^[1-9]$/.test(event.key) && event.altKey && !event.ctrlKey && !event.metaKey) {
       const target = tabs.list[Number(event.key) - 1];
       if (target) handle(() => selectTab(target.id));
+    } else if (matches(event, "mod+z") && !typing(event)) {
+      // Undoes what a notice offers to undo, such as a delete.
+      if (runNoticeAction()) event.preventDefault();
     } else if (event.key === "?" && !typing(event)) {
       handle(() => openDialog({ kind: "shortcuts" }));
     } else if (event.key === "/" && !typing(event)) {

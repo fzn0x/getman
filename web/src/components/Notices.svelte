@@ -1,12 +1,24 @@
 <script lang="ts">
-  import { notices } from "../lib/store.svelte";
+  import { dismiss, notices } from "../lib/store.svelte";
+  import { keyLabel } from "../lib/keys";
 </script>
 
 <div class="notices" role="status" aria-live="polite">
   {#each notices.list as notice (notice.id)}
-    <p class="notice {notice.kind}">
+    <p class="notice {notice.kind}" class:acts={notice.action}>
       <span class="dot" aria-hidden="true"></span>
-      {notice.text}
+      <span class="text">{notice.text}</span>
+      {#if notice.action}
+        {@const action = notice.action}
+        <button
+          class="act bitmap"
+          title="{action.label} ({keyLabel('mod+z').join(' ')})"
+          onclick={() => {
+            dismiss(notice.id);
+            action.run();
+          }}>{action.label}</button
+        >
+      {/if}
     </p>
   {/each}
 </div>
@@ -35,6 +47,15 @@
     animation: arrive 180ms steps(3, end);
   }
 
+  .notice.acts {
+    padding-right: var(--s2);
+    pointer-events: auto;
+  }
+
+  .text {
+    overflow-wrap: anywhere;
+  }
+
   .dot {
     flex: none;
     width: 6px;
@@ -49,6 +70,23 @@
   .notice.error {
     background: var(--error);
     color: var(--paper);
+  }
+
+  .act {
+    flex: none;
+    height: 22px;
+    margin-left: var(--s2);
+    padding: 0 var(--s2);
+    border: 1px solid var(--paper);
+    background: transparent;
+    color: var(--paper);
+  }
+
+  .act:hover,
+  .act:focus-visible {
+    background: var(--paper);
+    color: var(--ink);
+    outline: none;
   }
 
   @keyframes arrive {

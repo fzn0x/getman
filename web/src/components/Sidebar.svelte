@@ -4,6 +4,7 @@
   import { rank } from "../lib/fuzzy";
   import {
     allRequests,
+    emptyTrash,
     message,
     newRequest,
     notify,
@@ -12,6 +13,7 @@
     openRequest,
     openRunner,
     promptDialog,
+    refreshTrash,
     refreshTree,
     setExpanded,
     signals,
@@ -19,9 +21,10 @@
     ws,
   } from "../lib/store.svelte";
   import Icon from "./Icon.svelte";
+  import TrashList from "./TrashList.svelte";
   import Tree from "./Tree.svelte";
 
-  let view = $state<"requests" | "history">("requests");
+  let view = $state<"requests" | "history" | "trash">("requests");
   let filter = $state("");
   let filterInput: HTMLInputElement;
   let seen = signals.focusFilter;
@@ -124,6 +127,16 @@
       onclick={() => (view = "history")}
       >History <span class="count">{ws.history.length}</span></button
     >
+    <button
+      class="tab"
+      role="tab"
+      aria-selected={view === "trash"}
+      onclick={() => {
+        view = "trash";
+        void refreshTrash();
+      }}
+      >Trash {#if ws.trash.length}<span class="count">{ws.trash.length}</span>{/if}</button
+    >
   </div>
 
   <div class="body">
@@ -161,6 +174,8 @@
       {:else}
         <Tree nodes={ws.tree} {current} onNewFolder={newFolder} />
       {/if}
+    {:else if view === "trash"}
+      <TrashList />
     {:else}
       <ul class="results history">
         {#each ws.history as entry (entry.id)}
@@ -202,6 +217,10 @@
         title="Run every request in the workspace"
       >
         <Icon name="play" /> Run
+      </button>
+    {:else if view === "trash"}
+      <button class="btn quiet danger" onclick={emptyTrash} disabled={ws.trash.length === 0}>
+        <Icon name="trash" /> Empty trash
       </button>
     {:else}
       <button class="btn quiet" onclick={clearHistory} disabled={ws.history.length === 0}>

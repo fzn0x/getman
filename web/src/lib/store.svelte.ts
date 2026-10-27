@@ -18,6 +18,7 @@ import type {
   RunEvent,
   RunItem,
   RunSummary,
+  TrashItem,
 } from "./types";
 
 // ---- Preferences, kept in this browser only --------------------------------
@@ -81,6 +82,8 @@ export const ws = $state({
   environment: "",
   expanded: {} as Record<string, boolean>,
   history: [] as HistoryEntry[],
+  /** Deleted requests and folders, newest first. */
+  trash: [] as TrashItem[],
   dynamic: [] as DynamicVar[],
   languages: [] as Language[],
   /** Variables the active request sees, for highlighting and completion. */
@@ -114,6 +117,7 @@ export async function loadWorkspace(): Promise<void> {
         ws.history = history;
       },
     );
+    void refreshTrash();
     await restoreTabs();
   } catch (error) {
     if (!(error instanceof ApiError && error.code === "token")) ws.failure = message(error);
@@ -130,6 +134,14 @@ export async function refreshTree(): Promise<void> {
     }
   } catch (error) {
     notify(message(error), "error");
+  }
+}
+
+export async function refreshTrash(): Promise<void> {
+  try {
+    ws.trash = await api.trash();
+  } catch {
+    // The trash list is a convenience; the items stay on disk.
   }
 }
 
@@ -755,20 +767,34 @@ export interface Notice {
   id: number;
   text: string;
   kind: "ok" | "error" | "info";
+  /** A button on the notice, such as Undo. */
+  action?: { label: string; run: () => void };
 }
 
 export const notices = $state({ list: [] as Notice[] });
 let noticeId = 0;
 
-export function notify(text: string, kind: Notice["kind"] = "info"): void {
+export function notify(
+  text: string,
+  kind: Notice["kind"] = "info",
+  action?: Notice["action"],
+): void {
   const id = ++noticeId;
-  notices.list.push({ id, text, kind });
-  setTimeout(
-    () => {
-      notices.list = notices.list.filter((n) => n.id !== id);
-    },
-    kind === "error" ? 6000 : 2200,
-  );
+  notices.list.push({ id, text, kind, action });
+  setTimeout(() => dismiss(id), action ? 10000 : kind === "error" ? 6000 : 2200);
+}
+
+export function dismiss(id: number): void {
+  notices.list = notices.list.filter((n) => n.id !== id);
+}
+
+/** Runs the action of the newest notice that offers one, such as Undo. */
+export function runNoticeAction(): boolean {
+  const notice = [...notices.list].reverse().find((n) => n.action);
+  if (!notice?.action) return false;
+  dismiss(notice.id);
+  notice.action.run();
+  return true;
 }
 
 export function message(error: unknown): string {
@@ -815,23 +841,105 @@ export function renameItem(path: string, kind: "request" | "folder", current: st
   });
 }
 
-export function deleteItem(path: string, kind: "request" | "folder", name: string): void {
+/** Moves an item to the trash; the kind and name are not needed any more. */
+export function deleteItem(path: string, _kind?: "request" | "folder", _name?: string): void {
+  deleteItems([path]);
+}
+
+/** Paths without those inside another of them. */
+export function outermost(paths: string[]): string[] {
+  const unique = [...new Set(paths)];
+  return unique.filter((path) => !unique.some((other) => path.startsWith(`${other}/`)));
+}
+
+/**
+ * Moves items to the trash, offering to undo it. Asks first only when an
+ * open tab inside them has changes that are not saved.
+ */
+export function deleteItems(paths: string[]): void {
+  const targets = outermost(paths).filter(Boolean);
+  if (targets.length === 0) return;
+  const inside = (own: string) => targets.some((p) => own === p || own.startsWith(`${p}/`));
+  const unsaved = tabs.list.filter(
+    (tab) =>
+      (tab.kind === "request" || tab.kind === "folder") &&
+      tab.path &&
+      inside(tab.path) &&
+      isDirty(tab),
+  );
+  const go = () => void trashItems(targets);
+  if (unsaved.length === 0) {
+    go();
+    return;
+  }
   confirmDialog({
-    title: `Delete ${name}?`,
+    title: unsaved.length === 1 ? `Delete ${tabTitle(unsaved[0]!)}?` : "Delete these items?",
     body:
-      kind === "folder"
-        ? `The folder ${path}/ and everything in it will be deleted from disk. Git can bring it back if it was committed.`
-        : `${path} will be deleted from disk. Git can bring it back if it was committed.`,
+      unsaved.length === 1
+        ? "It has changes that are not saved. They go; the file can be put back from the trash."
+        : `${unsaved.length} open tabs have changes that are not saved. They go; the files can be put back from the trash.`,
     confirm: "Delete",
+    danger: true,
+    onConfirm: go,
+  });
+}
+
+async function trashItems(paths: string[]): Promise<void> {
+  const trashed: TrashItem[] = [];
+  for (const path of paths) {
+    try {
+      trashed.push(await api.remove(path));
+      dropTabs(path);
+    } catch (error) {
+      notify(message(error), "error");
+    }
+  }
+  await refreshTree();
+  await refreshTrash();
+  if (trashed.length === 0) return;
+  const what = trashed.length === 1 ? trashed[0]!.name : `${trashed.length} items`;
+  notify(`Moved ${what} to the trash`, "info", {
+    label: "Undo",
+    run: () => void restoreItems(trashed),
+  });
+}
+
+/** Puts items back from the trash, the last deleted first. */
+export async function restoreItems(items: TrashItem[]): Promise<void> {
+  const restored: string[] = [];
+  for (const item of [...items].reverse()) {
+    try {
+      const { path } = await api.restore(item.id);
+      restored.push(path);
+      if (parentOf(path)) setExpanded(parentOf(path), true);
+    } catch (error) {
+      notify(message(error), "error");
+    }
+  }
+  await refreshTree();
+  await refreshTrash();
+  if (restored.length > 0) {
+    notify(
+      restored.length === 1 ? `Put back ${restored[0]}` : `Put back ${restored.length} items`,
+      "ok",
+    );
+  }
+}
+
+export function emptyTrash(): void {
+  const count = ws.trash.length;
+  confirmDialog({
+    title: "Empty the trash?",
+    body: `${count === 1 ? "The item" : `All ${count} items`} in the trash will be deleted from disk for good. Git can bring back only what was committed.`,
+    confirm: "Empty trash",
     danger: true,
     onConfirm: async () => {
       try {
-        await api.remove(path);
-        dropTabs(path);
-        await refreshTree();
+        await api.emptyTrash();
       } catch (error) {
         notify(message(error), "error");
       }
+      await refreshTrash();
     },
   });
 }
