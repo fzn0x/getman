@@ -32,6 +32,7 @@ import {
   EditorView,
   highlightActiveLine,
   highlightActiveLineGutter,
+  hoverTooltip,
   keymap,
   lineNumbers,
   MatchDecorator,
@@ -42,6 +43,7 @@ import {
 import { tags as t } from "@lezer/highlight";
 import { trimUrl, URL_PATTERN } from "./bytes";
 import { iconRects, type IconName } from "./icons";
+import { shownValue } from "./variables";
 
 /** A pixel icon as a DOM node, for places outside Svelte. */
 function pixelIcon(name: IconName): HTMLElement {
@@ -165,6 +167,47 @@ export const theme = EditorView.theme({
     backgroundColor: "var(--field)",
     color: "var(--ink)",
   },
+  ".cm-gm-var-tip": {
+    display: "grid",
+    gap: "4px",
+    justifyItems: "start",
+    maxWidth: "320px",
+    padding: "8px",
+    fontFamily: "var(--font-ui)",
+    fontSize: "var(--fs-ui)",
+  },
+  ".cm-gm-var-tip-head": {
+    display: "flex",
+    gap: "12px",
+    justifyContent: "space-between",
+    width: "100%",
+    color: "var(--var-ink)",
+    fontFamily: "var(--font-code)",
+  },
+  ".cm-gm-var-tip-scope": {
+    color: "var(--ink-3)",
+    fontFamily: "var(--font-bitmap)",
+    fontSize: "var(--b1)",
+    textTransform: "uppercase",
+    WebkitFontSmoothing: "none",
+  },
+  ".cm-gm-var-tip-value": {
+    maxHeight: "120px",
+    overflow: "auto",
+    fontFamily: "var(--font-code)",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-all",
+  },
+  ".cm-gm-var-tip button": {
+    height: "22px",
+    padding: "0 8px",
+    border: "1px solid var(--rule)",
+    background: "var(--field)",
+    color: "var(--ink)",
+    fontFamily: "var(--font-bitmap)",
+    fontSize: "var(--b1)",
+    textTransform: "uppercase",
+  },
   ".cm-tooltip-autocomplete > ul": { fontFamily: "var(--font-code)", fontSize: "var(--fs-code)" },
   ".cm-tooltip-autocomplete > ul > li[aria-selected]": {
     backgroundColor: "var(--ink)",
@@ -200,7 +243,6 @@ export function variableMarks(known: Set<string> | null): Extension {
       const missing = known !== null && !name.startsWith("$") && !known.has(name);
       return Decoration.mark({
         class: missing ? "cm-gm-var cm-gm-var-missing" : "cm-gm-var",
-        attributes: { title: missing ? `${name} is not defined` : name },
       });
     },
   });
@@ -263,6 +305,73 @@ export function linkMarks(): Extension {
 
 export interface VariableSource {
   names: () => { label: string; detail?: string }[];
+  /** What a name holds, for the card shown on hover. */
+  describe?: (name: string) => VariableCard;
+}
+
+/** A variable's scope and value, or what a dynamic value makes. */
+export type VariableCard =
+  | { scope: string; value: string; secret: boolean }
+  | { scope: "dynamic"; description: string }
+  | null;
+
+/** Shows a variable's value and scope when the pointer rests on it. */
+export function variableHover(source: VariableSource): Extension {
+  return hoverTooltip((view, pos) => {
+    const line = view.state.doc.lineAt(pos);
+    for (const match of line.text.matchAll(/\{\{\s*([^{}\n"]+?)\s*\}\}/g)) {
+      const from = line.from + match.index;
+      const to = from + match[0].length;
+      if (pos < from || pos > to) continue;
+      const name = match[1] ?? "";
+      const card = source.describe?.(name) ?? null;
+      return {
+        pos: from,
+        end: to,
+        create: () => ({ dom: variableCard(name, card) }),
+      };
+    }
+    return null;
+  });
+}
+
+function variableCard(name: string, card: VariableCard): HTMLElement {
+  const dom = document.createElement("div");
+  dom.className = "cm-gm-var-tip";
+  const head = document.createElement("div");
+  head.className = "cm-gm-var-tip-head";
+  const title = document.createElement("span");
+  title.textContent = name;
+  const scope = document.createElement("span");
+  scope.className = "cm-gm-var-tip-scope";
+  scope.textContent = card ? card.scope : "not defined";
+  head.append(title, scope);
+  const body = document.createElement("div");
+  body.className = "cm-gm-var-tip-value";
+  dom.append(head, body);
+  if (!card) {
+    body.textContent = "No scope defines it, so it is sent as written.";
+  } else if ("description" in card) {
+    body.textContent = card.description;
+  } else {
+    let revealed = false;
+    const show = () =>
+      (body.textContent = shownValue(card.value, card.secret, revealed) || "(empty)");
+    show();
+    if (card.secret) {
+      const reveal = document.createElement("button");
+      reveal.type = "button";
+      reveal.textContent = "Reveal";
+      reveal.addEventListener("mousedown", (event) => event.preventDefault());
+      reveal.addEventListener("click", () => {
+        revealed = !revealed;
+        reveal.textContent = revealed ? "Hide" : "Reveal";
+        show();
+      });
+      dom.append(reveal);
+    }
+  }
+  return dom;
 }
 
 /** Completes variable names after `{{`. */
@@ -314,6 +423,7 @@ export function baseExtensions(options: SetupOptions): Extension[] {
       icons: false,
       activateOnTyping: true,
     }),
+    variableHover(options.completion),
     EditorView.domEventHandlers({
       paste: (event) => {
         const text = event.clipboardData?.getData("text/plain") ?? "";

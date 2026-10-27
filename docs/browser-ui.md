@@ -71,7 +71,8 @@ The Params, Headers, form body, folder header and variable tables mark
 Typing `{{` offers the names the request can use; <kbd>↑</kbd>
 <kbd>↓</kbd> choose and <kbd>Enter</kbd> or <kbd>Tab</kbd> takes one.
 Point at a variable, or move the caret into it, to see its value and the
-scope it comes from. Values the environment marks secret show as dots
+scope it comes from; pointing works in the URL bar and the body and
+script editors too. Values the environment marks secret show as dots
 until you choose **Reveal**.
 
 ## Header presets

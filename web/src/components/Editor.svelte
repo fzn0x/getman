@@ -9,8 +9,9 @@
     linkMarks,
     variableMarks,
     type EditorLanguage,
+    type VariableCard,
   } from "../lib/editor";
-  import { completionNames } from "../lib/store.svelte";
+  import { completionNames, describeVariable } from "../lib/store.svelte";
 
   interface Props {
     value?: string;
@@ -51,6 +52,14 @@
     class: className = "",
   }: Props = $props();
 
+  function describeCard(name: string): VariableCard {
+    const info = describeVariable(name);
+    if (!info) return null;
+    if (info.kind === "dynamic") return { scope: "dynamic", description: info.description };
+    const { scope, value, secret } = info.variable;
+    return { scope, value, secret: secret === true };
+  }
+
   let host: HTMLDivElement;
   let view: EditorView | undefined;
   const languageSlot = new Compartment();
@@ -68,7 +77,7 @@
             singleLine,
             lineNumbers: lineNumbers && !singleLine,
             placeholder,
-            completion: { names: completionNames },
+            completion: { names: completionNames, describe: describeCard },
             onSubmit: () => onSubmit?.(),
             onPaste: (text) => onPaste?.(text) ?? false,
           }),
