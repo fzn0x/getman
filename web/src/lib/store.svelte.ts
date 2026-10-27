@@ -224,9 +224,44 @@ export function parentOf(path: string): string {
 /** Names offered when completing `{{`. */
 export function completionNames(): { label: string; detail?: string }[] {
   return [
-    ...ws.variables.map((v) => ({ label: v.name, detail: `${v.scope} · ${preview(v.value)}` })),
+    ...ws.variables.map((v) => ({
+      label: v.name,
+      detail: `${v.scope} · ${v.secret ? "secret" : preview(v.value)}`,
+    })),
     ...ws.dynamic.map((d) => ({ label: d.name, detail: d.description })),
   ];
+}
+
+let knownCache: { from: ResolvedVar[]; names: Set<string> } | null = null;
+
+/** Names the active tab can use, or `null` until they are known. */
+export function knownNames(): Set<string> | null {
+  if (!ws.variablesReady) return null;
+  if (knownCache?.from !== ws.variables) {
+    knownCache = { from: ws.variables, names: new Set(ws.variables.map((v) => v.name)) };
+  }
+  return knownCache.names;
+}
+
+/** What a `{{name}}` stands for, for showing on hover. */
+export function describeVariable(
+  name: string,
+): { kind: "variable"; variable: ResolvedVar } | { kind: "dynamic"; description: string } | null {
+  if (name.startsWith("$env.")) {
+    const variable = name.slice(5);
+    return {
+      kind: "dynamic",
+      description: variable.startsWith("GETMAN_")
+        ? `The ${variable} environment variable of the getman process`
+        : "Only environment variables named GETMAN_* can be read",
+    };
+  }
+  if (name.startsWith("$")) {
+    const dynamic = ws.dynamic.find((d) => d.name === name || name.startsWith(`${d.name}.`));
+    return dynamic ? { kind: "dynamic", description: dynamic.description } : null;
+  }
+  const variable = ws.variables.find((v) => v.name === name);
+  return variable ? { kind: "variable", variable } : null;
 }
 
 function preview(value: string): string {
@@ -829,14 +864,23 @@ export function contextPath(tab: RequestTab): string | null {
 
 export async function refreshVariables(): Promise<void> {
   const tab = activeTab();
-  if (!tab || tab.kind !== "request") return;
+  if (!tab || (tab.kind !== "request" && tab.kind !== "folder")) return;
   if (!ws.ready) return;
   try {
-    ws.variables = await api.variables({
-      path: contextPath(tab),
-      request: toRequest(tab.draft),
-      environment: ws.environment || null,
-    });
+    ws.variables = await api.variables(
+      tab.kind === "request"
+        ? {
+            path: contextPath(tab),
+            request: toRequest(tab.draft),
+            environment: ws.environment || null,
+          }
+        : {
+            // What a request inside the folder would see.
+            path: tab.path ? `${tab.path}/_folder.yaml` : null,
+            request: { name: "", method: "GET", url: "" },
+            environment: ws.environment || null,
+          },
+    );
     ws.variablesReady = true;
   } catch {
     // Highlighting falls back to marking nothing as missing.
