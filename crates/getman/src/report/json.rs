@@ -17,6 +17,8 @@ pub(crate) fn render(recorded: &Recorded) -> String {
                 "url": execution.request.as_ref().map(|r| r.url.clone()),
                 "status": execution.response.as_ref().map(|r| r.status),
                 "time_ms": execution.response.as_ref().map(|r| r.time_ms),
+                "timings": execution.response.as_ref().and_then(|r| r.timings),
+                "http_version": execution.response.as_ref().map(|r| r.http_version.clone()),
                 "size": execution.response.as_ref().map(|r| r.size.body),
                 "passed": !execution.failed(),
                 "skipped": execution.skipped,
