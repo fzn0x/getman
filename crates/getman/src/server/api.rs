@@ -42,6 +42,9 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/item/duplicate", post(duplicate))
         .route("/item/delete", post(delete))
         .route("/item/order", post(order))
+        .route("/trash", get(trash))
+        .route("/trash/restore", post(restore))
+        .route("/trash/empty", post(empty_trash))
         .route("/environments", get(environments))
         .route("/environment/create", post(create_environment))
         .route("/environment/read", post(read_environment))
@@ -228,13 +231,34 @@ async fn duplicate(State(state): Shared, Json(arg): Json<PathArg>) -> ApiResult 
     Ok(Json(json!({ "path": path })))
 }
 
+/// Moves the item to the trash, from where it can be restored.
 async fn delete(State(state): Shared, Json(arg): Json<PathArg>) -> ApiResult {
-    state.workspace().delete(&arg.path)?;
-    Ok(done())
+    Ok(Json(json!(state.workspace().trash(&arg.path)?)))
 }
 
 async fn order(State(state): Shared, Json(arg): Json<Order>) -> ApiResult {
     state.workspace().set_order(&arg.folder, arg.order)?;
+    Ok(done())
+}
+
+// ---- Trash --------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct TrashId {
+    id: String,
+}
+
+async fn trash(State(state): Shared) -> ApiResult {
+    Ok(Json(json!(state.workspace().trash_list()?)))
+}
+
+async fn restore(State(state): Shared, Json(arg): Json<TrashId>) -> ApiResult {
+    let path = state.workspace().restore(&arg.id)?;
+    Ok(Json(json!({ "path": path })))
+}
+
+async fn empty_trash(State(state): Shared) -> ApiResult {
+    state.workspace().empty_trash()?;
     Ok(done())
 }
 

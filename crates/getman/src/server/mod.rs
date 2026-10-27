@@ -257,6 +257,46 @@ mod tests {
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
+    /// Calls the API as the UI does, with GET when there is no body, and
+    /// returns the JSON answer.
+    async fn call(app: &Router, path: &str, body: &str) -> (StatusCode, serde_json::Value) {
+        let builder = if body.is_empty() {
+            HttpRequest::get(path)
+        } else {
+            HttpRequest::post(path)
+        };
+        let request = builder
+            .header("host", "127.0.0.1:7878")
+            .header("x-getman-token", "secret-token")
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_owned()))
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        (status, serde_json::from_slice(&bytes).unwrap_or_default())
+    }
+
+    #[tokio::test]
+    async fn deleting_moves_items_to_the_trash() {
+        let (_dir, app) = app();
+        let (_, created) = call(&app, "/api/request/create", r#"{"name":"Ping"}"#).await;
+        assert_eq!(created["path"], "ping.yaml");
+        let (status, item) = call(&app, "/api/item/delete", r#"{"path":"ping.yaml"}"#).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(item["name"], "Ping");
+        let (_, tree) = call(&app, "/api/tree", "").await;
+        assert_eq!(tree, serde_json::json!([]));
+
+        let id = item["id"].as_str().unwrap();
+        let (_, restored) = call(&app, "/api/trash/restore", &format!(r#"{{"id":"{id}"}}"#)).await;
+        assert_eq!(restored["path"], "ping.yaml");
+        let (status, _) = call(&app, "/api/trash/empty", "{}").await;
+        assert_eq!(status, StatusCode::OK);
+    }
+
     #[tokio::test]
     async fn the_page_is_served_without_the_token() {
         let (_dir, app) = app();
