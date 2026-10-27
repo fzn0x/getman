@@ -197,11 +197,18 @@ impl Authenticator {
                 if first.status != 401 {
                     return Ok(first);
                 }
-                let Some(challenge) = first
+                // A server may offer several algorithms, preferred first.
+                let challenges: Vec<_> = first
                     .headers
                     .iter()
                     .filter(|h| h.name.eq_ignore_ascii_case("www-authenticate"))
-                    .find_map(|h| parse_challenge(&h.value))
+                    .filter_map(|h| parse_challenge(&h.value))
+                    .collect();
+                let Some(challenge) = challenges
+                    .iter()
+                    .find(|c| digest_hash(c).is_some())
+                    .or(challenges.first())
+                    .cloned()
                 else {
                     return Ok(first);
                 };
@@ -437,29 +444,65 @@ fn parse_challenge(header: &str) -> Option<HashMap<String, String>> {
     params.contains_key("nonce").then_some(params)
 }
 
+/// A hash function that returns lowercase hex.
+type HashFn = fn(&[u8]) -> String;
+
+/// The challenge's algorithm, as written.
+fn digest_algorithm(challenge: &HashMap<String, String>) -> &str {
+    match challenge.get("algorithm").map(String::as_str) {
+        None | Some("") => "MD5",
+        Some(algorithm) => algorithm,
+    }
+}
+
+/// The hash function a challenge asks for, and whether it is a `-sess`
+/// variant; `None` when Getman does not support it.
+fn digest_hash(challenge: &HashMap<String, String>) -> Option<(HashFn, bool)> {
+    let hash: (HashFn, bool) = match digest_algorithm(challenge).to_ascii_uppercase().as_str() {
+        "MD5" => (md5_hex, false),
+        "MD5-SESS" => (md5_hex, true),
+        "SHA-256" => (sha256_hex, false),
+        "SHA-256-SESS" => (sha256_hex, true),
+        "SHA-512-256" => (sha512_256_hex, false),
+        "SHA-512-256-SESS" => (sha512_256_hex, true),
+        _ => return None,
+    };
+    Some(hash)
+}
+
 fn digest_header(
     challenge: &HashMap<String, String>,
     username: &str,
     password: &str,
     outgoing: &Outgoing,
 ) -> Result<String> {
+    // The client nonce guards against chosen-plaintext attacks by the
+    // server, which only works if the server cannot predict it.
+    let mut random = [0_u8; 8];
+    getrandom::fill(&mut random)
+        .map_err(|e| Error::Http(format!("Could not make a Digest client nonce: {e}")))?;
+    digest_header_with(
+        challenge,
+        username,
+        password,
+        outgoing,
+        &hex::encode(random),
+    )
+}
+
+fn digest_header_with(
+    challenge: &HashMap<String, String>,
+    username: &str,
+    password: &str,
+    outgoing: &Outgoing,
+    cnonce: &str,
+) -> Result<String> {
     let get = |name: &str| challenge.get(name).map_or("", String::as_str);
-    let algorithm = if get("algorithm").is_empty() {
-        "MD5"
-    } else {
-        get("algorithm")
-    };
-    let (hash, session): (fn(&[u8]) -> String, bool) = match algorithm.to_ascii_uppercase().as_str()
-    {
-        "MD5" => (md5_hex, false),
-        "MD5-SESS" => (md5_hex, true),
-        "SHA-256" => (sha256_hex, false),
-        "SHA-256-SESS" => (sha256_hex, true),
-        other => {
-            return Err(Error::Http(format!(
-                "The server asks for Digest with {other}, which Getman does not support"
-            )));
-        }
+    let algorithm = digest_algorithm(challenge);
+    let Some((hash, session)) = digest_hash(challenge) else {
+        return Err(Error::Http(format!(
+            "The server asks for Digest with {algorithm}, which Getman does not support"
+        )));
     };
     let url = url::Url::parse(&outgoing.url).map_err(|e| Error::Invalid(e.to_string()))?;
     let uri = match url.query() {
@@ -467,12 +510,6 @@ fn digest_header(
         None => url.path().to_owned(),
     };
     let (realm, nonce) = (get("realm"), get("nonce"));
-    // The client nonce guards against chosen-plaintext attacks by the
-    // server, which only works if the server cannot predict it.
-    let mut random = [0_u8; 8];
-    getrandom::fill(&mut random)
-        .map_err(|e| Error::Http(format!("Could not make a Digest client nonce: {e}")))?;
-    let cnonce = hex::encode(random);
     let nc = "00000001";
     let qops: Vec<&str> = get("qop").split(',').map(str::trim).collect();
     let body_bytes = match &outgoing.body {
@@ -528,6 +565,10 @@ fn sha256_hex(data: &[u8]) -> String {
     hex::encode(Sha256::digest(data))
 }
 
+fn sha512_256_hex(data: &[u8]) -> String {
+    hex::encode(sha2::Sha512_256::digest(data))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -580,6 +621,74 @@ mod tests {
         assert!(header.starts_with(r#"Digest username="Mufasa", realm="testrealm@host.com""#));
         assert!(header.contains(r#"uri="/dir/index.html""#));
         assert!(header.contains(r#"opaque="5ccc069c403ebaf9f0171e9517f40e41""#));
+    }
+
+    #[test]
+    fn digest_matches_the_rfc_7616_examples() {
+        let get = |url: &str| Outgoing {
+            method: "GET".into(),
+            url: url.into(),
+            headers: vec![],
+            body: OutgoingBody::None,
+        };
+        let response = |header: String| {
+            header
+                .split("response=\"")
+                .nth(1)
+                .unwrap()
+                .split('"')
+                .next()
+                .unwrap()
+                .to_owned()
+        };
+        // Section 3.9.1, with SHA-256 and with MD5.
+        for (algorithm, expected) in [
+            (
+                "SHA-256",
+                "753927fa0e85d155564e2e272a28d1802ca10daf4496794697cf8db5856cb6c1",
+            ),
+            ("MD5", "8ca523f5e9506fed4657c9700eebdbec"),
+        ] {
+            let challenge = parse_challenge(&format!(
+                r#"Digest realm="http-auth@example.org", qop="auth, auth-int", algorithm={algorithm}, nonce="7ypf/xlj9XXwfDPEoM4URrv/xwf94BcCAzFZH4GiTo0v", opaque="FQhe/qaU925kfnzjCev0ciny7QMkPqMAFRtzCUYo5tdS""#
+            ))
+            .unwrap();
+            let header = digest_header_with(
+                &challenge,
+                "Mufasa",
+                "Circle of Life",
+                &get("http://www.example.org/dir/index.html"),
+                "f2/wE4q74E6zIJEtWaHKaf5wv/H5QzzpXusqGemxURZJ",
+            )
+            .unwrap();
+            assert_eq!(response(header), expected, "{algorithm}");
+        }
+        // The inputs of section 3.9.2, with SHA-512-256. The response printed
+        // there does not follow from them; this one was computed from the
+        // same inputs with Python's hashlib.
+        let challenge = parse_challenge(
+            r#"Digest realm="api@example.org", qop="auth", algorithm=SHA-512-256, nonce="5TsQWLVdgBdmrQ0XsxbDODV+57QdFR34I9HAbC/RVvkK", opaque="HRPCssKJSGjCrkzDg8OhwpzCiGPChXYjwrI2QmXDnsOS", charset=UTF-8, userhash=true"#,
+        )
+        .unwrap();
+        let header = digest_header_with(
+            &challenge,
+            "J\u{e4}s\u{f8}n Doe",
+            "Secret, or not?",
+            &get("http://api.example.org/doe.json"),
+            "NTg6RKcb9boFIAS3KrFK9BGeh+iDa/sm6jUMp2wds69v",
+        )
+        .unwrap();
+        assert_eq!(
+            response(header.clone()),
+            "3798d4131c277846293534c3edc11bd8a5e4cdcbff78b05db9d95eeb1cec68a5"
+        );
+        assert!(header.contains("algorithm=SHA-512-256"), "{header}");
+
+        let mut sess = challenge.clone();
+        sess.insert("algorithm".into(), "SHA-512-256-sess".into());
+        assert!(digest_hash(&sess).is_some_and(|(_, session)| session));
+        sess.insert("algorithm".into(), "SHA-1".into());
+        assert!(digest_hash(&sess).is_none());
     }
 
     #[tokio::test]

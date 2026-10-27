@@ -251,7 +251,8 @@ pub enum Auth {
         #[serde(default, rename = "in")]
         location: ApiKeyLocation,
     },
-    /// HTTP Digest authentication (MD5, MD5-sess, SHA-256).
+    /// HTTP Digest authentication (MD5, SHA-256, SHA-512-256 and their
+    /// -sess forms).
     Digest {
         /// User name.
         #[serde(default, deserialize_with = "lenient::string")]
