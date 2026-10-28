@@ -227,10 +227,11 @@ pub(super) async fn run(job: &mut Job, sink: &mut Sink) {
     };
     let opening = within(job.connect_timeout(), async {
         let (mut socket, handshake) = websocket::open(
+            &job.http,
+            &job.transport,
             &job.outgoing.url,
             &job.outgoing.headers,
             &[],
-            job.transport.verify_tls,
         )
         .await?;
         let joined = join(&mut socket, &namespace, auth.as_ref()).await?;

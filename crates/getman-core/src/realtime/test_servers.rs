@@ -13,7 +13,7 @@ use tokio_tungstenite::tungstenite::http::{HeaderValue, StatusCode};
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 
-async fn listen<F, Fut>(session: F) -> SocketAddr
+pub(super) async fn listen<F, Fut>(session: F) -> SocketAddr
 where
     F: Fn(TcpStream) -> Fut + Send + 'static,
     Fut: Future<Output = ()> + Send + 'static,
@@ -62,12 +62,19 @@ async fn echo(stream: TcpStream) {
                 HeaderValue::from_static("chat.v2"),
             );
         }
+        if request.uri().path() == "/session" {
+            response.headers_mut().append(
+                "set-cookie",
+                HeaderValue::from_static("session=abc123; Path=/"),
+            );
+        }
         seen = json!({
             "path": request.uri().path(),
             "query": request.uri().query().unwrap_or_default(),
             "authorization": header("authorization"),
             "x_test": header("x-test"),
             "protocol": offered,
+            "cookie": header("cookie"),
         });
         Ok(response)
     };

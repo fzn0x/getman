@@ -3,7 +3,7 @@ use std::time::Duration;
 use serde_json::{Value, json};
 
 use super::*;
-use crate::model::KeyValue;
+use crate::model::{KeyValue, Proxy, Settings};
 use crate::test_server;
 use crate::workspace::Workspace;
 
@@ -584,6 +584,228 @@ async fn socket_io_reports_a_refused_join() {
             EventKind::Error { message } if message.starts_with("The Socket.IO auth payload must be a JSON object"))),
         "{events:#?}"
     );
+}
+
+/// A WebSocket request to the echo server that goes through `proxy`.
+fn through(addr: std::net::SocketAddr, host: &str, proxy: Option<Proxy>) -> Request {
+    Request {
+        kind: RequestKind::Websocket,
+        url: format!("ws://{host}:{}/chat", addr.port()),
+        settings: Settings {
+            proxy,
+            ..Settings::default()
+        },
+        ..Request::default()
+    }
+}
+
+fn proxy(url: String, bypass: &str) -> Proxy {
+    Proxy {
+        url,
+        bypass: bypass.into(),
+        ..Proxy::default()
+    }
+}
+
+fn theme_cookie() -> crate::http::CookieInfo {
+    crate::http::CookieInfo {
+        domain: "127.0.0.1".into(),
+        path: "/".into(),
+        name: "theme".into(),
+        value: "dark".into(),
+        expires: None,
+        secure: false,
+        http_only: false,
+        host_only: true,
+    }
+}
+
+/// The server's greeting: what its handshake carried.
+async fn greeting(session: &mut Session) -> Value {
+    let events = until(session, |e| received(e).is_some()).await;
+    serde_json::from_str(&received(events.last().unwrap()).unwrap().data).unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn websocket_goes_through_an_http_proxy_with_credentials() {
+    let server = test_servers::websocket().await;
+    let proxy_server = test_proxies::connect_proxy(Some(("ada", "p@ss"))).await;
+    let (_dir, executor) = setup();
+
+    // The credentials in the proxy URL are percent-encoded, as in HTTP.
+    let request = through(
+        server,
+        "127.0.0.1",
+        Some(proxy(
+            format!("http://ada:p%40ss@{}", proxy_server.addr),
+            "",
+        )),
+    );
+    let mut session = open(&executor, &request, Options::default());
+    assert_eq!(greeting(&mut session).await["path"], "/chat");
+    session.control().send(text("through")).unwrap();
+    until(&mut session, |e| {
+        received(e).is_some_and(|m| m.data == "through")
+    })
+    .await;
+    session.control().close();
+    until(&mut session, is_closed).await;
+    let seen = proxy_server.seen.lock().unwrap().clone();
+    assert_eq!(seen.len(), 1, "{seen:?}");
+    // ada:p@ss
+    assert_eq!(
+        seen[0],
+        format!(
+            "CONNECT 127.0.0.1:{} HTTP/1.1 | Basic YWRhOnBAc3M=",
+            server.port()
+        )
+    );
+
+    // Without them the proxy refuses, and the message says why.
+    let request = through(
+        server,
+        "127.0.0.1",
+        Some(proxy(format!("http://{}", proxy_server.addr), "")),
+    );
+    let mut session = open(&executor, &request, Options::default());
+    let events = until(&mut session, is_closed).await;
+    assert!(
+        events.iter().any(|e| matches!(
+            &e.kind,
+            EventKind::Error { message } if message.contains("407") && message.contains("user name and password")
+        )),
+        "{events:#?}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn websocket_goes_through_socks5_and_socks5h() {
+    let server = test_servers::websocket().await;
+    let proxy_server = test_proxies::socks5_proxy(Some(("bob", "hunter2")), server).await;
+    let (_dir, executor) = setup();
+
+    // socks5h leaves the name to the proxy, which knows where it leads.
+    let request = through(
+        server,
+        "chat.invalid",
+        Some(proxy(
+            format!("socks5h://bob:hunter2@{}", proxy_server.addr),
+            "",
+        )),
+    );
+    let mut session = open(&executor, &request, Options::default());
+    assert_eq!(greeting(&mut session).await["path"], "/chat");
+    assert_eq!(
+        proxy_server.seen.lock().unwrap().clone(),
+        [format!("name chat.invalid:{}", server.port())]
+    );
+
+    // socks5 resolves the name first, so the proxy is given an address.
+    let request = through(
+        server,
+        "localhost",
+        Some(proxy(
+            format!("socks5://bob:hunter2@{}", proxy_server.addr),
+            "",
+        )),
+    );
+    let mut session = open(&executor, &request, Options::default());
+    assert_eq!(greeting(&mut session).await["path"], "/chat");
+    let seen = proxy_server.seen.lock().unwrap().clone();
+    assert_eq!(seen.len(), 2, "{seen:?}");
+    assert!(seen[1].starts_with("address 127.0.0.1:"), "{seen:?}");
+
+    // Wrong credentials are refused.
+    let request = through(
+        server,
+        "127.0.0.1",
+        Some(proxy(
+            format!("socks5://bob:wrong@{}", proxy_server.addr),
+            "",
+        )),
+    );
+    let mut session = open(&executor, &request, Options::default());
+    let events = until(&mut session, is_closed).await;
+    assert!(
+        events.iter().any(|e| matches!(
+            &e.kind,
+            EventKind::Error { message } if message.contains("refused the user name")
+        )),
+        "{events:#?}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn websocket_skips_the_proxy_when_off_or_bypassed() {
+    let server = test_servers::websocket().await;
+    // A proxy that would fail every request.
+    let proxy_server = test_proxies::connect_proxy(Some(("nobody", "nothing"))).await;
+    let (_dir, executor) = setup();
+    let url = format!("http://{}", proxy_server.addr);
+
+    for settings in [
+        Some(Proxy {
+            url: "off".into(),
+            ..Proxy::default()
+        }),
+        Some(proxy(url.clone(), "127.0.0.1, .internal")),
+    ] {
+        let request = through(server, "127.0.0.1", settings);
+        let mut session = open(&executor, &request, Options::default());
+        assert_eq!(greeting(&mut session).await["path"], "/chat");
+    }
+    assert_eq!(
+        proxy_server.seen.lock().unwrap().clone(),
+        Vec::<String>::new()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn websocket_sends_and_stores_cookies_unless_told_not_to() {
+    let server = test_servers::websocket().await;
+    let (_dir, executor) = setup();
+    let mut request = through(server, "127.0.0.1", None);
+    request.url = format!("ws://127.0.0.1:{}/session", server.port());
+
+    // The handshake sets a cookie, which the jar keeps.
+    let mut session = open(&executor, &request, Options::default());
+    assert_eq!(greeting(&mut session).await["cookie"], "");
+    let cookies = executor.http.cookies();
+    assert_eq!(cookies.len(), 1, "{cookies:?}");
+    assert_eq!(
+        (cookies[0].name.as_str(), cookies[0].value.as_str()),
+        ("session", "abc123")
+    );
+
+    // The next connection sends it, as does a cookie added by hand.
+    let mut session = open(&executor, &request, Options::default());
+    assert_eq!(greeting(&mut session).await["cookie"], "session=abc123");
+    executor.http.set_cookie(&theme_cookie()).unwrap();
+    let mut session = open(&executor, &request, Options::default());
+    let cookie = greeting(&mut session).await["cookie"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        cookie.contains("session=abc123") && cookie.contains("theme=dark"),
+        "{cookie}"
+    );
+
+    // A Cookie header of the request itself wins over the jar.
+    request.headers.push(KeyValue::new("Cookie", "mine=1"));
+    let mut session = open(&executor, &request, Options::default());
+    assert_eq!(greeting(&mut session).await["cookie"], "mine=1");
+    request.headers.clear();
+
+    // `cookies: false` neither sends nor stores.
+    executor.http.clear_cookies();
+    request.settings.cookies = Some(false);
+    let mut session = open(&executor, &request, Options::default());
+    assert_eq!(greeting(&mut session).await["cookie"], "");
+    assert_eq!(executor.http.cookies(), []);
+    executor.http.set_cookie(&theme_cookie()).unwrap();
+    let mut session = open(&executor, &request, Options::default());
+    assert_eq!(greeting(&mut session).await["cookie"], "");
 }
 
 #[test]

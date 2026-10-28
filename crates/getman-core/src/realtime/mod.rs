@@ -8,9 +8,12 @@
 //! order to close through the session's [`Control`]. Scripts, checks and
 //! captures do not run for these requests.
 
+mod dial;
 mod settings;
 mod socketio;
 mod sse;
+#[cfg(test)]
+mod test_proxies;
 #[cfg(test)]
 mod test_servers;
 #[cfg(test)]

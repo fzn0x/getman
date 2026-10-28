@@ -22,7 +22,7 @@ http = "1"
 http-body = "1"
 http-body-util = "0.1"
 hyper = { version = "1", default-features = false, features = ["client", "http2"] }
-hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
+hyper-util = { version = "0.1", default-features = false, features = ["tokio", "client-proxy", "client-proxy-system"] }
 indexmap = { version = "2", features = ["serde"] }
 md-5 = "0.11"
 mime_guess = "2"

@@ -584,6 +584,37 @@ impl HttpClient {
         Ok((response, millis(started.elapsed())))
     }
 
+    /// The value of the `Cookie` header the jar sends to `url`, if it holds
+    /// any cookie for it. For connections Getman opens itself, such as
+    /// WebSocket handshakes; reqwest does the same for HTTP requests.
+    pub(crate) fn cookie_header(&self, url: &url::Url) -> Option<String> {
+        let store = self.cookies.lock().expect("cookie jar lock");
+        let pairs: Vec<String> = store
+            .get_request_values(url)
+            .map(|(name, value)| format!("{name}={value}"))
+            .collect();
+        (!pairs.is_empty()).then(|| pairs.join("; "))
+    }
+
+    /// Stores the cookies of `Set-Cookie` header values that answered a
+    /// request to `url`. Values that are not valid cookies are ignored.
+    pub(crate) fn store_cookies<'a>(
+        &self,
+        url: &url::Url,
+        set_cookie: impl IntoIterator<Item = &'a str>,
+    ) {
+        let mut stored = false;
+        {
+            let mut store = self.cookies.lock().expect("cookie jar lock");
+            for value in set_cookie {
+                stored |= store.parse(value, url).is_ok();
+            }
+        }
+        if stored {
+            self.save_cookies_quietly();
+        }
+    }
+
     /// The cookies in the jar, expired ones excluded.
     pub fn cookies(&self) -> Vec<CookieInfo> {
         let store = self.cookies.lock().expect("cookie jar lock");
