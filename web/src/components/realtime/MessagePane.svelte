@@ -190,7 +190,8 @@
 <style>
   .composer {
     display: grid;
-    grid-template-rows: auto minmax(120px, 1fr) auto;
+    /* The saved messages take what they need, up to 40% of the pane. */
+    grid-template-rows: auto minmax(120px, 1fr) fit-content(40%);
     height: 100%;
     min-height: 0;
   }
@@ -226,7 +227,6 @@
   }
 
   .saved {
-    max-height: 40%;
     overflow: auto;
     padding: var(--s3) var(--s4);
   }
