@@ -114,4 +114,7 @@ export const TARGETS: { target: string; hint: string }[] = [
   { target: "json", hint: "The whole JSON body" },
   { target: "json.", hint: "A JSON path, like json.data[0].id" },
   { target: "url", hint: "Final URL after redirects" },
+  { target: "messages.length", hint: "Messages a connection received" },
+  { target: "messages[0].data", hint: "A received message's text" },
+  { target: "messages[0].json.", hint: "Part of a received message that is JSON" },
 ];

@@ -516,7 +516,7 @@
             bind:checks={draft.checks}
             captures={draft.captures}
             onCaptures={(captures) => (draft.captures = captures)}
-            results={tab.execution?.checks ?? []}
+            results={(liveKind ? tab.live?.results?.checks : tab.execution?.checks) ?? []}
             response={tab.execution?.response ?? null}
           />
         {:else if tab.requestPane === "variables"}

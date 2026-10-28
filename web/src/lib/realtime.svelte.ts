@@ -16,9 +16,18 @@ import {
   type DirectionFilter,
   type LogEntry,
   type Outbound,
+  type ScriptResults,
   type StreamEvent,
 } from "./realtime";
-import { contextPath, message, notify, tabs, ws, type RequestTab } from "./store.svelte";
+import {
+  contextPath,
+  message,
+  notify,
+  refreshVariables,
+  tabs,
+  ws,
+  type RequestTab,
+} from "./store.svelte";
 import type { Header } from "./types";
 
 /** What a request tab knows about its connection. Kept on the tab. */
@@ -45,6 +54,8 @@ export interface LiveState {
   /** The selected log entry's number, or -1. */
   selected: number;
   composer: Composer;
+  /** What scripts and checks made of the last connection, once it ended. */
+  results: ScriptResults | null;
 }
 
 /** The logs, outside the reactive tabs so thousands of entries stay cheap. */
@@ -84,6 +95,7 @@ export function live(tab: RequestTab): LiveState {
       direction: "all",
       selected: -1,
       composer: newComposer(),
+      results: null,
     };
   }
   return tab.live;
@@ -215,6 +227,11 @@ function apply(id: string, state: LiveState, events: StreamEvent[]): void {
         sessions.delete(id);
         summarize(state);
         break;
+      case "result":
+        state.results = event;
+        if (event.changes.length > 0) void refreshVariables();
+        // Shown in its own pane, not in the log.
+        continue;
     }
     added.push({ seq: ++nextSeq, event });
   }
@@ -279,6 +296,7 @@ export async function connect(tab: RequestTab): Promise<void> {
   state.request = null;
   state.sent = 0;
   state.received = 0;
+  state.results = null;
   started.set(state.key, {
     at: Date.now(),
     name: tab.draft.name,

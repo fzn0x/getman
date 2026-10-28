@@ -3,6 +3,8 @@
 //! requests. Like the rest of a request file, fields at their defaults are
 //! not written.
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 
 use crate::lenient;
@@ -98,6 +100,11 @@ pub struct SocketIoSettings {
     /// as `socket.handshake.auth`. May contain `{{variables}}`.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub auth: String,
+    /// How to reach the server: long polling first and an upgrade to
+    /// WebSocket if the server offers it (the default, as in the Socket.IO
+    /// client), or only one of them.
+    #[serde(skip_serializing_if = "SocketIoTransport::is_auto")]
+    pub transport: SocketIoTransport,
     /// Events to show. Every event when empty.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub events: Vec<String>,
@@ -110,6 +117,87 @@ impl SocketIoSettings {
     /// Whether nothing is set.
     pub fn is_empty(&self) -> bool {
         *self == Self::default()
+    }
+}
+
+/// When `getman run` and scripted sends end a connection, under `until:` in
+/// a request file. The first limit reached ends it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Until {
+    /// End after this many messages have been received.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub messages: Option<u32>,
+    /// End this many milliseconds after the connection opened.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_ms: Option<u64>,
+}
+
+impl Until {
+    /// Without `until`, a connection ends after this many messages.
+    pub const DEFAULT_MESSAGES: u32 = 10;
+    /// Without `until`, a connection ends after this long.
+    pub const DEFAULT_TIME: Duration = Duration::from_secs(5);
+    /// With a message count and no time, a connection ends after this long
+    /// all the same: a run never waits for ever.
+    pub const LONGEST: Duration = Duration::from_secs(60);
+
+    /// Whether nothing is set.
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// The limits that apply, with the defaults filled in: nothing set
+    /// means [`Self::DEFAULT_MESSAGES`] messages or [`Self::DEFAULT_TIME`];
+    /// otherwise what is set, and [`Self::LONGEST`] when no time is.
+    pub fn limits(&self) -> Limits {
+        if self.is_empty() {
+            return Limits {
+                messages: Some(u64::from(Self::DEFAULT_MESSAGES)),
+                time: Some(Self::DEFAULT_TIME),
+            };
+        }
+        Limits {
+            messages: self.messages.map(u64::from),
+            time: Some(
+                self.time_ms
+                    .filter(|ms| *ms > 0)
+                    .map_or(Self::LONGEST, Duration::from_millis),
+            ),
+        }
+    }
+}
+
+/// When to end a connection: a number of received messages, a time after
+/// it opened, or whichever comes first. `None` is no limit.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Limits {
+    /// Received messages.
+    pub messages: Option<u64>,
+    /// Time since the connection opened.
+    pub time: Option<Duration>,
+}
+
+/// The transports a Socket.IO connection may use.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SocketIoTransport {
+    /// Start with HTTP long polling and upgrade to WebSocket if the
+    /// server offers it. If the server turns long polling down, connect
+    /// over WebSocket.
+    #[default]
+    Auto,
+    /// WebSocket only, for servers that allow nothing else.
+    Websocket,
+    /// HTTP long polling only, never upgrading.
+    Polling,
+}
+
+impl SocketIoTransport {
+    /// Whether this is [`SocketIoTransport::Auto`].
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn is_auto(&self) -> bool {
+        *self == Self::Auto
     }
 }
 
@@ -179,6 +267,7 @@ kind: socketio
 url: http://localhost:3000
 socketio:
   namespace: /orders
+  transport: websocket
   auth: '{\"token\": \"{{token}}\"}'
   events: [order:created]
   messages:
@@ -190,12 +279,17 @@ sse:
 ";
         let request: Request = serde_yaml_ng::from_str(yaml).unwrap();
         assert_eq!(request.socketio.namespace, "/orders");
+        assert_eq!(
+            request.socketio.transport,
+            super::SocketIoTransport::Websocket
+        );
         assert!(request.socketio.messages[0].ack);
         assert!(request.sse.reconnect);
         let written = serde_yaml_ng::to_string(&request).unwrap();
         assert!(!written.contains("name:"), "{written}");
         assert!(!written.contains("path:"), "{written}");
-        assert!(!written.contains("websocket"), "{written}");
+        assert!(written.contains("transport: websocket"), "{written}");
+        assert!(!written.contains("kind: websocket"), "{written}");
         assert_eq!(
             serde_yaml_ng::from_str::<Request>(&written).unwrap(),
             request

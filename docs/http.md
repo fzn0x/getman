@@ -109,6 +109,9 @@ settings:
 `getman send` and `getman run` take `--proxy URL` (or `--proxy off`) to
 override every file.
 
+WebSocket and Socket.IO connections follow the same settings: an HTTP
+proxy gets a `CONNECT` request, a SOCKS5 one a login.
+
 ## TLS
 
 Getman checks server certificates against your operating system's trust
@@ -171,6 +174,9 @@ for full control.
 
 `getman send` and `getman run` start each time with an empty jar, so runs
 in CI do not depend on what happened before.
+
+WebSocket and Socket.IO handshakes send the jar's cookies and store the
+ones the server sets, too, with the same `cookies: false`.
 
 ## Responses
 

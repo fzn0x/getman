@@ -8,11 +8,18 @@
 //! order to close through the session's [`Control`]. Scripts, checks and
 //! captures do not run for these requests.
 
+mod dial;
+mod engine;
+mod run;
 mod settings;
 mod socketio;
 mod sse;
 #[cfg(test)]
+mod test_proxies;
+#[cfg(test)]
 mod test_servers;
+#[cfg(test)]
+mod test_socketio;
 #[cfg(test)]
 mod tests;
 pub(crate) mod tls;
@@ -33,8 +40,11 @@ use crate::model::{Auth, Body, KeyValue, Request, RequestKind};
 use crate::prepare::prepare;
 use crate::vars::VarStack;
 
+pub(crate) use run::execute;
+pub use run::{Closed, Entry, Plan, Ready, RealtimeCall, Recorder, saved_messages};
 pub use settings::{
-    MessageFormat, SavedEmit, SavedMessage, SocketIoSettings, SseSettings, WebSocketSettings,
+    Limits, MessageFormat, SavedEmit, SavedMessage, SocketIoSettings, SocketIoTransport,
+    SseSettings, Until, WebSocketSettings,
 };
 
 /// Messages longer than this are reported cut short; their `size` still
@@ -296,6 +306,19 @@ pub fn connect(
     context: &Context,
     options: Options,
 ) -> Result<Session> {
+    connect_with(executor, path, request, context, options, None)
+}
+
+/// Like [`connect`], with these headers instead of the ones the request
+/// inherits and sets: the ones a pre-request script left.
+pub fn connect_with(
+    executor: &Executor,
+    path: Option<&str>,
+    request: &Request,
+    context: &Context,
+    options: Options,
+    headers: Option<Vec<KeyValue>>,
+) -> Result<Session> {
     if !request.kind.is_realtime() {
         return Err(Error::Invalid(format!(
             "{} requests are sent, not connected to",
@@ -303,7 +326,7 @@ pub fn connect(
         )));
     }
     let (effective, vars) = executor.resolve(path, request, context)?;
-    let mut headers = effective.headers.clone();
+    let mut headers = headers.unwrap_or_else(|| effective.headers.clone());
     let mut stored = request.clone();
     if request.kind == RequestKind::Sse {
         // As browsers do, unless the request says otherwise.
@@ -333,6 +356,7 @@ pub fn connect(
     )?;
     let mut outgoing = prepared.outgoing;
     let mut namespace = String::new();
+    let mut endpoint = String::new();
     match request.kind {
         RequestKind::Websocket => {
             outgoing.method = "GET".into();
@@ -340,8 +364,8 @@ pub fn connect(
         }
         RequestKind::Socketio => {
             outgoing.method = "GET".into();
-            (outgoing.url, namespace) =
-                socketio::endpoint(&outgoing.url, &request.socketio, &vars)?;
+            (endpoint, namespace) = socketio::endpoint(&outgoing.url, &request.socketio, &vars)?;
+            outgoing.url = socketio::first_url(&endpoint, request.socketio.transport);
         }
         RequestKind::Sse => sse::check_url(&outgoing.url)?,
         RequestKind::Http | RequestKind::Grpc => {}
@@ -364,6 +388,7 @@ pub fn connect(
         transport,
         request: request.clone(),
         namespace,
+        endpoint,
         http: Arc::clone(&executor.http),
         authenticator: Arc::clone(&executor.authenticator),
         commands: command_receiver,
@@ -392,6 +417,8 @@ struct Job {
     request: Request,
     /// The Socket.IO namespace.
     namespace: String,
+    /// The Socket.IO endpoint, before the Engine.IO transport is added.
+    endpoint: String,
     http: Arc<HttpClient>,
     authenticator: Arc<Authenticator>,
     commands: mpsc::Receiver<Outbound>,

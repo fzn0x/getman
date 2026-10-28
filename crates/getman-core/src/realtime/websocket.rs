@@ -1,14 +1,10 @@
 //! WebSocket connections, and the WebSocket transport under Socket.IO.
 
-use std::net::IpAddr;
 use std::time::{Duration, Instant};
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use futures_util::{SinkExt as _, StreamExt as _};
-use rustls::pki_types::ServerName;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::net::TcpStream;
 use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest as _;
 use tokio_tungstenite::tungstenite::error::{ProtocolError, SubProtocolError};
@@ -18,17 +14,13 @@ use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::{CloseFrame, WebSocketConfig};
 use tokio_tungstenite::tungstenite::{self, Message as Frame};
 
+use super::dial::{self, Io};
 use super::{
     Direction, EventKind, Job, MAX_MESSAGE_BYTES, Message, MessageFormat, Outbound, SavedMessage,
-    Sink, header_list, tls, within,
+    Sink, header_list, within,
 };
 use crate::error::{Error, Result};
-use crate::http::Header;
-
-/// A stream a WebSocket runs over: plain TCP or TLS.
-pub(super) trait Io: AsyncRead + AsyncWrite + Unpin + Send {}
-
-impl<T: AsyncRead + AsyncWrite + Unpin + Send> Io for T {}
+use crate::http::{Header, HttpClient, Transport};
 
 /// An open WebSocket.
 pub(super) type Socket = WebSocketStream<Box<dyn Io>>;
@@ -67,42 +59,29 @@ pub(super) fn url(raw: &str) -> Result<String> {
     Ok(url.to_string())
 }
 
-/// Opens a WebSocket: TCP, TLS for `wss`, then the handshake with these
-/// headers, offering these subprotocols.
+/// Opens a WebSocket: TCP, through the proxy the transport settings call
+/// for, TLS for `wss`, then the handshake with these headers, offering
+/// these subprotocols. The cookie jar's cookies for the URL go with the
+/// handshake, and those the server sets are stored, unless the settings
+/// turn cookies off.
 pub(super) async fn open(
+    http: &HttpClient,
+    transport: &Transport,
     url: &str,
     headers: &[Header],
     subprotocols: &[String],
-    verify_tls: bool,
 ) -> Result<(Socket, Handshake), String> {
     let parsed = url::Url::parse(url).map_err(|e| format!("{url:?} is not a valid URL: {e}"))?;
     let secure = parsed.scheme() == "wss";
     let host = parsed
-        .host()
+        .host_str()
         .ok_or_else(|| format!("{url:?} has no host"))?
         .to_owned();
-    let port = parsed
-        .port_or_known_default()
-        .unwrap_or(if secure { 443 } else { 80 });
-    let tcp = TcpStream::connect(format!("{host}:{port}"))
-        .await
-        .map_err(|e| format!("Could not connect: {e}"))?;
-    let _ = tcp.set_nodelay(true);
+    let tcp = dial::connect(&parsed, transport).await?;
     let stream: Box<dyn Io> = if secure {
-        let name = match host {
-            url::Host::Domain(domain) => ServerName::try_from(domain)
-                .map_err(|e| format!("{url:?} has no valid host name: {e}"))?,
-            url::Host::Ipv4(address) => ServerName::IpAddress(IpAddr::V4(address).into()),
-            url::Host::Ipv6(address) => ServerName::IpAddress(IpAddr::V6(address).into()),
-        };
-        let connector = tokio_rustls::TlsConnector::from(tls::config(verify_tls)?);
-        let tls = connector
-            .connect(name, tcp)
-            .await
-            .map_err(|e| format!("Could not connect securely: {e}"))?;
-        Box::new(tls)
+        dial::secure(tcp, &host, transport.verify_tls).await?
     } else {
-        Box::new(tcp)
+        tcp
     };
 
     let mut request = url
@@ -132,6 +111,16 @@ pub(super) async fn open(
         })?;
         request.headers_mut().append(name, value);
     }
+    let jar_url = jar_url(&parsed);
+    if transport.cookies
+        && !headers
+            .iter()
+            .any(|h| h.name.trim().eq_ignore_ascii_case("cookie"))
+        && let Some(cookies) = jar_url.as_ref().and_then(|url| http.cookie_header(url))
+        && let Ok(value) = HeaderValue::from_str(&cookies)
+    {
+        request.headers_mut().insert("cookie", value);
+    }
     if !offered.is_empty() {
         let value = HeaderValue::from_str(&offered.join(", "))
             .map_err(|_| "a subprotocol contains characters headers cannot carry".to_owned())?;
@@ -142,9 +131,40 @@ pub(super) async fn open(
     let config = WebSocketConfig::default()
         .max_message_size(Some(MAX_MESSAGE_BYTES))
         .max_frame_size(Some(MAX_MESSAGE_BYTES));
-    tokio_tungstenite::client_async_with_config(request, stream, Some(config))
-        .await
-        .map_err(|e| describe(&e, &offered))
+    let answered = tokio_tungstenite::client_async_with_config(request, stream, Some(config)).await;
+    if transport.cookies
+        && let Some(jar_url) = &jar_url
+    {
+        // A refusal can set cookies too, such as a session to sign in with.
+        let headers = match &answered {
+            Ok((_, handshake)) => Some(handshake.headers()),
+            Err(tungstenite::Error::Http(response)) => Some(response.headers()),
+            Err(_) => None,
+        };
+        if let Some(headers) = headers {
+            http.store_cookies(
+                jar_url,
+                headers
+                    .get_all("set-cookie")
+                    .iter()
+                    .filter_map(|v| v.to_str().ok()),
+            );
+        }
+    }
+    answered.map_err(|e| describe(&e, &offered))
+}
+
+/// The URL the cookie jar knows a WebSocket URL by: the HTTP one it
+/// upgrades.
+fn jar_url(url: &url::Url) -> Option<url::Url> {
+    let mut jar = url.clone();
+    jar.set_scheme(if url.scheme() == "wss" {
+        "https"
+    } else {
+        "http"
+    })
+    .ok()?;
+    Some(jar)
 }
 
 /// Explains a WebSocket error in one line.
@@ -198,10 +218,11 @@ pub(super) async fn run(job: &mut Job, sink: &mut Sink) {
     let opening = within(
         job.connect_timeout(),
         open(
+            &job.http,
+            &job.transport,
             &job.outgoing.url,
             &job.outgoing.headers,
             &job.request.websocket.subprotocols,
-            job.transport.verify_tls,
         ),
     );
     let opened = tokio::select! {

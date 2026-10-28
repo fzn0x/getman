@@ -445,6 +445,12 @@ impl Pretty {
             .or_else(|| self.methods.get(index).map(String::as_str))
             .unwrap_or_default()
             .to_owned();
+        // Connections have a name for their kind, short enough for the column.
+        let method = match method.as_str() {
+            "WEBSOCKET" => "WS".to_owned(),
+            "SOCKETIO" => "SIO".to_owned(),
+            _ => method,
+        };
         let mark = if execution.skipped {
             paint(YELLOW, "–")
         } else if execution.failed() {
@@ -488,6 +494,28 @@ impl Pretty {
         if let Some(error) = &execution.error {
             anstream::println!("      {}", paint(RED, error));
         }
+        if let Some(call) = &execution.realtime
+            && call.opened
+        {
+            let count = |direction| {
+                call.messages
+                    .iter()
+                    .filter(|m| m.direction == direction)
+                    .count()
+            };
+            anstream::println!(
+                "      {}",
+                paint(
+                    DIM,
+                    &format!(
+                        "{} received · {} sent · open for {}",
+                        count(getman_core::realtime::Direction::Received),
+                        count(getman_core::realtime::Direction::Sent),
+                        style::duration(call.duration_ms)
+                    )
+                )
+            );
+        }
         if let Some(status) = execution.grpc.as_ref().and_then(|c| c.status.as_ref())
             && !status.is_ok()
             && !status.message.is_empty()
@@ -525,6 +553,19 @@ impl Pretty {
                     "      {}",
                     paint(DIM, &format!("[{}] {}", log.level, log.message))
                 );
+            }
+            if let Some(call) = &execution.realtime {
+                for message in &call.messages {
+                    let arrow = match message.direction {
+                        getman_core::realtime::Direction::Sent => "→",
+                        getman_core::realtime::Direction::Received => "←",
+                    };
+                    let shown: String = message.data.chars().take(200).collect();
+                    anstream::println!(
+                        "      {}",
+                        paint(DIM, &format!("{arrow} {:>7.0} ms  {shown}", message.time))
+                    );
+                }
             }
             if let Some(response) = &execution.response {
                 anstream::println!(

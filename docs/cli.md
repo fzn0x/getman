@@ -69,7 +69,11 @@ getman run [TARGET]... [-e ENV] [--var NAME=VALUE]... [-d DATA] [-n N]
 ```
 
 Each `TARGET` is a folder or a request; several run in the order given,
-and none runs the whole workspace. Reporters are `cli`, `json`, `junit`,
+and none runs the whole workspace. WebSocket, event stream and Socket.IO
+requests are connected to, sent their saved messages and left at their
+`until` (10 messages or 5 seconds when they have none), and their scripts
+and checks count like any other's; see
+[WebSocket, SSE and Socket.IO](realtime.md#stopping-a-run). Reporters are `cli`, `json`, `junit`,
 `html`, `csv` and `xlsx`. `--save` keeps the run in `.getman/runs` for
 the UI's Runner. `--no-scripts` runs no [scripts](scripts.md#turning-scripts-off);
 each request notes how many it skipped.
@@ -78,7 +82,8 @@ each request notes how many it skipped.
 
 Sends one request and prints the response body. On a WebSocket, event
 stream or Socket.IO request, it connects instead and prints each message
-it receives on a line; see [WebSocket, SSE and Socket.IO](realtime.md).
+it receives on a line, running the request's scripts and checks around the
+connection; see [WebSocket, SSE and Socket.IO](realtime.md).
 
 | Option | |
 | --- | --- |
@@ -90,7 +95,7 @@ it receives on a line; see [WebSocket, SSE and Socket.IO](realtime.md).
 | `--proxy URL` | A proxy URL, `system` or `off`, over the files' settings |
 | `--json` | Print everything as JSON: request, response, tests, checks, logs. For a connection, every event as one line of JSON |
 | `-m`, `--message NAME` | WebSocket and Socket.IO: a saved message to send once connected. Repeat to send several, in order |
-| `--until N\|TIME` | Connections: stop after `N` received messages, or after a time such as `30s`, `500ms` or `2m`. Repeat for both; the first reached stops. Without it, <kbd>Ctrl</kbd> <kbd>C</kbd> stops |
+| `--until N\|TIME` | Connections: stop after `N` received messages, or after a time such as `30s`, `500ms` or `2m`, counted from when the connection opens. Repeat for both; the first reached stops. Without it, the request's `until` applies, and without that <kbd>Ctrl</kbd> <kbd>C</kbd> stops |
 | `--script-timeout SECONDS` | Default 10 |
 | `--no-scripts` | Run no scripts; the result notes how many were skipped |
 

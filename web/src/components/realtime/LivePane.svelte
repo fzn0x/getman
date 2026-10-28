@@ -19,7 +19,7 @@
 
   let { tab, conn }: { tab: RequestTab; conn: LiveState } = $props();
 
-  let pane = $state<"messages" | "handshake">("messages");
+  let pane = $state<"messages" | "handshake" | "tests">("messages");
   let list: HTMLOListElement | undefined = $state();
   let pinned = true;
 
@@ -37,6 +37,13 @@
   );
   const shown = $derived(message ? readable(message) : null);
   const missing = $derived(conn.request?.missing ?? []);
+  const results = $derived(conn.results);
+  const failures = $derived(
+    results
+      ? [...results.checks, ...results.tests].filter((r) => !r.passed).length +
+          results.script_errors.length
+      : 0,
+  );
 
   const label = $derived(
     {
@@ -198,6 +205,19 @@
       Handshake
       {#if conn.handshake}<span class="count">{conn.handshake.headers.length}</span>{/if}
     </button>
+    {#if results}
+      <button
+        class="tab"
+        role="tab"
+        aria-selected={pane === "tests"}
+        onclick={() => (pane = "tests")}
+      >
+        Tests
+        <span class="count" class:bad={failures > 0}
+          >{failures > 0 ? failures : results.checks.length + results.tests.length}</span
+        >
+      </button>
+    {/if}
   </div>
 
   {#if pane === "messages"}
@@ -322,6 +342,61 @@
           {/key}
         </section>
       {/if}
+    </div>
+  {:else if pane === "tests" && results}
+    <div class="handshake">
+      {#each results.script_errors as scriptError, i (i)}
+        <div class="result fail">
+          <span class="mark"><Icon name="warning" size={7} /></span>
+          <div>
+            <p class="name">Script in {scriptError.origin} failed</p>
+            <p class="why">{scriptError.message}</p>
+          </div>
+        </div>
+      {/each}
+      {#if results.checks.length}
+        <h3 class="bitmap">Checks</h3>
+        {#each results.checks as result, i (i)}
+          <div class="result" class:fail={!result.passed}>
+            <span class="mark"><Icon name={result.passed ? "check" : "close"} size={7} /></span>
+            <div>
+              <p class="name mono">{result.name}</p>
+              {#if result.message}<p class="why">{result.message}</p>{/if}
+            </div>
+          </div>
+        {/each}
+      {/if}
+      {#if results.tests.length}
+        <h3 class="bitmap">Script tests</h3>
+        {#each results.tests as result, i (i)}
+          <div class="result" class:fail={!result.passed} class:skip={result.skipped}>
+            <span class="mark"
+              ><Icon
+                name={result.skipped ? "more" : result.passed ? "check" : "close"}
+                size={7}
+              /></span
+            >
+            <div>
+              <p class="name">{result.name}</p>
+              {#if result.message}<p class="why">{result.message}</p>{/if}
+            </div>
+          </div>
+        {/each}
+      {/if}
+      {#if results.logs.length}
+        <h3 class="bitmap">Console</h3>
+        <ol class="logs">
+          {#each results.logs as log, i (i)}
+            <li class={log.level}>
+              <span class="origin bitmap">{log.origin}</span>
+              <pre>{log.message}</pre>
+            </li>
+          {/each}
+        </ol>
+      {/if}
+      {#each results.warnings as warning, i (i)}
+        <p class="why">{warning}</p>
+      {/each}
     </div>
   {:else}
     <div class="handshake">
@@ -683,6 +758,74 @@
   .line {
     margin: 0 0 var(--s2);
     word-break: break-all;
+  }
+
+  .result {
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr);
+    gap: var(--s2);
+    padding: 6px 0;
+    border-bottom: 1px solid var(--rule-3);
+  }
+
+  .result p {
+    margin: 0;
+  }
+
+  .result .mark {
+    display: grid;
+    place-items: center;
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+    background: var(--ok);
+    color: var(--paper);
+  }
+
+  .result.fail .mark {
+    background: var(--error);
+  }
+
+  .result.skip .mark {
+    background: var(--t4);
+  }
+
+  .why {
+    color: var(--error);
+    font-size: var(--fs-meta);
+  }
+
+  .logs {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .logs li {
+    display: grid;
+    grid-template-columns: 110px minmax(0, 1fr);
+    gap: var(--s2);
+    padding: 4px 0;
+    border-bottom: 1px solid var(--rule-3);
+  }
+
+  .logs .origin {
+    color: var(--ink-3);
+    padding-top: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .logs pre {
+    margin: 0;
+    font: var(--fs-code) / 1.5 var(--font-code);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .count.bad {
+    color: var(--error);
   }
 
   .pairs {

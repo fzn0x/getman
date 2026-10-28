@@ -19,8 +19,8 @@ HTTP, WebSocket, event stream, Socket.IO and gRPC requests all open
 here. The tree marks the last four `WS`, `SSE`, `SIO` and `GRPC`. See
 [Connections and calls](#connections-and-calls) for them and
 [Signing in with a browser](#signing-in-with-a-browser) for OAuth 2.0.
-Runs started from it include gRPC requests; WebSocket, event stream and
-Socket.IO requests are skipped, as in `getman run`.
+Runs started from it include gRPC requests, and connect to WebSocket, event
+stream and Socket.IO requests as `getman run` does.
 
 Press <kbd>Esc</kbd> or <kbd>x</kbd> to stop whatever is running: a
 request being sent, a connection, a call, a sign-in. A request stopped

@@ -33,7 +33,7 @@ pub(crate) async fn send(args: SendArgs) -> Outcome {
     if let Ok(request) = executor.workspace.read_request(&path)
         && request.kind.is_realtime()
     {
-        return super::stream::stream(&args, &executor, &path, &request, &context).await;
+        return super::stream::stream(&args, &executor, &path, &request, &mut context).await;
     }
     if let Ok(request) = executor.workspace.read_request(&path)
         && request.kind == RequestKind::Grpc

@@ -8,6 +8,11 @@
 //! browser's few connections per host free for the rest of the API. When
 //! the page goes away its stream ends, and every connection it opened is
 //! closed.
+//!
+//! Pre-request scripts run before a connection is made, and when it ends
+//! the post-response scripts and checks run on the handshake and the
+//! messages received; their results arrive on the stream as a `result`
+//! event.
 
 use std::collections::HashMap;
 use std::convert::Infallible;
@@ -20,9 +25,9 @@ use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use axum::{Json, Router};
-use getman_core::execute::Context;
+use getman_core::execute::{Context, Execution, persist_changes};
 use getman_core::model::Request;
-use getman_core::realtime::{self, Control, Options, Outbound};
+use getman_core::realtime::{self, Control, Options, Outbound, Recorder};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, watch};
@@ -208,6 +213,13 @@ struct ConnectArg {
     request: Request,
     #[serde(default)]
     environment: Option<String>,
+    /// Save variables the scripts set to the local files.
+    #[serde(default = "yes")]
+    persist: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 /// Opens a connection whose events go to the page's stream.
@@ -241,17 +253,38 @@ async fn connect(
         }
         lines
     };
-    let context = Context {
+    let mut context = Context {
         environment: arg.environment.filter(|e| !e.is_empty()),
         ..Context::default()
     };
-    let session = realtime::connect(
+    let path = arg.path.filter(|p| !p.is_empty());
+    let mut execution = Execution {
+        path: path.clone(),
+        name: arg.request.name.clone(),
+        ..Execution::default()
+    };
+    let ready = state
+        .executor
+        .before_connect(path.as_deref(), &arg.request, &mut context, &mut execution)
+        .await?;
+    let Some(ready) = ready else {
+        let reason = execution
+            .script_errors
+            .first()
+            .map(|e| format!("The script in {} failed: {}", e.origin, e.message))
+            .or(execution.error.clone())
+            .unwrap_or_else(|| "A pre-request script skipped the connection".into());
+        return Err(failure(StatusCode::BAD_REQUEST, reason));
+    };
+    let session = realtime::connect_with(
         &state.executor,
-        arg.path.as_deref().filter(|p| !p.is_empty()),
-        &arg.request,
+        path.as_deref(),
+        &ready.request,
         &context,
         Options { lossy: true },
+        ready.headers,
     )?;
+    let request = ready.request;
     let id = getman_core::dynamic::uuid_v4();
     let (control, mut events) = session.into_parts();
     state.realtime.lock().sessions.insert(
@@ -264,15 +297,64 @@ async fn connect(
 
     let forward = Arc::clone(&state);
     let session_id = id.clone();
+    let persist = arg.persist;
     tokio::spawn(async move {
+        let mut recorder = Recorder::new();
+        let mut listening = true;
         while let Some(event) = events.recv().await {
+            recorder.record(&event);
+            if !listening {
+                continue;
+            }
             let mut value = json!(event);
             value["session"] = Value::from(session_id.as_str());
-            if lines.send(line(&value)).await.is_err() {
-                break;
-            }
+            // Nobody reads the page's stream any more; the session ends
+            // by itself, and the scripts still run over what it carried.
+            listening = lines.send(line(&value)).await.is_ok();
         }
         forward.realtime.lock().sessions.remove(&session_id);
+
+        let call = recorder.finish();
+        let opened = call.opened;
+        forward
+            .executor
+            .after_connect(
+                path.as_deref(),
+                &request,
+                &mut context,
+                call,
+                &mut execution,
+            )
+            .await;
+        if persist
+            && let Err(e) = persist_changes(
+                forward.workspace(),
+                context.environment.as_deref(),
+                &execution.changes,
+            )
+        {
+            execution
+                .warnings
+                .push(format!("variables could not be saved: {e}"));
+        }
+        let ran = !(execution.tests.is_empty()
+            && execution.checks.is_empty()
+            && execution.logs.is_empty()
+            && execution.script_errors.is_empty()
+            && execution.changes.is_empty());
+        if opened && ran && listening {
+            let result = json!({
+                "type": "result",
+                "session": session_id,
+                "tests": execution.tests,
+                "checks": execution.checks,
+                "logs": execution.logs,
+                "script_errors": execution.script_errors,
+                "warnings": execution.warnings,
+                "changes": execution.changes,
+            });
+            let _ = lines.send(line(&result)).await;
+        }
     });
     Ok(Json(json!({ "id": id })))
 }
@@ -505,6 +587,99 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn scripts_and_checks_run_around_a_connection() {
+        let url = ticking().await;
+        let (dir, state, router) = app();
+        let response = router
+            .clone()
+            .oneshot(post("/api/realtime/events", &json!({})))
+            .await
+            .unwrap();
+        let page = response.headers()["x-page-id"].to_str().unwrap().to_owned();
+        let mut lines = Lines {
+            body: response.into_body().into_data_stream(),
+            buffer: String::new(),
+        };
+        lines.until(|v| v["type"] == "ready").await;
+
+        let request = json!({
+            "kind": "sse",
+            "url": format!("{url}?{{{{stamp}}}}"),
+            "scripts": {
+                "pre_request": "gm.variables.set('stamp', 'from-pre'); gm.request.headers.add({ key: 'X-Pre', value: 'yes' });",
+                "post_response": "gm.test('ticks arrived', () => gm.expect(gm.messages.length).to.be.above(1)); gm.collectionVariables.set('first', gm.messages[0].data); console.log('done');",
+            },
+            "checks": ["status == 200", "messages.length > 1", "messages[0].data == tick 0"],
+            "until": { "messages": 3 },
+        });
+        let (status, opened) = call(
+            &router,
+            "/api/realtime/connect",
+            &json!({ "page": page, "request": request }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{opened}");
+
+        // The page reads the connection as before, and then the results.
+        let connecting = lines.until(|v| v["type"] == "connecting").await;
+        assert!(connecting["url"].as_str().unwrap().ends_with("?from-pre"));
+        let header = |name: &str| {
+            connecting["headers"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|h| h["name"] == name)
+        };
+        assert!(header("X-Pre"), "{connecting}");
+
+        // The connection runs until the page closes it; scripts run then.
+        lines.until(|v| v["type"] == "message").await;
+        lines.until(|v| v["type"] == "message").await;
+        lines.until(|v| v["type"] == "message").await;
+        call(
+            &router,
+            "/api/realtime/close",
+            &json!({ "id": opened["id"] }),
+        )
+        .await;
+        let result = lines.until(|v| v["type"] == "result").await;
+        assert_eq!(result["session"], opened["id"]);
+        assert_eq!(result["tests"][0]["name"], "ticks arrived");
+        assert_eq!(result["tests"][0]["passed"], true, "{result}");
+        let checks = result["checks"].as_array().unwrap();
+        assert_eq!(checks.len(), 3);
+        assert!(checks.iter().all(|c| c["passed"] == true), "{result}");
+        assert_eq!(result["logs"][0]["message"], "done");
+
+        // What the post-response script set is saved with the local variables.
+        let local = state.workspace().read_local_state().unwrap();
+        assert_eq!(
+            local.variables.get("first").map(String::as_str),
+            Some("tick 0")
+        );
+
+        // A pre-request script that fails stops the connection, and says why.
+        let broken = json!({
+            "kind": "sse",
+            "url": url,
+            "scripts": { "pre_request": "throw new Error('nope');" },
+        });
+        let (status, error) = call(
+            &router,
+            "/api/realtime/connect",
+            &json!({ "page": page, "request": broken }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        let message = error["error"].as_str().unwrap();
+        assert!(
+            message.contains("nope") && message.contains("script"),
+            "{message}"
+        );
+        drop(dir);
     }
 
     #[tokio::test]

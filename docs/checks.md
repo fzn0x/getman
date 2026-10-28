@@ -41,6 +41,9 @@ separated by spaces.
 | `json` | The whole body, parsed as JSON |
 | `json.<path>` | Part of it |
 
+| `messages` | The messages a connection received; see [below](#messages-of-a-connection) |
+| `messages.<path>` | Part of them, like `messages[0].data` |
+
 For a [gRPC request](grpc.md#checks-captures-and-scripts), `status` is
 the gRPC status code (`0` is OK), `json` is the response message (the list
 of messages for a stream from the server), and `header.<name>` finds the
@@ -50,6 +53,37 @@ A JSON path is made of `.name`, `[index]` (negative counts from the end),
 `["a key with spaces"]` and `.length` for arrays and strings:
 `json.data[0].id`, `json.items[-1].price`, `json["full name"]`,
 `json.tags.length`.
+
+### Messages of a connection
+
+On a [WebSocket, event stream or Socket.IO request](realtime.md#scripts-and-checks)
+the handshake is the response: `status` is its status (`101` for a
+WebSocket, usually `200` otherwise), `header.<name>` and `cookie.<name>`
+read its headers, `time` is how long connecting took, and `size` the bytes
+received. The messages the connection received, in order, are `messages`:
+
+| Target | Is |
+| --- | --- |
+| `messages.length` | How many arrived |
+| `messages[0].data` | The first one's text; `[-1]` is the last |
+| `messages[0].json.x` | Part of it, when its data is JSON |
+| `messages[0].event` | The type of a stream event, or the name of a Socket.IO event |
+| `messages[0].time` | Milliseconds after the connection opened |
+| `messages[0].id`, `.ack`, `.size`, `.direction` | A stream event's id, a Socket.IO acknowledgement's id, its size in bytes, and `received` |
+
+```yaml
+checks:
+  - status == 101
+  - messages.length >= 2
+  - messages[0].json.type == welcome
+  - messages[-1].time < 3000
+```
+
+They run when the connection ends, after the post-response script.
+`getman run` ends it at the request's `until`, so a check such as
+`messages.length == 10` needs `until: { messages: 10 }`. A target on a
+message that did not arrive does not exist, so `messages[5] !exists` passes
+and the others fail; on an HTTP request, `messages` is an error.
 
 ### Operators
 

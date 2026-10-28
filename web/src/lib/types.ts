@@ -241,9 +241,19 @@ export interface SseSettings {
   reconnect?: boolean;
 }
 
+/** How a Socket.IO connection reaches its server; `auto` when missing. */
+export type SocketIoTransport = "auto" | "websocket" | "polling";
+
+/** When `getman run` ends a connection: the first limit reached. */
+export interface Until {
+  messages?: number;
+  time_ms?: number;
+}
+
 export interface SocketIoSettings {
   namespace?: string;
   path?: string;
+  transport?: SocketIoTransport;
   auth?: string;
   events?: string[];
   messages?: SavedEmit[];
@@ -273,6 +283,7 @@ export interface Request {
   websocket?: WebSocketSettings;
   sse?: SseSettings;
   socketio?: SocketIoSettings;
+  until?: Until;
 }
 
 /** A request with every optional part present, as the editors use it. */
@@ -298,10 +309,13 @@ export interface Draft {
   socketio: {
     namespace: string;
     path: string;
+    transport: SocketIoTransport;
     auth: string;
     events: string[];
     messages: Required<SavedEmit>[];
   };
+  /** Empty fields are not set. */
+  until: { messages: number | null; time_ms: number | null };
 }
 
 export interface Folder {

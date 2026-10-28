@@ -34,12 +34,19 @@ type Shared = State<Arc<AppState>>;
 pub(crate) struct Calls(Mutex<HashMap<String, mpsc::UnboundedSender<Command>>>);
 
 impl Calls {
-    fn insert(&self, id: String, commands: mpsc::UnboundedSender<Command>) {
+    pub(crate) fn insert(&self, id: String, commands: mpsc::UnboundedSender<Command>) {
         self.0.lock().expect("calls lock").insert(id, commands);
     }
 
     fn remove(&self, id: &str) {
         self.0.lock().expect("calls lock").remove(id);
+    }
+
+    /// Stops every call, for when the state they belong to is replaced.
+    pub(crate) fn cancel_all(&self) {
+        for (_, commands) in self.0.lock().expect("calls lock").drain() {
+            let _ = commands.send(Command::Cancel);
+        }
     }
 
     fn get(&self, id: &str) -> Result<mpsc::UnboundedSender<Command>, ApiError> {

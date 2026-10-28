@@ -3,11 +3,12 @@
 //! until a limit or Ctrl+C.
 
 use std::io::Write as _;
-use std::process::ExitCode;
 
-use getman_core::execute::{Context, Executor};
+use getman_core::execute::{Cancel, Context, Executor};
 use getman_core::model::{Request, RequestKind};
-use getman_core::realtime::{self, Direction, EventKind, Message, Options, Outbound, StreamEvent};
+use getman_core::realtime::{
+    self, Direction, EventKind, Limits, Message, Outbound, Plan, StreamEvent,
+};
 use getman_core::vars::missing_reason;
 
 use super::Outcome;
@@ -19,103 +20,121 @@ pub(crate) async fn stream(
     executor: &Executor,
     path: &str,
     request: &Request,
-    context: &Context,
+    context: &mut Context,
 ) -> Outcome {
     // Find the messages first, so a misspelt name fails before connecting.
-    let mut outbound = args
+    let outbound = args
         .messages
         .iter()
         .map(|name| saved(request, name))
         .collect::<Result<Vec<_>, _>>()?;
-    let most = args.until.iter().find_map(|u| match u {
-        Until::Messages(n) => Some(*n),
-        Until::Time(_) => None,
-    });
-    let deadline = args
-        .until
-        .iter()
-        .filter_map(|u| match u {
-            Until::Time(time) => Some(*time),
-            Until::Messages(_) => None,
-        })
-        .min()
-        .map(|time| tokio::time::Instant::now() + time);
+    let plan = Plan {
+        send: outbound,
+        limits: limits(args, request),
+    };
 
-    let mut session = realtime::connect(executor, Some(path), request, context, Options::default())
-        .map_err(|e| e.to_string())?;
-    let control = session.control();
+    // The first Ctrl+C disconnects politely, a second one stops waiting.
+    let cancel = Cancel::new();
+    context.cancel = Some(cancel.clone());
+    tokio::spawn(async move {
+        if tokio::signal::ctrl_c().await.is_ok() {
+            cancel.cancel();
+            if tokio::signal::ctrl_c().await.is_ok() {
+                std::process::exit(130);
+            }
+        }
+    });
+
     let mut printer = Printer {
         json: args.json,
         include: args.include,
         kind: request.kind,
     };
-    let mut received = 0_u64;
-    let (mut opened, mut failed, mut closing) = (false, false, false);
-    if most == Some(0) {
-        control.close();
-        closing = true;
+    let mut failed = None;
+    let execution = executor
+        .execute_realtime(Some(path), request, context, plan, &mut |event| {
+            match printer.print(event) {
+                Ok(()) => true,
+                // The reader, such as `head`, stopped reading: not an error.
+                Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => false,
+                Err(e) => {
+                    failed = Some(e.to_string());
+                    false
+                }
+            }
+        })
+        .await;
+    if let Some(message) = failed {
+        return Err(message);
     }
-    let mut interrupt = Box::pin(tokio::signal::ctrl_c());
-    let mut time_up = Box::pin(async {
-        match deadline {
-            Some(deadline) => tokio::time::sleep_until(deadline).await,
-            None => std::future::pending().await,
+
+    // What the connection printed as it went is not printed again.
+    if args.json {
+        let ran = !(execution.tests.is_empty()
+            && execution.checks.is_empty()
+            && execution.logs.is_empty()
+            && execution.script_errors.is_empty());
+        if ran {
+            let result = serde_json::json!({
+                "type": "result",
+                "tests": execution.tests,
+                "checks": execution.checks,
+                "logs": execution.logs,
+                "script_errors": execution.script_errors,
+                "changes": execution.changes,
+            });
+            println!("{result}");
         }
-    });
-    loop {
-        let event = tokio::select! {
-            event = session.next() => match event {
-                Some(event) => event,
-                None => break,
-            },
-            _ = &mut interrupt => {
-                if closing {
-                    // A second Ctrl+C: stop waiting for the close.
-                    break;
-                }
-                closing = true;
-                control.close();
-                interrupt = Box::pin(tokio::signal::ctrl_c());
-                continue;
-            }
-            () = &mut time_up, if !closing => {
-                closing = true;
-                control.close();
-                continue;
-            }
-        };
-        match printer.print(&event) {
-            Ok(()) => {}
-            // The reader, such as `head`, stopped reading: not an error.
-            Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {
-                control.close();
-                break;
-            }
-            Err(e) => return Err(e.to_string()),
-        }
-        match &event.kind {
-            EventKind::Open { .. } if !opened => {
-                opened = true;
-                for message in outbound.drain(..) {
-                    control.send(message).map_err(|e| e.to_string())?;
-                }
-            }
-            EventKind::Message(message) if message.direction == Direction::Received => {
-                received += 1;
-                if !closing && most.is_some_and(|most| received >= most) {
-                    closing = true;
-                    control.close();
-                }
-            }
-            EventKind::Error { .. } => failed = true,
-            _ => {}
-        }
-    }
-    Ok(if failed || !opened {
-        ExitCode::FAILURE
     } else {
-        ExitCode::SUCCESS
-    })
+        for error in &execution.script_errors {
+            style::error(&format!("script in {}: {}", error.origin, error.message));
+        }
+        for log in &execution.logs {
+            style::note(&format!("[{}] {}", log.level, log.message));
+        }
+        let shown = execution
+            .realtime
+            .as_ref()
+            .map(|call| call.warnings.as_slice())
+            .unwrap_or_default();
+        for warning in execution.warnings.iter().filter(|w| !shown.contains(w)) {
+            style::warn(warning);
+        }
+        if execution.error.is_some() && execution.realtime.is_none() {
+            // Failed before it connected, so nothing was printed about it.
+            if let Some(error) = &execution.error {
+                style::error(error);
+            }
+        }
+        super::send::print_results(&execution);
+    }
+    Ok(super::send::exit(execution.failed()))
+}
+
+/// When to end the connection: what `--until` says, else what the request
+/// file's `until` says, else never (Ctrl+C ends it).
+fn limits(args: &SendArgs, request: &Request) -> Limits {
+    if args.until.is_empty() {
+        return if request.until.is_empty() {
+            Limits::default()
+        } else {
+            request.until.limits()
+        };
+    }
+    Limits {
+        messages: args.until.iter().find_map(|u| match u {
+            Until::Messages(n) => Some(*n),
+            Until::Time(_) => None,
+        }),
+        time: args
+            .until
+            .iter()
+            .filter_map(|u| match u {
+                Until::Time(time) => Some(*time),
+                Until::Messages(_) => None,
+            })
+            .min(),
+    }
 }
 
 /// The saved message or event named `name`.
