@@ -474,6 +474,10 @@ export interface Language {
   id: string;
   label: string;
   syntax: string;
+  /** Whether the snippet has an indent the options change. */
+  indent: boolean;
+  /** Whether the snippet has imports or a main function to leave out. */
+  boilerplate: boolean;
 }
 
 export interface Cookie {

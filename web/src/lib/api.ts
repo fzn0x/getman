@@ -190,8 +190,14 @@ export const api = {
   send: (args: SendArgs, signal?: AbortSignal) => call<Execution>("POST", "/send", args, signal),
   cancelSend: (id: string) => post("/send/cancel", { id }),
   prepare: (args: SendArgs) => post<{ request: Outgoing; missing: string[] }>("/prepare", args),
-  codegen: (args: SendArgs & { language: string; keep_vars?: boolean }) =>
-    post<{ code: string; missing: string[] }>("/codegen", args),
+  codegen: (
+    args: SendArgs & {
+      language: string;
+      keep_vars?: boolean;
+      indent?: "2" | "4" | "tab" | null;
+      no_boilerplate?: boolean;
+    },
+  ) => post<{ code: string; missing: string[] }>("/codegen", args),
   exportItem: (args: {
     kind: "folder" | "environment" | "globals";
     path?: string;
