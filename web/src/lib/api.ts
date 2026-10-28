@@ -28,6 +28,7 @@ import type {
   StoredRun,
   Token,
   TrashItem,
+  Authorization,
   WorkspaceInfo,
 } from "./types";
 
@@ -118,6 +119,13 @@ export interface SendArgs {
   id?: string;
 }
 
+/** OAuth 2.0 settings, and where they are, for resolving variables. */
+export interface OAuthArgs {
+  path?: string | null;
+  auth: Auth;
+  environment?: string | null;
+}
+
 export interface RunArgs {
   target: string;
   /** Folders and requests to run in this order, instead of `target`. */
@@ -182,8 +190,12 @@ export const api = {
     environment?: string | null;
   }) => post("/variables/set", args),
   dynamic: () => call<DynamicVar[]>("GET", "/dynamic"),
-  oauthToken: (args: { path?: string | null; auth: Auth; environment?: string | null }) =>
-    post<Token>("/oauth2/token", args),
+  oauthToken: (args: OAuthArgs) => post<Token>("/oauth2/token", args),
+  oauthAuthorize: (args: OAuthArgs) => post<Authorization>("/oauth2/authorize", args),
+  oauthWait: (id: string) => post<Token>("/oauth2/wait", { id }),
+  oauthCancel: (id: string) => post("/oauth2/cancel", { id }),
+  oauthStatus: (args: OAuthArgs) => post<{ token: Token | null }>("/oauth2/status", args),
+  oauthClear: (args: OAuthArgs) => post<{ cleared: boolean }>("/oauth2/clear", args),
 
   importText: (text: string, folder = "", root = false) =>
     post<ImportReport>("/import", { text, folder, root }),

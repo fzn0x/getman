@@ -255,7 +255,8 @@ pub enum Auth {
         #[serde(default, rename = "in")]
         location: ApiKeyLocation,
     },
-    /// HTTP Digest authentication (MD5, MD5-sess, SHA-256).
+    /// HTTP Digest authentication (MD5, SHA-256, SHA-512-256 and their
+    /// -sess forms).
     Digest {
         /// User name.
         #[serde(default, deserialize_with = "lenient::string")]
@@ -266,6 +267,19 @@ pub enum Auth {
     },
     /// An OAuth 2.0 access token, fetched and cached automatically.
     Oauth2(OAuth2),
+    /// AWS Signature Version 4, computed when the request is sent.
+    #[serde(rename = "aws_sigv4")]
+    AwsSigV4(AwsSigV4),
+    /// A JSON Web Token, signed when the request is sent.
+    Jwt(Jwt),
+    /// Atlassian ASAP: a short-lived JWT signed with a private key.
+    Asap(Asap),
+    /// OAuth 1.0a, signed when the request is sent.
+    Oauth1(OAuth1),
+    /// Hawk, signed when the request is sent.
+    Hawk(Hawk),
+    /// Akamai EdgeGrid, signed when the request is sent.
+    Edgegrid(EdgeGrid),
 }
 
 impl Auth {
@@ -275,7 +289,7 @@ impl Auth {
     }
 }
 
-/// Where an API key goes.
+/// Where an API key, a token or a signature goes.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ApiKeyLocation {
@@ -286,12 +300,18 @@ pub enum ApiKeyLocation {
     Query,
 }
 
-/// OAuth 2.0 settings for grants that need no browser.
+/// OAuth 2.0 settings.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OAuth2 {
     /// The grant used to get a token.
     pub grant: OAuth2Grant,
+    /// Authorization endpoint, for the grants that sign in with a browser.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub auth_url: String,
     /// Token endpoint.
     #[serde(deserialize_with = "lenient::string")]
     pub token_url: String,
@@ -304,12 +324,22 @@ pub struct OAuth2 {
         deserialize_with = "lenient::string"
     )]
     pub client_secret: String,
+    /// Where the provider sends the browser back: a loopback `http` URL.
+    /// When empty, Getman listens on a free port of 127.0.0.1.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub callback_url: String,
+    /// Proof Key for Code Exchange, for the authorization code grant.
+    #[serde(skip_serializing_if = "Pkce::is_off")]
+    pub pkce: Pkce,
     /// Space-separated scopes.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub scope: String,
     /// Audience, for providers that require one.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub audience: String,
+    /// Resource indicator (RFC 8707), for providers that require one.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub resource: String,
     /// Resource owner's user name, for the password grant.
     #[serde(
         skip_serializing_if = "String::is_empty",
@@ -324,9 +354,22 @@ pub struct OAuth2 {
     pub password: String,
     /// How the client authenticates to the token endpoint.
     pub client_auth: ClientAuth,
+    /// More parameters for the authorization request.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub auth_params: Vec<KeyValue>,
+    /// More parameters for token requests.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub token_params: Vec<KeyValue>,
+    /// Scheme written before the token. `Bearer` when empty.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub prefix: String,
+    /// Where the token goes: the `Authorization` header, or the query as
+    /// `access_token`.
+    #[serde(skip_serializing_if = "is_header")]
+    pub token_in: ApiKeyLocation,
 }
 
-/// OAuth 2.0 grant types Getman can complete on its own.
+/// OAuth 2.0 grant types.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OAuth2Grant {
@@ -335,6 +378,38 @@ pub enum OAuth2Grant {
     ClientCredentials,
     /// Resource owner password credentials grant.
     Password,
+    /// Authorization code grant: the user signs in with a browser.
+    AuthorizationCode,
+    /// Implicit grant: the browser receives the token directly.
+    Implicit,
+}
+
+impl OAuth2Grant {
+    /// Whether the user signs in with a browser to get a token.
+    pub fn uses_browser(self) -> bool {
+        matches!(self, Self::AuthorizationCode | Self::Implicit)
+    }
+}
+
+/// Proof Key for Code Exchange (RFC 7636).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Pkce {
+    /// No PKCE.
+    #[default]
+    Off,
+    /// A SHA-256 challenge.
+    S256,
+    /// The verifier itself as the challenge.
+    Plain,
+}
+
+impl Pkce {
+    /// Whether PKCE is off.
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn is_off(&self) -> bool {
+        *self == Self::Off
+    }
 }
 
 /// How an OAuth 2.0 client sends its credentials to the token endpoint.
@@ -346,6 +421,379 @@ pub enum ClientAuth {
     Basic,
     /// As `client_id` and `client_secret` form fields.
     Body,
+}
+
+/// AWS Signature Version 4 settings.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AwsSigV4 {
+    /// Access key ID.
+    #[serde(deserialize_with = "lenient::string")]
+    pub access_key: String,
+    /// Secret access key.
+    #[serde(deserialize_with = "lenient::string")]
+    pub secret_key: String,
+    /// Session token, for temporary credentials.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub session_token: String,
+    /// Region, such as `us-east-1`.
+    #[serde(deserialize_with = "lenient::string")]
+    pub region: String,
+    /// Service name, such as `s3` or `execute-api`.
+    #[serde(deserialize_with = "lenient::string")]
+    pub service: String,
+    /// Where the signature goes: headers, or a presigned query string.
+    #[serde(rename = "in", skip_serializing_if = "is_header")]
+    pub location: ApiKeyLocation,
+    /// Seconds a presigned URL stays valid. Default 3600.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_in: Option<u64>,
+    /// Sign `UNSIGNED-PAYLOAD` instead of the body's hash, as S3 allows.
+    #[serde(skip_serializing_if = "is_false")]
+    pub unsigned_payload: bool,
+}
+
+/// A JSON Web Token signed when the request is sent.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Jwt {
+    /// Signature algorithm. Default `HS256`.
+    #[serde(skip_serializing_if = "JwtAlgorithm::is_default")]
+    pub algorithm: JwtAlgorithm,
+    /// Secret for the HMAC algorithms.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub secret: String,
+    /// Whether `secret` is base64 text to decode first.
+    #[serde(skip_serializing_if = "is_false")]
+    pub secret_base64: bool,
+    /// PEM private key for the RSA and ECDSA algorithms, usually a
+    /// `{{variable}}`.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub private_key: String,
+    /// A PEM private key file in the workspace, used instead of
+    /// `private_key`.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub private_key_file: String,
+    /// Extra header fields, as JSON text. `alg` is set from `algorithm`.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub header: String,
+    /// The claims, as JSON text.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub payload: String,
+    /// Add an `iat` claim with the current time.
+    #[serde(skip_serializing_if = "is_false")]
+    pub issued_at: bool,
+    /// Add an `exp` claim this many seconds from now.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_in: Option<u64>,
+    /// Where the token goes: the `Authorization` header or the query.
+    #[serde(rename = "in", skip_serializing_if = "is_header")]
+    pub location: ApiKeyLocation,
+    /// Scheme written before the token in the header. `Bearer` when empty.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub prefix: String,
+    /// Query parameter name. `token` when empty.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub param: String,
+}
+
+/// A JSON Web Signature algorithm.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum JwtAlgorithm {
+    /// HMAC with SHA-256.
+    #[default]
+    Hs256,
+    /// HMAC with SHA-384.
+    Hs384,
+    /// HMAC with SHA-512.
+    Hs512,
+    /// RSA PKCS#1 v1.5 with SHA-256.
+    Rs256,
+    /// RSA PKCS#1 v1.5 with SHA-384.
+    Rs384,
+    /// RSA PKCS#1 v1.5 with SHA-512.
+    Rs512,
+    /// RSA-PSS with SHA-256.
+    Ps256,
+    /// RSA-PSS with SHA-384.
+    Ps384,
+    /// RSA-PSS with SHA-512.
+    Ps512,
+    /// ECDSA on P-256 with SHA-256.
+    Es256,
+    /// ECDSA on P-384 with SHA-384.
+    Es384,
+}
+
+impl JwtAlgorithm {
+    /// Whether this is the default, `HS256`.
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// Atlassian ASAP settings: a JWT signed with a private key, sent as a
+/// Bearer token.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Asap {
+    /// Signature algorithm. Default `RS256`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub algorithm: Option<JwtAlgorithm>,
+    /// The `iss` claim: who issues the token.
+    #[serde(deserialize_with = "lenient::string")]
+    pub issuer: String,
+    /// The `sub` claim. Left out when empty.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub subject: String,
+    /// The `aud` claim; separate several with commas.
+    #[serde(deserialize_with = "lenient::string")]
+    pub audience: String,
+    /// The `kid` header: the key's ID.
+    #[serde(deserialize_with = "lenient::string")]
+    pub key_id: String,
+    /// PEM private key, usually a `{{variable}}`.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub private_key: String,
+    /// A PEM private key file in the workspace, used instead of
+    /// `private_key`.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub private_key_file: String,
+    /// More claims, as JSON text.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub claims: String,
+    /// Seconds the token is valid. Default 3600.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_in: Option<u64>,
+}
+
+/// OAuth 1.0a settings.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OAuth1 {
+    /// How the request is signed. Default `HMAC-SHA1`.
+    #[serde(skip_serializing_if = "OAuth1Method::is_default")]
+    pub signature_method: OAuth1Method,
+    /// Consumer key.
+    #[serde(deserialize_with = "lenient::string")]
+    pub consumer_key: String,
+    /// Consumer secret, for the HMAC and PLAINTEXT methods.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub consumer_secret: String,
+    /// Access token.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub token: String,
+    /// Token secret.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub token_secret: String,
+    /// PEM private key for the RSA methods, usually a `{{variable}}`.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub private_key: String,
+    /// A PEM private key file in the workspace, used instead of
+    /// `private_key`.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub private_key_file: String,
+    /// `realm`, sent in the header only.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub realm: String,
+    /// `oauth_callback`, when asking for a request token.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub callback: String,
+    /// `oauth_verifier`, when exchanging a request token.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub verifier: String,
+    /// `oauth_version`. `1.0` when empty.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub version: String,
+    /// A fixed `oauth_timestamp`, instead of the current time.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub timestamp: String,
+    /// A fixed `oauth_nonce`, instead of a random one.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub nonce: String,
+    /// Sign the body with `oauth_body_hash`, for bodies that are not forms.
+    #[serde(skip_serializing_if = "is_false")]
+    pub body_hash: bool,
+    /// Where the parameters go.
+    #[serde(rename = "in", skip_serializing_if = "OAuth1Location::is_default")]
+    pub location: OAuth1Location,
+}
+
+/// An OAuth 1.0a signature method.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OAuth1Method {
+    /// HMAC with SHA-1.
+    #[default]
+    #[serde(rename = "HMAC-SHA1")]
+    HmacSha1,
+    /// HMAC with SHA-256.
+    #[serde(rename = "HMAC-SHA256")]
+    HmacSha256,
+    /// HMAC with SHA-512.
+    #[serde(rename = "HMAC-SHA512")]
+    HmacSha512,
+    /// The secrets themselves, for use over TLS only.
+    #[serde(rename = "PLAINTEXT")]
+    Plaintext,
+    /// RSA with SHA-1.
+    #[serde(rename = "RSA-SHA1")]
+    RsaSha1,
+    /// RSA with SHA-256.
+    #[serde(rename = "RSA-SHA256")]
+    RsaSha256,
+    /// RSA with SHA-512.
+    #[serde(rename = "RSA-SHA512")]
+    RsaSha512,
+}
+
+impl OAuth1Method {
+    /// Whether this is the default, `HMAC-SHA1`.
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// Where OAuth 1.0a parameters go.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OAuth1Location {
+    /// The `Authorization` header.
+    #[default]
+    Header,
+    /// The query string.
+    Query,
+    /// A URL-encoded form body.
+    Body,
+}
+
+impl OAuth1Location {
+    /// Whether this is the default, the header.
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// Hawk settings.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Hawk {
+    /// Key identifier.
+    #[serde(deserialize_with = "lenient::string")]
+    pub id: String,
+    /// The shared key.
+    #[serde(deserialize_with = "lenient::string")]
+    pub key: String,
+    /// MAC algorithm. Default `sha256`.
+    #[serde(skip_serializing_if = "HawkAlgorithm::is_default")]
+    pub algorithm: HawkAlgorithm,
+    /// Application-specific data, sent as `ext`.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub ext: String,
+    /// Application ID, for delegated credentials.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub app: String,
+    /// Delegated-by application ID.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub dlg: String,
+    /// Sign the body too, with a payload `hash`.
+    #[serde(skip_serializing_if = "is_false")]
+    pub payload_hash: bool,
+}
+
+/// A Hawk MAC algorithm.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum HawkAlgorithm {
+    /// HMAC with SHA-256.
+    #[default]
+    Sha256,
+    /// HMAC with SHA-1.
+    Sha1,
+}
+
+impl HawkAlgorithm {
+    /// Whether this is the default, SHA-256.
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// Akamai EdgeGrid settings, as an `.edgerc` section holds them.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EdgeGrid {
+    /// Client token.
+    #[serde(deserialize_with = "lenient::string")]
+    pub client_token: String,
+    /// Client secret.
+    #[serde(deserialize_with = "lenient::string")]
+    pub client_secret: String,
+    /// Access token.
+    #[serde(deserialize_with = "lenient::string")]
+    pub access_token: String,
+    /// The API host, such as `https://akab-xxx.luna.akamaiapis.net`. When
+    /// set, requests go there, keeping their path and query.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub base_url: String,
+    /// Headers included in the signature, in order.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub headers_to_sign: Vec<String>,
+    /// Most body bytes a POST signature covers. Default 131072.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_body: Option<u64>,
 }
 
 /// JavaScript run around a request.
@@ -715,6 +1163,16 @@ fn is_true(value: &bool) -> bool {
     *value
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_header(location: &ApiKeyLocation) -> bool {
+    *location == ApiKeyLocation::Header
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -816,6 +1274,68 @@ mod tests {
         assert_eq!(oauth.grant, OAuth2Grant::Password);
         assert_eq!(oauth.username, "ada");
         assert_eq!(oauth.client_auth, ClientAuth::Basic);
+    }
+
+    #[test]
+    fn aws_signatures_write_only_what_is_set() {
+        let auth = Auth::AwsSigV4(AwsSigV4 {
+            access_key: "{{awsKey}}".into(),
+            secret_key: "{{awsSecret}}".into(),
+            region: "eu-west-1".into(),
+            service: "execute-api".into(),
+            ..AwsSigV4::default()
+        });
+        let yaml = serde_yaml_ng::to_string(&auth).unwrap();
+        assert_eq!(
+            yaml,
+            "type: aws_sigv4\naccess_key: '{{awsKey}}'\nsecret_key: '{{awsSecret}}'\nregion: eu-west-1\nservice: execute-api\n"
+        );
+        let presigned: Auth = serde_yaml_ng::from_str(
+            "type: aws_sigv4\nservice: s3\nin: query\nunsigned_payload: true\n",
+        )
+        .unwrap();
+        let Auth::AwsSigV4(settings) = presigned else {
+            panic!("expected aws_sigv4, got {presigned:?}");
+        };
+        assert_eq!(settings.location, ApiKeyLocation::Query);
+        assert!(settings.unsigned_payload);
+    }
+
+    #[test]
+    fn jwt_algorithms_are_written_as_named() {
+        let auth: Auth = serde_yaml_ng::from_str(
+            "type: jwt\nalgorithm: ES384\nprivate_key_file: keys/signing.pem\npayload: '{\"sub\": \"{{user}}\"}'\nexpires_in: 300\n",
+        )
+        .unwrap();
+        let Auth::Jwt(jwt) = &auth else {
+            panic!("expected jwt, got {auth:?}");
+        };
+        assert_eq!(jwt.algorithm, JwtAlgorithm::Es384);
+        assert_eq!(jwt.expires_in, Some(300));
+        let yaml = serde_yaml_ng::to_string(&auth).unwrap();
+        assert!(yaml.contains("algorithm: ES384"), "{yaml}");
+        assert!(!yaml.contains("issued_at"), "{yaml}");
+        let default = serde_yaml_ng::to_string(&Auth::Jwt(Jwt::default())).unwrap();
+        assert_eq!(default, "type: jwt\n");
+    }
+
+    #[test]
+    fn browser_grants_keep_their_settings_beside_the_type() {
+        let yaml = "type: oauth2\ngrant: authorization_code\nauth_url: https://id.example.com/authorize\ntoken_url: https://id.example.com/token\nclient_id: cli\npkce: s256\nauth_params:\n- name: prompt\n  value: consent\ntoken_in: query\n";
+        let auth: Auth = serde_yaml_ng::from_str(yaml).unwrap();
+        let Auth::Oauth2(oauth) = &auth else {
+            panic!("expected oauth2, got {auth:?}");
+        };
+        assert_eq!(oauth.grant, OAuth2Grant::AuthorizationCode);
+        assert!(oauth.grant.uses_browser());
+        assert_eq!(oauth.pkce, Pkce::S256);
+        assert_eq!(oauth.auth_params[0].name, "prompt");
+        assert_eq!(oauth.token_in, ApiKeyLocation::Query);
+        let written = serde_yaml_ng::to_string(&auth).unwrap();
+        assert!(written.contains("pkce: s256"), "{written}");
+        assert!(!written.contains("prefix"), "{written}");
+        assert!(!written.contains("callback_url"), "{written}");
+        assert_eq!(serde_yaml_ng::from_str::<Auth>(&written).unwrap(), auth);
     }
 
     #[test]

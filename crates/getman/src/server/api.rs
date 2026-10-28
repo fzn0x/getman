@@ -16,7 +16,7 @@ use getman_core::execute::{Cancel, Context, persist_changes, resolved_variables}
 use getman_core::export::codegen;
 use getman_core::http::{CookieInfo, Payload};
 use getman_core::import::{curl, postman};
-use getman_core::model::{Auth, Example, Folder, Request};
+use getman_core::model::{Auth, Example, Folder, OAuth2, Request};
 use getman_core::runner::{self, RunEvent, RunOptions};
 use getman_core::script::{ChangeScope, VarChange};
 use getman_core::workspace::{EnvironmentFiles, LocalState};
@@ -93,6 +93,11 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
             "/header-presets",
             get(read_header_presets).put(write_header_presets),
         )
+        .route("/oauth2/authorize", post(oauth2_authorize))
+        .route("/oauth2/wait", post(oauth2_wait))
+        .route("/oauth2/cancel", post(oauth2_cancel))
+        .route("/oauth2/status", post(oauth2_status))
+        .route("/oauth2/clear", post(oauth2_clear))
 }
 
 /// An error answered as `{"error": "..."}` with a fitting status.
@@ -593,7 +598,14 @@ struct OAuthArg {
     environment: Option<String>,
 }
 
-async fn oauth2_token(State(state): Shared, Json(arg): Json<OAuthArg>) -> ApiResult {
+/// How long a browser sign-in may take.
+const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+
+/// The OAuth 2.0 settings of an argument, and the variables they see.
+fn oauth_settings(
+    state: &AppState,
+    arg: &OAuthArg,
+) -> Result<(OAuth2, getman_core::VarStack), ApiError> {
     let Auth::Oauth2(settings) = &arg.auth else {
         return Err(bad("the authentication is not OAuth 2.0"));
     };
@@ -613,8 +625,19 @@ async fn oauth2_token(State(state): Shared, Json(arg): Json<OAuthArg>) -> ApiRes
         getman_core::Scope::Request,
         resolved.into_iter().map(|v| (v.name, v.value)).collect(),
     );
+    Ok((settings.clone(), vars))
+}
+
+async fn oauth2_token(State(state): Shared, Json(arg): Json<OAuthArg>) -> ApiResult {
+    let (settings, vars) = oauth_settings(&state, &arg)?;
+    let settings = &settings;
     // The token request goes the way the requests in that folder go:
     // through the same proxy, with the same certificates.
+    let request = Request {
+        auth: arg.auth.clone(),
+        ..Request::default()
+    };
+    let path = arg.path.as_deref().filter(|p| !p.is_empty());
     let transport =
         state
             .executor
@@ -625,6 +648,59 @@ async fn oauth2_token(State(state): Shared, Json(arg): Json<OAuthArg>) -> ApiRes
         .token(&state.executor.http, settings, &vars, transport, true)
         .await?;
     Ok(Json(json!(token)))
+}
+
+/// Starts a browser sign-in and opens the authorization URL in the
+/// system's browser.
+async fn oauth2_authorize(State(state): Shared, Json(arg): Json<OAuthArg>) -> ApiResult {
+    let (settings, vars) = oauth_settings(&state, &arg)?;
+    let authorization = state
+        .executor
+        .authenticator
+        .authorize(&settings, &vars)
+        .await?;
+    let opened = open::that_detached(&authorization.url).is_ok();
+    let mut value = json!(authorization);
+    value["opened"] = json!(opened);
+    Ok(Json(value))
+}
+
+#[derive(Deserialize)]
+struct SignInId {
+    id: String,
+}
+
+/// Waits for a browser sign-in to finish and returns its token.
+async fn oauth2_wait(State(state): Shared, Json(arg): Json<SignInId>) -> ApiResult {
+    let token = state
+        .executor
+        .authenticator
+        .wait_for_token(
+            &state.executor.http,
+            &arg.id,
+            getman_core::http::Transport::default(),
+            SIGN_IN_TIMEOUT,
+        )
+        .await?;
+    Ok(Json(json!(token)))
+}
+
+async fn oauth2_cancel(State(state): Shared, Json(arg): Json<SignInId>) -> ApiResult {
+    state.executor.authenticator.cancel_authorization(&arg.id);
+    Ok(done())
+}
+
+/// The cached token for these settings, if there is one.
+async fn oauth2_status(State(state): Shared, Json(arg): Json<OAuthArg>) -> ApiResult {
+    let (settings, vars) = oauth_settings(&state, &arg)?;
+    let token = state.executor.authenticator.cached_token(&settings, &vars);
+    Ok(Json(json!({ "token": token })))
+}
+
+async fn oauth2_clear(State(state): Shared, Json(arg): Json<OAuthArg>) -> ApiResult {
+    let (settings, vars) = oauth_settings(&state, &arg)?;
+    let cleared = state.executor.authenticator.clear_token(&settings, &vars)?;
+    Ok(Json(json!({ "cleared": cleared })))
 }
 
 // ---- Runs -------------------------------------------------------------------

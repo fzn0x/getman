@@ -20,11 +20,14 @@ indexmap = { version = "2", features = ["serde"] }
 md-5 = "0.11"
 mime_guess = "2"
 p12-keystore = "0.4"
+p256 = "0.14"
+p384 = "0.14"
 percent-encoding = "2"
 regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "cookies", "gzip", "brotli", "deflate", "zstd", "multipart", "system-proxy", "socks", "stream"] }
 reqwest_cookie_store = "0.10"
 rquickjs = "0.14"
+rsa = { version = "=0.10.0-rc.19", features = ["getrandom"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
@@ -32,7 +35,7 @@ serde_yaml_ng = "0.10"
 sha1 = "0.11"
 sha2 = "0.11"
 thiserror = "2"
-tokio = { version = "1", features = ["rt", "macros", "time", "fs", "sync", "net"] }
+tokio = { version = "1", features = ["rt", "macros", "time", "fs", "sync", "net", "io-util"] }
 tower-layer = "0.3"
 tower-service = "0.3"
 url = "2"

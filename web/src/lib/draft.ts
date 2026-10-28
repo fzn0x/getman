@@ -93,6 +93,18 @@ export function emptyAuth(type: Auth["type"]): Auth {
         client_id: "",
         client_auth: "basic",
       };
+    case "aws_sigv4":
+      return { type, access_key: "", secret_key: "", region: "", service: "" };
+    case "jwt":
+      return { type, algorithm: "HS256", payload: "{\n  \n}" };
+    case "asap":
+      return { type, issuer: "", audience: "", key_id: "" };
+    case "oauth1":
+      return { type, consumer_key: "" };
+    case "hawk":
+      return { type, id: "", key: "" };
+    case "edgegrid":
+      return { type, client_token: "", client_secret: "", access_token: "" };
     default:
       return { type };
   }
@@ -144,4 +156,10 @@ export const AUTH_TYPES: { type: Auth["type"]; label: string }[] = [
   { type: "api_key", label: "API key" },
   { type: "digest", label: "Digest" },
   { type: "oauth2", label: "OAuth 2.0" },
+  { type: "oauth1", label: "OAuth 1.0a" },
+  { type: "jwt", label: "JWT bearer" },
+  { type: "aws_sigv4", label: "AWS Signature v4" },
+  { type: "hawk", label: "Hawk" },
+  { type: "edgegrid", label: "Akamai EdgeGrid" },
+  { type: "asap", label: "Atlassian ASAP" },
 ];

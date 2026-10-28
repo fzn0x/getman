@@ -40,7 +40,7 @@ commit.
 | --- | --- |
 | Requests | Method, URL, query and path parameters (disabled ones kept), headers, description |
 | Bodies | Raw (JSON, XML, text), form, multipart, binary file, GraphQL |
-| Authentication | Basic, Bearer, API key, Digest, OAuth 2.0 client credentials and password grants |
+| Authentication | Basic, Bearer, API key, Digest, OAuth 1.0, OAuth 2.0 (every grant), AWS Signature, JWT, Hawk, Akamai EdgeGrid, ASAP |
 | Scripts | Pre-request and test scripts, unchanged: `pm` is the same object as `gm` |
 | Variables | Collection, folder, environment and global variables |
 | Settings | Redirects, TLS verification |
@@ -54,11 +54,12 @@ than dropping it quietly:
 - **Files** selected for form fields or binary bodies. Exports hold the
   absolute path on the exporting machine; Getman keeps the file name and
   asks you to copy the file into the workspace.
-- **OAuth 2.0 grants that need a browser**, such as authorization code.
-  The request sends the saved token, or `{{accessToken}}`, as a Bearer
-  token instead.
-- **Other authentication types**, such as AWS Signature or NTLM. Set the
-  credentials in headers or a pre-request script.
+- **Saved OAuth 2.0 tokens.** They would end up in a shared file; get a
+  new one under **Auth**. A callback URL Getman cannot listen on, such as
+  Postman's own, is dropped too: Getman receives the sign-in on this
+  machine ([Authentication](auth.md#signing-in-with-a-browser)).
+- **Other authentication types**, such as NTLM. Set the credentials in
+  headers or a pre-request script.
 
 ## From cURL
 
@@ -81,7 +82,9 @@ sense for a saved request, such as `-o` or `--proxy`, are skipped.
 
 <kbd>Alt</kbd> <kbd>C</kbd> in the UI, or `getman export`, writes the
 current request as code, with variables replaced and authentication
-applied:
+applied. Signatures, such as AWS Signature or OAuth 1.0, are made as of
+now and soon expire; OAuth 2.0 tokens and Digest answers need a round
+trip, so they are left out:
 
 ```sh
 getman export orders/create.yaml --to python -e staging

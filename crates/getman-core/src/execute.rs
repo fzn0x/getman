@@ -196,12 +196,14 @@ pub struct Executor {
 }
 
 impl Executor {
-    /// An executor with a fresh client and no cached tokens.
+    /// An executor with a fresh client. OAuth 2.0 tokens from browser
+    /// sign-ins are read from and kept in the workspace's state directory.
     pub fn new(workspace: Workspace) -> Self {
+        let tokens = workspace.state_dir().join(crate::auth::TOKEN_FILE);
         Self {
             workspace,
             http: Arc::new(HttpClient::new()),
-            authenticator: Arc::new(Authenticator::new()),
+            authenticator: Arc::new(Authenticator::with_store(tokens)),
         }
     }
 

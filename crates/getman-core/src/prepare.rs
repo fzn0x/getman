@@ -323,6 +323,8 @@ pub fn prepare(
     if find_header(&outgoing.headers, "accept").is_none() {
         outgoing.headers.push(Header::new("Accept", "*/*"));
     }
+    // Signatures cover the finished request, so they come last.
+    crate::auth::sign(auth, &mut |text| r.render(text), &mut outgoing, root)?;
 
     Ok(Prepared {
         outgoing,
@@ -453,7 +455,8 @@ fn build_body(
 }
 
 /// Adds credentials that need no round trip: Basic, Bearer and API keys.
-/// Digest and OAuth 2.0 are handled when sending (see [`crate::auth`]).
+/// Digest and OAuth 2.0 are handled when sending, and signatures once the
+/// request is complete (see [`crate::auth`]).
 fn apply_auth(auth: &Auth, r: &mut Renderer<'_>, outgoing: &mut Outgoing) -> Result<()> {
     match auth {
         Auth::Basic { username, password } => {
@@ -495,7 +498,8 @@ fn apply_auth(auth: &Auth, r: &mut Renderer<'_>, outgoing: &mut Outgoing) -> Res
                 }
             }
         }
-        Auth::Inherit | Auth::None | Auth::Digest { .. } | Auth::Oauth2(_) => {}
+        // Handled when sending, or signed once the request is complete.
+        _ => {}
     }
     Ok(())
 }
@@ -799,6 +803,59 @@ mod tests {
         assert_eq!(
             find_header(&prepared.outgoing.headers, "authorization"),
             Some("Token t")
+        );
+    }
+
+    #[test]
+    fn signatures_are_inherited_rendered_and_added_last() {
+        use crate::model::{AwsSigV4, Hawk};
+
+        let workspace = Folder {
+            auth: Auth::AwsSigV4(AwsSigV4 {
+                access_key: "{{awsKey}}".into(),
+                secret_key: "{{awsSecret}}".into(),
+                region: "{{region}}".into(),
+                service: "execute-api".into(),
+                ..AwsSigV4::default()
+            }),
+            ..Folder::default()
+        };
+        let request = Request {
+            url: "https://api.example.com/items".into(),
+            ..Request::default()
+        };
+        let effective = Effective::new(&[workspace], &request);
+        let prepared = prepare(
+            &request,
+            &effective.headers,
+            &effective.auth,
+            &vars(&[("awsKey", "AKID"), ("awsSecret", "s")]),
+            Path::new("."),
+        )
+        .unwrap();
+        let authorization = find_header(&prepared.outgoing.headers, "authorization").unwrap();
+        assert!(
+            authorization.starts_with("AWS4-HMAC-SHA256 Credential=AKID/"),
+            "{authorization}"
+        );
+        // The default Accept header is there before signing, so it is signed.
+        assert!(authorization.contains("SignedHeaders=accept;host;x-amz-date"));
+        assert_eq!(prepared.missing, ["region"]);
+
+        let request = Request {
+            url: "https://api.example.com/items".into(),
+            auth: Auth::Hawk(Hawk {
+                id: "id".into(),
+                key: "{{hawkKey}}".into(),
+                ..Hawk::default()
+            }),
+            ..Request::default()
+        };
+        let prepared = prepare_simple(&request, &vars(&[("hawkKey", "k")]));
+        assert!(
+            find_header(&prepared.outgoing.headers, "authorization")
+                .unwrap()
+                .starts_with(r#"Hawk id="id", ts=""#)
         );
     }
 

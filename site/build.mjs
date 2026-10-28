@@ -33,6 +33,7 @@ export const sections = [
     pages: [
       "workspaces",
       "variables",
+      "auth",
       "checks",
       "scripts",
       "http",

@@ -58,6 +58,12 @@ A workspace is a folder you chose. Getman reads and writes only inside it:
   certificate, are read from variables, so their values can live in
   `*.local.yaml` files. A variable that is not defined stops the request
   instead of sending the placeholder.
+- OAuth 2.0 tokens from a browser sign-in are kept in
+  `.getman/oauth2-tokens.json`, readable only by you on macOS and Linux,
+  so `getman run` can use them. Client credentials and password tokens
+  stay in memory.
+- Private keys for JWT, ASAP and OAuth 1.0 come from a variable or a file
+  inside the workspace, like uploads.
 
 ## Cookies
 
@@ -68,6 +74,17 @@ as they are valid, so treat it like a password file: it is written readable
 only by you on macOS and Linux, and cookies that expire are dropped when it
 is read. Remove all in the Cookies dialog empties it. `getman send` and
 `getman run` never read or write it.
+
+## OAuth 2.0 sign-in
+
+Signing in with a browser makes Getman listen on a port of 127.0.0.1 for
+a few minutes, where anything on your machine can connect. The listener
+reads at most 16 KiB from each connection and gives each 10 seconds,
+answers only `GET` on the callback path, and finishes only for an answer
+that carries the random `state` it sent; others get an error page. The
+`state` and the PKCE verifier come from the operating system's random
+number generator. Getman opens only `http` and `https` authorization URLs,
+so a shared collection cannot make it launch another program.
 
 ## Scripts
 
