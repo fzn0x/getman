@@ -296,7 +296,36 @@ are not read; decrypt them first.
   `keys/signing.pem`. Add it to `.gitignore`. Files outside the workspace
   are refused.
 
-## From Postman
+## With gRPC
+
+[gRPC calls](grpc.md#metadata-and-authentication) send authentication as
+metadata. Basic, Bearer, API key, OAuth 2.0, JWT and ASAP work as for HTTP:
+a JWT or ASAP token goes in `authorization`, and a JWT set to go in the
+query string goes under the name of its `param` instead. Digest does not
+work with gRPC.
+
+AWS Signature, OAuth 1.0a, Hawk and EdgeGrid sign the call as the
+HTTP/2 request it is: a `POST` to `https://host/package.Service/Method`
+(`http` for plaintext), your metadata as the headers, and the
+length-prefixed protobuf message as the body. That covers unary and
+server-streaming calls, which have one message. A stream from the client
+(client and bidirectional streams) has no body known in advance, so
+these sign without one:
+
+| `type` | Streams from the client |
+| --- | --- |
+| `aws_sigv4` | Signs `UNSIGNED-PAYLOAD` and sends `X-Amz-Content-Sha256` to say so |
+| `oauth1` | Sends no `oauth_body_hash`, whatever `body_hash` says |
+| `hawk` | Sends no payload `hash`, whatever `payload_hash` says |
+| `edgegrid` | Refused: it signs the body of every `POST` |
+
+Server reflection is a stream too, so a request that reads its schema by
+reflection signs that part the same way. Use a `.proto` file with
+EdgeGrid. `in: query` for AWS Signature and `in: query` or `in: body` for
+OAuth 1.0a are refused, since a gRPC call has no query string or form.
+EdgeGrid's `base_url` is ignored: the call goes to the request's address,
+and that is what the signature names.
+
 
 `getman import` maps Postman's Basic, Bearer, API key, Digest, OAuth 1.0,
 OAuth 2.0 (every grant), AWS Signature, JWT, Hawk, Akamai EdgeGrid and

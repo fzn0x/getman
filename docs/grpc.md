@@ -116,10 +116,21 @@ headers between HTTP and gRPC requests.
 
 Authentication works as for HTTP and arrives as metadata: Basic, Bearer
 and OAuth 2.0 tokens in `authorization`, an API key under its own name
-(also when it is set to go in the query string). Digest does not work
-with gRPC, and the types that sign each request (AWS Signature, JWT,
-ASAP, OAuth 1.0, Hawk, EdgeGrid) are not sent with gRPC calls yet; use a
-Bearer token in a variable instead.
+(also when it is set to go in the query string). JWT and ASAP tokens go in
+`authorization` too, or, for a JWT set to go in the query string, under
+the name of its `param`. Digest does not work with gRPC.
+
+AWS Signature, OAuth 1.0, Hawk and EdgeGrid sign the call as the HTTP/2
+request it is: a `POST` to `https://host/package.Service/Method` (`http`
+without TLS) with your metadata as headers and the length-prefixed
+message as the body. The signature arrives as metadata, such as
+`authorization` and `x-amz-date`. A client or bidirectional stream has no
+body to sign up front, so these sign without one: AWS Signature signs
+`UNSIGNED-PAYLOAD`, and OAuth 1.0 and Hawk leave out the body hash. EdgeGrid
+signs the body of every `POST`, so it works for unary and server-streaming
+calls only, and with a `.proto` file rather than reflection, which is a
+stream. The presigned (`in: query`) and form-body (`in: body`) forms have
+no place in a gRPC call and are refused. See [Authentication](auth.md#with-grpc).
 
 ## Deadlines and TLS
 
@@ -131,6 +142,27 @@ they may run for a long time. A timeout of `0` means no deadline.
 TLS checks certificates against your system's trusted roots. For a
 self-signed certificate, set **Check TLS certificates** to No in the
 request's settings, or `verify_tls: false` in a folder's `settings`.
+
+The connection otherwise follows the same [settings as HTTP
+requests](http.md): `ca_certs` adds certificate authorities to trust,
+`client_cert` presents a client certificate (PEM files, or a PKCS#12 file
+with its passphrase) to servers that ask for one, and `proxy` sends the
+call through an HTTP proxy with `CONNECT`, or a SOCKS5 proxy, with
+credentials and a bypass list. Without a `proxy` setting the call uses the
+system's proxy and the `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY` and
+`NO_PROXY` variables, as an HTTP request to the same address would. `http://`
+and `https://` proxies both work; with `https://` the connection to the
+proxy itself uses TLS.
+
+```yaml
+# orders/_folder.yaml
+settings:
+  ca_certs: [certs/company-root.pem]
+  client_cert:
+    pkcs12: certs/me.p12
+    passphrase: "{{p12Passphrase}}"
+  proxy: socks5h://127.0.0.1:1080
+```
 
 ## Results
 
@@ -177,5 +209,6 @@ getman send orders/watch-order.yaml --json | jq .state
 ```
 
 `getman export` prints a gRPC request as a `grpcurl` command, and the
-**Code** button in the UI does the same. The [terminal UI](terminal.md)
+**Code** button in the UI does the same; it leaves out OAuth 2.0 tokens
+and signatures, which are made when the call is. The [terminal UI](terminal.md)
 cannot open gRPC requests yet; use the browser UI or `getman send`.
