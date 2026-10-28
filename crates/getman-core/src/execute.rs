@@ -208,13 +208,13 @@ impl Executor {
     }
 
     /// An executor whose cookie jar is kept in the workspace's git-ignored
-    /// state directory, so cookies last from one run to the next.
+    /// state directory, so cookies last from one run to the next. Like
+    /// [`Executor::new`], it keeps OAuth 2.0 tokens there too.
     pub fn with_saved_cookies(workspace: Workspace) -> Self {
         let file = workspace.state_dir().join(crate::http::COOKIE_FILE);
         Self {
-            workspace,
             http: Arc::new(HttpClient::with_cookie_file(file)),
-            authenticator: Arc::new(Authenticator::new()),
+            ..Self::new(workspace)
         }
     }
 
