@@ -169,9 +169,9 @@ jobs:
         run: |
           args=(build --ci --target "${{ matrix.target }}")
           case "$RUNNER_OS" in
-            Windows) args+=(--bundles nsis,msi --config windows/command-line.json) ;;
-            macOS) args+=(--bundles app,dmg) ;;
-            Linux) args+=(--bundles appimage,deb,rpm) ;;
+            Windows) args+=(--bundles "nsis,msi" --config windows/command-line.json) ;;
+            macOS) args+=(--bundles "app,dmg") ;;
+            Linux) args+=(--bundles "appimage,deb,rpm") ;;
           esac
           if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
             args+=(--config '{"bundle":{"createUpdaterArtifacts":true}}')
@@ -190,6 +190,8 @@ jobs:
           # "optional", matching none is fine: update files and their
           # signatures exist only when the release is signed.
           put() {
+            # The pattern is meant to expand here.
+            # shellcheck disable=SC2206
             local matches=($1)
             if [ ${#matches[@]} -eq 0 ] && [ "${3:-}" = optional ]; then return; fi
             if [ ${#matches[@]} -ne 1 ]; then
@@ -297,7 +299,7 @@ jobs:
         run: node packaging/render.mjs --tag "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dist dist
       - name: Write checksums
         working-directory: dist
-        run: sha256sum * > SHA256SUMS
+        run: sha256sum -- * > SHA256SUMS
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
