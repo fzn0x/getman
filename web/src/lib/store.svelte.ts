@@ -142,6 +142,24 @@ export async function loadWorkspace(): Promise<void> {
   }
 }
 
+/** Catches up with files changed underneath the UI. When Getman was
+ * started again on another workspace at the same address, this page's
+ * tabs and drafts belong to the old one: keep them for it and start over. */
+export async function catchUp(): Promise<void> {
+  let root: string;
+  try {
+    root = (await api.workspace()).root;
+  } catch {
+    return;
+  }
+  if (root !== ws.root) {
+    flushSession();
+    location.reload();
+    return;
+  }
+  await refreshTree();
+}
+
 export async function refreshTree(): Promise<void> {
   try {
     const [tree, environments] = await Promise.all([api.tree(), api.environments()]);

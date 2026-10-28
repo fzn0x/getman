@@ -20,6 +20,7 @@
   import {
     activeTab,
     cancelSend,
+    catchUp,
     closeTab,
     cycleTab,
     dialogs,
@@ -29,7 +30,6 @@
     newRequest,
     openDialog,
     prefs,
-    refreshTree,
     reopenClosedTab,
     runNoticeAction,
     save,
@@ -61,7 +61,7 @@
     // Files change underneath the UI (an editor, git checkout); catch up
     // whenever the window comes back.
     const onFocus = () => {
-      if (ws.ready) void refreshTree();
+      if (ws.ready) void catchUp();
     };
     window.addEventListener("focus", onFocus);
     // Unsaved drafts are kept for the next visit; warn only if they did not fit.
