@@ -6,11 +6,15 @@
 import type {
   Draft,
   Header,
+  LogEntry as ScriptLog,
   MessageFormat,
   Request,
   RequestKind,
   SavedEmit,
   SavedMessage,
+  TestResult,
+  Until,
+  VarChange,
 } from "./types";
 
 /** Whether requests of this kind stay open, rather than being sent once. */
@@ -74,7 +78,7 @@ export function fromPicker(value: string): { kind: RequestKind; method: string |
 /** The realtime parts of a draft, complete for the editors. */
 export function liveDraft(
   request: Request,
-): Pick<Draft, "kind" | "websocket" | "sse" | "socketio"> {
+): Pick<Draft, "kind" | "websocket" | "sse" | "socketio" | "until"> {
   return {
     kind: request.kind ?? "http",
     websocket: {
@@ -89,6 +93,7 @@ export function liveDraft(
     socketio: {
       namespace: request.socketio?.namespace ?? "",
       path: request.socketio?.path ?? "",
+      transport: request.socketio?.transport ?? "auto",
       auth: request.socketio?.auth ?? "",
       events: [...(request.socketio?.events ?? [])],
       messages: (request.socketio?.messages ?? []).map((m) => ({
@@ -98,6 +103,7 @@ export function liveDraft(
         ack: m.ack ?? false,
       })),
     },
+    until: { messages: request.until?.messages ?? null, time_ms: request.until?.time_ms ?? null },
   };
 }
 
@@ -136,12 +142,22 @@ export function liveRequest(draft: Draft): Partial<Request> {
     const socketio = {
       ...(s.namespace.trim() ? { namespace: s.namespace.trim() } : {}),
       ...(s.path.trim() ? { path: s.path.trim() } : {}),
+      ...(s.transport !== "auto" ? { transport: s.transport } : {}),
       ...(s.auth.trim() ? { auth: s.auth } : {}),
       ...(events.length ? { events } : {}),
       ...(messages.length ? { messages } : {}),
     };
     if (Object.keys(socketio).length) out.socketio = socketio;
   }
+  const messages = draft.until.messages;
+  const time = draft.until.time_ms;
+  const until: Until = {
+    ...(typeof messages === "number" && Number.isInteger(messages) && messages >= 0
+      ? { messages }
+      : {}),
+    ...(typeof time === "number" && time > 0 ? { time_ms: Math.round(time) } : {}),
+  };
+  if (Object.keys(until).length) out.until = until;
   return out;
 }
 
@@ -149,11 +165,42 @@ export function liveRequest(draft: Draft): Partial<Request> {
 export function livePanes(kind: RequestKind): string[] {
   switch (kind) {
     case "websocket":
-      return ["message", "params", "headers", "auth", "variables", "settings", "docs"];
+      return [
+        "message",
+        "params",
+        "headers",
+        "auth",
+        "scripts",
+        "checks",
+        "variables",
+        "settings",
+        "docs",
+      ];
     case "socketio":
-      return ["message", "socketio", "params", "headers", "auth", "variables", "settings", "docs"];
+      return [
+        "message",
+        "socketio",
+        "params",
+        "headers",
+        "auth",
+        "scripts",
+        "checks",
+        "variables",
+        "settings",
+        "docs",
+      ];
     default:
-      return ["params", "headers", "body", "auth", "variables", "settings", "docs"];
+      return [
+        "params",
+        "headers",
+        "body",
+        "auth",
+        "scripts",
+        "checks",
+        "variables",
+        "settings",
+        "docs",
+      ];
   }
 }
 
@@ -187,7 +234,18 @@ export type StreamEvent = { at: number; session?: string } & (
   | ({ type: "message" } & StreamMessage)
   | { type: "note" | "warning" | "error"; message: string }
   | { type: "closed"; code: number | null; reason: string; by_client: boolean }
+  | ({ type: "result" } & ScriptResults)
 );
+
+/** What scripts, checks and captures made of a connection that ended. */
+export interface ScriptResults {
+  tests: TestResult[];
+  checks: TestResult[];
+  logs: ScriptLog[];
+  script_errors: { origin: string; message: string }[];
+  warnings: string[];
+  changes: VarChange[];
+}
 
 /** A message to send on a connection. */
 export type Outbound = { message: SavedMessage } | { emit: SavedEmit };
@@ -257,6 +315,8 @@ function searchable(event: StreamEvent): string {
       return event.url;
     case "open":
       return `open ${event.status}`;
+    case "result":
+      return "";
   }
 }
 

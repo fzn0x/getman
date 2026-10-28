@@ -67,6 +67,42 @@ describe("drafts", () => {
     expect(toRequest(draft).sse).toEqual({ reconnect: true });
   });
 
+  it("keep the Socket.IO transport and the until limits only when they are set", () => {
+    const draft = toDraft({
+      name: "Orders",
+      kind: "socketio",
+      method: "GET",
+      url: "https://x.test",
+    });
+    expect(draft.socketio.transport).toBe("auto");
+    expect(draft.until).toEqual({ messages: null, time_ms: null });
+    const plain = toRequest(draft);
+    expect(plain).not.toHaveProperty("socketio");
+    expect(plain).not.toHaveProperty("until");
+
+    draft.socketio.transport = "websocket";
+    draft.until.messages = 3;
+    draft.until.time_ms = 2500.4;
+    const request = toRequest(draft);
+    expect(request.socketio).toEqual({ transport: "websocket" });
+    expect(request.until).toEqual({ messages: 3, time_ms: 2500 });
+    expect(toDraft(request).until).toEqual({ messages: 3, time_ms: 2500 });
+    expect(toDraft(request).socketio.transport).toBe("websocket");
+
+    // Zero messages is a limit; zero milliseconds is none, nor is a fraction.
+    draft.until.messages = 0;
+    draft.until.time_ms = 0;
+    expect(toRequest(draft).until).toEqual({ messages: 0 });
+    draft.until.messages = 1.5;
+    expect(toRequest(draft)).not.toHaveProperty("until");
+
+    // Any realtime kind has them, and HTTP requests do not.
+    draft.kind = "sse";
+    draft.until.messages = 4;
+    expect(toRequest(draft).until).toEqual({ messages: 4 });
+    expect(toRequest(draft)).not.toHaveProperty("socketio");
+  });
+
   it("are dirty when the kind changes", () => {
     const draft = newDraft();
     const before = fingerprint(draft);
