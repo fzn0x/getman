@@ -3,8 +3,9 @@
 //!
 //! Requests keep their variables, authentication, headers and bodies.
 //! Assertions become checks where Getman has the same test, and
-//! post-response variables become captures. Scripts are carried over;
-//! their `bru.*`, `req.*` and `res.*` calls need rewriting with `gm.*`.
+//! post-response variables become captures. Scripts are carried over and
+//! run as they are, since Getman provides Bruno's `bru`, `req` and `res`;
+//! calls it does not provide are reported.
 
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
@@ -37,6 +38,44 @@ const METHODS: &[&str] = &[
 
 static BLOCK_START: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^([A-Za-z][\w:-]*)\s*([{\[])\s*$").expect("block pattern"));
+/// The `bru.*` and `req.*` calls Getman's scripts provide.
+const SUPPORTED_CALLS: &[&str] = &[
+    "bru.getEnvName",
+    "bru.getEnvVar",
+    "bru.setEnvVar",
+    "bru.getGlobalEnvVar",
+    "bru.setGlobalEnvVar",
+    "bru.getVar",
+    "bru.setVar",
+    "bru.hasVar",
+    "bru.deleteVar",
+    "bru.deleteAllVars",
+    "bru.getCollectionVar",
+    "bru.getFolderVar",
+    "bru.getRequestVar",
+    "bru.getProcessEnv",
+    "bru.interpolate",
+    "bru.setNextRequest",
+    "bru.runner.skipRequest",
+    "bru.runner.stopExecution",
+    "bru.runner.setNextRequest",
+    "bru.sendRequest",
+    "bru.sleep",
+    "req.getUrl",
+    "req.setUrl",
+    "req.getMethod",
+    "req.setMethod",
+    "req.getName",
+    "req.getHeader",
+    "req.getHeaders",
+    "req.setHeader",
+    "req.setHeaders",
+    "req.deleteHeader",
+    "req.getBody",
+    "req.setBody",
+];
+static CALL: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\b(bru\.runner\.\w+|bru\.\w+|req\.\w+)").expect("call pattern"));
 static PROCESS_ENV: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\{\{\s*process\.env\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}").expect("env pattern")
 });
@@ -645,17 +684,18 @@ impl Reader {
             }
             post.push_str(tests);
         }
-        let uses_api = |code: &str| {
-            code.contains("bru.")
-                || code.contains("req.")
-                || code.contains("res.")
-                || code.contains("res(")
-        };
-        if uses_api(pre) || uses_api(&post) {
+        let mut unsupported = unsupported_calls(pre);
+        for call in unsupported_calls(&post) {
+            if !unsupported.contains(&call) {
+                unsupported.push(call);
+            }
+        }
+        if !unsupported.is_empty() {
             warn_once(
                 &mut self.warnings,
                 format!(
-                    "{name}: its scripts call bru.*, req.* or res.*, which may need edits: Getman scripts use gm.*"
+                    "{name}: its scripts call {}, which Getman does not provide; rewrite them with gm.*",
+                    unsupported.join(", ")
                 ),
             );
         }
@@ -740,6 +780,17 @@ impl Reader {
         }
         out.into_owned()
     }
+}
+
+/// The `bru.*` and `req.*` calls in a script that Getman does not provide.
+fn unsupported_calls(code: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    for call in CALL.find_iter(code).map(|m| m.as_str()) {
+        if !SUPPORTED_CALLS.contains(&call) && !found.iter().any(|seen| seen == call) {
+            found.push(call.to_owned());
+        }
+    }
+    found
 }
 
 /// Splits `value @contentType(type)` into the value and the type.
@@ -970,10 +1021,51 @@ mod tests {
         ));
 
         let warnings = c.warnings.join("\n");
-        assert!(warnings.contains("bru.*"), "{warnings}");
+        assert!(!warnings.contains("does not provide"), "{warnings}");
         assert!(warnings.contains("isTruthy"), "{warnings}");
         assert!(warnings.contains("GETMAN_TRACE_ID"), "{warnings}");
         assert!(warnings.contains("files/cat.png"), "{warnings}");
+    }
+
+    #[test]
+    fn only_calls_getman_lacks_are_reported() {
+        let code = "bru.setVar('a', 1); req.setHeader('x', 'y'); bru.runner.skipRequest();\n\
+                    bru.cwd(); req.getTimeout(); bru.cwd(); res.body.id; bru.runner.skipRequest();";
+        assert_eq!(unsupported_calls(code), ["bru.cwd", "req.getTimeout"]);
+        assert!(unsupported_calls("const res = 1; res.x;").is_empty());
+    }
+
+    #[test]
+    fn every_call_the_importer_accepts_exists_in_scripts() {
+        let checks: String = SUPPORTED_CALLS
+            .iter()
+            .map(|call| {
+                let parts: Vec<&str> = call.split('.').collect();
+                let path = parts.join(".");
+                format!("if (typeof {path} !== 'function') missing.push('{call}');")
+            })
+            .collect();
+        let code = format!(
+            "const missing = []; {checks} test('all exist', () => expect(missing).to.eql([]));"
+        );
+        let input = crate::script::ScriptInput {
+            event: crate::script::Event::PreRequest,
+            info: crate::script::ScriptInfo::default(),
+            scopes: crate::script::ScriptScopes::default(),
+            request: crate::script::ScriptRequest::default(),
+            response: None,
+            cookies: Vec::new(),
+        };
+        let output = crate::script::run(
+            &crate::script::ScriptHost::default(),
+            &[crate::prepare::Script {
+                origin: "request".into(),
+                code,
+            }],
+            &input,
+        );
+        assert!(output.error.is_none(), "{:?}", output.error);
+        assert!(output.tests[0].passed, "{:?}", output.tests[0].message);
     }
 
     #[test]

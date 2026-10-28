@@ -148,8 +148,10 @@ Import dialog.
   translate. Others are reported.
 - **Post-response variables** that read the response, such as
   `token: res.body.token`, become captures.
-- **Scripts and tests** are carried over. Their `bru.*`, `req.*` and
-  `res.*` calls may need edits: Getman scripts use `gm.*`.
+- **Scripts and tests** are carried over and run as they are: Getman
+  provides `bru`, `req`, `res`, `test` and `expect` (see
+  [Scripts](scripts.md#scripts-written-for-bruno)). A call it does not
+  provide is reported, and needs rewriting with `gm.*`.
 - `{{process.env.NAME}}` becomes `{{$env.GETMAN_NAME}}`, since Getman
   reads only environment variables that start with `GETMAN_`.
 
