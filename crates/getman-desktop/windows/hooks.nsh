@@ -23,7 +23,7 @@ Var GetmanOnPathBox
 Function GetmanWelcomeShow
   ${NSD_CreateCheckbox} 120u 172u 195u 12u "Add the getman command to PATH"
   Pop $GetmanOnPathBox
-  SetCtlColors $GetmanOnPathBox "" "FFFFFF"
+  SetCtlColors $GetmanOnPathBox "000000" "FFFFFF"
   ${NSD_Check} $GetmanOnPathBox
 FunctionEnd
 
