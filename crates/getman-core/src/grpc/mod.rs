@@ -19,6 +19,7 @@ mod execute;
 mod generate;
 mod json;
 mod metadata;
+mod proxy;
 mod reflection;
 mod schema;
 mod status;

@@ -22,7 +22,7 @@ use super::{CallType, Direction, GrpcCall, StreamMessage, metadata, reflected, r
 use crate::checks::{run_captures, run_checks};
 use crate::error::{Error, Result};
 use crate::execute::{Context, Execution, Executor, absorb, run_scripts, script_scopes, var_stack};
-use crate::http::{Header, Outgoing, OutgoingBody, Payload, Response, Size};
+use crate::http::{Header, Outgoing, OutgoingBody, Payload, Response, Size, Transport};
 use crate::model::{Folder, Request, Settings};
 use crate::prepare::Effective;
 use crate::script::{
@@ -301,7 +301,7 @@ async fn run(
         "" => None,
         proto => Some(compile(executor.workspace.root(), proto).await?),
     };
-    let mut connection = connect(&target, transport.verify_tls, &chain, &request).await?;
+    let mut connection = connect(&target, &transport, &chain, &request).await?;
     let schema = match proto_schema {
         Some(schema) => schema,
         None => reflect(&target, &mut connection, &metadata, false).await?,
@@ -420,7 +420,7 @@ pub async fn load_schema(
         Some((&executor.authenticator, &executor.http, transport.clone())),
     )
     .await?;
-    let mut connection = connect(&target, transport.verify_tls, &chain, request).await?;
+    let mut connection = connect(&target, &transport, &chain, request).await?;
     reflect(&target, &mut connection, &metadata, true).await
 }
 
@@ -610,13 +610,13 @@ async fn reflect(
 
 async fn connect(
     target: &Target,
-    verify_tls: bool,
+    transport: &Transport,
     chain: &[Folder],
     request: &Request,
 ) -> Result<Connection> {
     let timeout = deadline(chain, request, CallType::Unary)
         .map_or(CONNECT_TIMEOUT, |d| d.min(CONNECT_TIMEOUT));
-    transport::connect(target, verify_tls, timeout).await
+    transport::connect(target, transport, timeout).await
 }
 
 /// The deadline: the timeout set on the request or its folders, `None`
