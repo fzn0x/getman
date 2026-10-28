@@ -103,7 +103,11 @@ impl History {
             path: execution.path.clone(),
             environment,
             name: request.name.clone(),
-            method: request.method.clone(),
+            method: if request.kind.is_http() {
+                request.method.clone()
+            } else {
+                request.kind.as_str().to_ascii_uppercase()
+            },
             url: request.url.clone(),
             status: execution.response.as_ref().map(|r| r.status),
             time_ms: execution.response.as_ref().map(|r| r.time_ms),

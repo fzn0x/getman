@@ -25,23 +25,30 @@
   /** Leaves `{{variables}}` as written, so tokens stay out of the code. */
   let keepVars = $state(false);
 
+  // gRPC requests have one form outside Getman: a grpcurl command.
+  const grpc = $derived(tab.draft.kind === "grpc");
+  const languages = $derived(
+    grpc ? [{ id: "grpcurl", label: "grpcurl", syntax: "shell" }] : ws.languages,
+  );
+
   const syntax = $derived<EditorLanguage>(
     ws.languages.find((l) => l.id === language)?.syntax === "javascript" ? "javascript" : "text",
   );
 
   $effect(() => {
-    const chosen = language;
+    const chosen = grpc ? "grpcurl" : language;
     const keep = keepVars;
-    store("codeLanguage", chosen);
+    if (!grpc) store("codeLanguage", chosen);
     void (async () => {
       try {
-        const result = await api.codegen({
+        const args = {
           path: contextPath(tab),
           request: toRequest(tab.draft),
           environment: ws.environment || null,
-          language: chosen,
-          keep_vars: keep,
-        });
+        };
+        const result = grpc
+          ? await api.grpcCode(args)
+          : await api.codegen({ ...args, language: chosen, keep_vars: keep });
         code = result.code;
         missing = result.missing;
         error = "";
@@ -57,10 +64,10 @@
   <div class="code-dialog">
     <nav class="languages" aria-label="Language">
       <h2 class="bitmap">Code</h2>
-      {#each ws.languages as option (option.id)}
+      {#each languages as option (option.id)}
         <button
-          class:on={option.id === language}
-          aria-pressed={option.id === language}
+          class:on={grpc || option.id === language}
+          aria-pressed={grpc || option.id === language}
           onclick={() => (language = option.id)}
         >
           {option.label}

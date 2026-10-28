@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from "svelte";
+  import { newGrpcDraft, toRequest } from "../../lib/draft";
   import { methodClass } from "../../lib/format";
   import { rank } from "../../lib/fuzzy";
   import { KIND_LABELS, kindMark } from "../../lib/realtime";
@@ -49,6 +50,13 @@
         run: () =>
           newRequest({ name: `Untitled ${KIND_LABELS[kind]}`, kind, method: "GET", url: "" }),
       })),
+      {
+        id: "new-grpc",
+        title: "New gRPC request",
+        detail: "Call a gRPC method, from .proto files or server reflection",
+        icon: "plus",
+        run: () => newRequest(toRequest(newGrpcDraft())),
+      },
       {
         id: "import",
         title: "Import a collection, API spec, HAR file or cURL command",

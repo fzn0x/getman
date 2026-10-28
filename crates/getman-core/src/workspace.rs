@@ -71,7 +71,8 @@ pub enum Node {
         path: String,
         /// Display name.
         name: String,
-        /// HTTP method.
+        /// HTTP method, or the kind of a request that is not HTTP in
+        /// capitals, such as `GRPC`.
         method: String,
         /// What the request is, when it is not HTTP. Not named `kind`,
         /// which tells folders from requests here.
@@ -315,7 +316,11 @@ impl Workspace {
                         } else {
                             request.name
                         },
-                        method: request.method,
+                        method: if request.kind.is_http() {
+                            request.method
+                        } else {
+                            request.kind.as_str().to_ascii_uppercase()
+                        },
                         request_kind: request.kind,
                         error: None,
                     },

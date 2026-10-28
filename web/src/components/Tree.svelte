@@ -1,5 +1,6 @@
 <script lang="ts">
   import { copyText } from "../lib/clipboard";
+  import { newGrpcRequestIn } from "../lib/grpc.svelte";
   import type { Node } from "../lib/types";
   import {
     clearSelection,
@@ -101,6 +102,11 @@
     }
     return [
       { label: "New request here", icon: "plus", action: () => newRequestIn(node.path) },
+      {
+        label: "New gRPC request here",
+        icon: "plus",
+        action: () => newGrpcRequestIn(node.path),
+      },
       { label: "New folder here", icon: "folder", action: () => onNewFolder(node.path) },
       {
         label: "Import here…",

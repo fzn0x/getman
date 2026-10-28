@@ -6,6 +6,7 @@ use std::process::ExitCode;
 use getman_core::Workspace;
 use getman_core::execute::{Context, Executor};
 use getman_core::export::{Exported, codegen, openapi, postman};
+use getman_core::model::{Request, RequestKind};
 use getman_core::vars::missing_reason;
 
 use super::Outcome;
@@ -80,21 +81,30 @@ fn code(
     let environment = workspaces::environment(&workspace, args.vars.env.as_deref())?;
     let request = workspace.read_request(path).map_err(|e| e.to_string())?;
     let executor = Executor::new(workspace);
+    let mut context = Context {
+        environment,
+        ..Context::default()
+    };
+    for (name, value) in &args.vars.vars {
+        context
+            .overlay
+            .local
+            .insert(name.clone(), Some(value.clone()));
+    }
+    if request.kind.is_realtime() {
+        return Err(format!(
+            "{} requests are not written as code; connect to them with getman send",
+            request.kind.label()
+        ));
+    }
+    if request.kind == RequestKind::Grpc || language == "grpcurl" {
+        return export_grpc(&executor, path, &request, &context, language);
+    }
     let prepared = if args.keep_vars {
         executor
             .prepare_unresolved(Some(path), &request)
             .map_err(|e| e.to_string())?
     } else {
-        let mut context = Context {
-            environment,
-            ..Context::default()
-        };
-        for (name, value) in &args.vars.vars {
-            context
-                .overlay
-                .local
-                .insert(name.clone(), Some(value.clone()));
-        }
         executor
             .prepare(Some(path), &request, &context)
             .map_err(|e| e.to_string())?
@@ -104,10 +114,38 @@ fn code(
     }
     let mut outgoing = prepared.outgoing;
     codegen::relativize(&mut outgoing, executor.workspace.root());
-    let content = codegen::generate(language, &outgoing)
+    let snippet = codegen::generate(language, &outgoing)
         .ok_or_else(|| format!("{language} is not a language Getman writes"))?;
     Ok(Exported {
-        content,
+        content: snippet,
+        ..Exported::default()
+    })
+}
+
+/// A gRPC request as a `grpcurl` command, its only form; `curl`, the
+/// default, means the same.
+fn export_grpc(
+    executor: &Executor,
+    path: &str,
+    request: &Request,
+    context: &Context,
+    language: &str,
+) -> Result<Exported, String> {
+    if request.kind != RequestKind::Grpc {
+        return Err("grpcurl writes gRPC requests only; choose another language".into());
+    }
+    if !matches!(language, "curl" | "grpcurl") {
+        return Err(format!(
+            "gRPC requests are written as grpcurl commands, not {language}"
+        ));
+    }
+    let (code, missing) = getman_core::grpc::grpcurl(executor, Some(path), request, context)
+        .map_err(|e| e.to_string())?;
+    for name in &missing {
+        style::warn(&missing_reason(name));
+    }
+    Ok(Exported {
+        content: code,
         ..Exported::default()
     })
 }

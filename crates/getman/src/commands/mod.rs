@@ -6,6 +6,7 @@ mod init;
 mod mock;
 mod run;
 mod send;
+mod send_grpc;
 mod stream;
 
 use std::process::ExitCode;

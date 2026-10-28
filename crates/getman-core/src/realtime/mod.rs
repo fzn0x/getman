@@ -344,7 +344,7 @@ pub fn connect(
                 socketio::endpoint(&outgoing.url, &request.socketio, &vars)?;
         }
         RequestKind::Sse => sse::check_url(&outgoing.url)?,
-        RequestKind::Http => {}
+        RequestKind::Http | RequestKind::Grpc => {}
     }
 
     let transport = crate::prepare::transport(
@@ -445,7 +445,7 @@ impl Job {
             RequestKind::Websocket => websocket::run(&mut self, &mut sink).await,
             RequestKind::Sse => sse::run(&mut self, &mut sink).await,
             RequestKind::Socketio => socketio::run(&mut self, &mut sink).await,
-            RequestKind::Http => {}
+            RequestKind::Http | RequestKind::Grpc => {}
         }
         // Refuse messages before the events end, so a reader who saw the
         // end cannot queue one that is never sent.

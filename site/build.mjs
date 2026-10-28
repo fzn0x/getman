@@ -38,6 +38,7 @@ export const sections = [
       "scripts",
       "http",
       "realtime",
+      "grpc",
       "runner",
       "examples-and-mocks",
       "mcp",

@@ -13,7 +13,8 @@ use crate::realtime::{SocketIoSettings, SseSettings, WebSocketSettings};
 /// Named string values, in the order they were written.
 pub type Vars = IndexMap<String, String>;
 
-/// One HTTP request, stored as `<name>.yaml` inside the workspace.
+/// One request, stored as `<name>.yaml` inside the workspace. Requests are
+/// HTTP unless `kind` says otherwise.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Request {
@@ -23,12 +24,16 @@ pub struct Request {
     /// What the file holds: an HTTP request unless it says otherwise.
     #[serde(skip_serializing_if = "RequestKind::is_http")]
     pub kind: RequestKind,
-    /// HTTP method, such as `GET` or `POST`. Any token is accepted.
+    /// HTTP method, such as `GET` or `POST`. Any token is accepted. For
+    /// gRPC, the method's full name, such as `shop.Orders/GetOrder`.
     pub method: String,
     /// URL with the enabled query parameters. May contain `{{variables}}`
-    /// and `:path` parameters.
+    /// and `:path` parameters. For gRPC, the server's address.
     #[serde(deserialize_with = "lenient::string")]
     pub url: String,
+    /// gRPC settings, for `kind: grpc`.
+    #[serde(skip_serializing_if = "Grpc::is_empty")]
+    pub grpc: Grpc,
     /// Free-form Markdown shown next to the request.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub description: String,
@@ -94,6 +99,7 @@ impl Default for Request {
             kind: RequestKind::Http,
             method: "GET".to_owned(),
             url: String::new(),
+            grpc: Grpc::default(),
             description: String::new(),
             path_params: Vars::new(),
             disabled_params: Vec::new(),
@@ -113,8 +119,8 @@ impl Default for Request {
     }
 }
 
-/// What a request file holds: one HTTP request and its response, or a
-/// connection that stays open and carries messages.
+/// What a request file holds: one HTTP request and its response, a gRPC
+/// call, or a connection that stays open and carries messages.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RequestKind {
@@ -127,11 +133,19 @@ pub enum RequestKind {
     Sse,
     /// A Socket.IO connection, over WebSocket.
     Socketio,
+    /// A gRPC call over HTTP/2.
+    Grpc,
 }
 
 impl RequestKind {
     /// Every kind, in the order they are offered.
-    pub const ALL: [Self; 4] = [Self::Http, Self::Websocket, Self::Sse, Self::Socketio];
+    pub const ALL: [Self; 5] = [
+        Self::Http,
+        Self::Websocket,
+        Self::Sse,
+        Self::Socketio,
+        Self::Grpc,
+    ];
 
     /// The name written in files, such as `websocket`.
     pub fn as_str(self) -> &'static str {
@@ -140,6 +154,7 @@ impl RequestKind {
             Self::Websocket => "websocket",
             Self::Sse => "sse",
             Self::Socketio => "socketio",
+            Self::Grpc => "grpc",
         }
     }
 
@@ -150,6 +165,7 @@ impl RequestKind {
             Self::Websocket => "WebSocket",
             Self::Sse => "Server-Sent Events",
             Self::Socketio => "Socket.IO",
+            Self::Grpc => "gRPC",
         }
     }
 
@@ -183,6 +199,36 @@ impl<'de> Deserialize<'de> for RequestKind {
                     known.join(", ")
                 ))
             })
+    }
+}
+
+/// How a gRPC request finds its schema, how it connects, and what it
+/// sends.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Grpc {
+    /// A `.proto` file or a folder of them, relative to the workspace
+    /// root. When empty, the schema comes from the server's reflection
+    /// service.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub proto: String,
+    /// Connect with TLS. Addresses that start with `https://` always do.
+    #[serde(skip_serializing_if = "is_false")]
+    pub tls: bool,
+    /// The message to send, as JSON. May contain `{{variables}}`. Calls
+    /// that stream from the client send every message written here, one
+    /// after another.
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "lenient::string"
+    )]
+    pub message: String,
+}
+
+impl Grpc {
+    /// Whether nothing is set.
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
     }
 }
 
@@ -1447,6 +1493,40 @@ mod tests {
     }
 
     #[test]
+    fn http_requests_do_not_write_their_kind() {
+        let yaml = serde_yaml_ng::to_string(&Request {
+            url: "https://example.com".into(),
+            ..Request::default()
+        })
+        .unwrap();
+        assert!(!yaml.contains("kind"), "{yaml}");
+        assert!(!yaml.contains("grpc"), "{yaml}");
+    }
+
+    #[test]
+    fn a_grpc_request_round_trips_through_yaml() {
+        let request = Request {
+            name: "Say hello".into(),
+            kind: RequestKind::Grpc,
+            method: "greet.Greeter/SayHello".into(),
+            url: "localhost:50051".into(),
+            grpc: Grpc {
+                proto: "protos/greet.proto".into(),
+                tls: false,
+                message: "{ \"name\": \"{{who}}\" }\n".into(),
+            },
+            headers: vec![KeyValue::new("x-trace", "abc")],
+            checks: vec!["status == 0".into()],
+            ..Request::default()
+        };
+        let yaml = serde_yaml_ng::to_string(&request).unwrap();
+        assert!(yaml.starts_with("name: Say hello\nkind: grpc\n"), "{yaml}");
+        assert!(!yaml.contains("tls"), "{yaml}");
+        let back: Request = serde_yaml_ng::from_str(&yaml).unwrap();
+        assert_eq!(back, request);
+    }
+
+    #[test]
     fn an_unknown_kind_is_an_error_not_http() {
         let error = serde_yaml_ng::from_str::<Request>("kind: carrier-pigeon\nurl: x")
             .unwrap_err()
@@ -1455,7 +1535,12 @@ mod tests {
             error.contains("\"carrier-pigeon\" is not a request kind"),
             "{error}"
         );
-        assert!(error.contains("http, websocket, sse, socketio"), "{error}");
+        assert!(
+            error.contains("http, websocket, sse, socketio, grpc"),
+            "{error}"
+        );
+        let request: Request = serde_yaml_ng::from_str("kind: GRPC\nurl: a:1\n").unwrap();
+        assert_eq!(request.kind, RequestKind::Grpc);
     }
 
     #[test]

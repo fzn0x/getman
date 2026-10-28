@@ -15,10 +15,12 @@ the body, authentication, checks) opens in your own editor:
 `$VISUAL`, then `$EDITOR`, then `vi` (Notepad on Windows). Save and close
 the editor, and the change appears, ready to send and save.
 
-WebSocket, event stream and Socket.IO requests show in the tree as `WS`,
-`SSE` and `SIO`, but the terminal UI does not connect to them yet. Use
-`getman send` or the browser UI; see
-[WebSocket, SSE and Socket.IO](realtime.md).
+The terminal UI works with HTTP requests. WebSocket, event stream and
+Socket.IO requests show in the tree as `WS`, `SSE` and `SIO`, and gRPC
+requests as `GRPC`, but it does not connect to them or open them yet:
+use `getman send` or the browser UI. See
+[WebSocket, SSE and Socket.IO](realtime.md) and [gRPC](grpc.md). Runs
+started from it include gRPC requests.
 
 ## Keys
 

@@ -337,6 +337,7 @@ mod tests {
             mocks: Mutex::new(HashMap::new()),
             sends: Mutex::new(HashMap::new()),
             realtime: Hub::default(),
+            grpc: super::super::grpc::Calls::default(),
         });
         let router = super::super::router(Arc::clone(&state));
         (dir, state, router)

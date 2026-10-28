@@ -229,11 +229,13 @@ pub(crate) struct SendArgs {
     pub(crate) net: NetArgs,
 
     /// Print the status line and headers before the body, and the timing
-    /// and TLS details after it.
+    /// and TLS details after it. For gRPC, the headers before the
+    /// messages and the trailers after them.
     #[arg(long, short = 'i')]
     pub(crate) include: bool,
 
-    /// Print everything that happened as JSON instead of the body.
+    /// Print everything that happened as JSON instead of the body. For
+    /// gRPC, print each response message as one line of JSON.
     #[arg(long)]
     pub(crate) json: bool,
 
@@ -304,10 +306,11 @@ pub(crate) struct ExportArgs {
     /// the whole workspace when it is left out.
     pub(crate) request: Option<String>,
 
-    /// Language or tool to write a request in, or `postman` or `openapi`
-    /// for a folder, the workspace or an environment.
+    /// Language or tool to write a request in (gRPC requests go to
+    /// grpcurl), or `postman` or `openapi` for a folder, the workspace or
+    /// an environment.
     #[arg(long = "to", short = 't', default_value = "curl", value_parser = clap::builder::PossibleValuesParser::new(
-        getman_core::export::codegen::LANGUAGES.iter().map(|l| l.id).chain(["postman", "openapi"])
+        getman_core::export::codegen::LANGUAGES.iter().map(|l| l.id).chain(["postman", "openapi", "grpcurl"])
     ))]
     pub(crate) language: String,
 

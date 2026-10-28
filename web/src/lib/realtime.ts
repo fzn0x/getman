@@ -23,6 +23,7 @@ export const KIND_LABELS: Record<RequestKind, string> = {
   websocket: "WebSocket",
   sse: "Event stream",
   socketio: "Socket.IO",
+  grpc: "gRPC",
 };
 
 /** The short mark shown where an HTTP request shows its method. */

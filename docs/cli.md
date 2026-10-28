@@ -80,6 +80,13 @@ it receives on a line; see [WebSocket, SSE and Socket.IO](realtime.md).
 | `--until N\|TIME` | Connections: stop after `N` received messages, or after a time such as `30s`, `500ms` or `2m`. Repeat for both; the first reached stops. Without it, <kbd>Ctrl</kbd> <kbd>C</kbd> stops |
 | `--script-timeout SECONDS` | Default 10 |
 
+For a [gRPC request](grpc.md), `send` prints each response message as
+pretty JSON as it arrives, and the status, its message and any error
+details on stderr. `--json` prints one line of JSON per message instead,
+for piping into tools such as `jq`; `-i` adds the response headers before
+the messages and the trailers after them. A status other than `0 OK`
+exits with 1.
+
 ## getman init
 
 Creates `getman.yaml` and a `.gitignore` for local files.
@@ -113,7 +120,7 @@ the globals instead.
 | Option | |
 | --- | --- |
 | `ITEM` | The request, or for `postman` and `openapi` the folder; the whole workspace when left out |
-| `-t`, `--to FORMAT` | A language (see [Export as code](import-export.md#export-as-code)), `postman` or `openapi` |
+| `-t`, `--to FORMAT` | A language (see [Export as code](import-export.md#export-as-code)), `postman` or `openapi`. gRPC requests print as a `grpcurl` command, also with `--to grpcurl` |
 | `-o`, `--output FILE` | Write to a file instead of standard output; `.yaml` gives YAML for `openapi` |
 | `--keep-vars` | Leave `{{variables}}` as written in code, so tokens stay out of it |
 | `-e`, `--env NAME` | Environment to fill in variables from; with `--to postman` and no `ITEM`, the environment to export |

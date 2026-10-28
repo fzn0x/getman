@@ -8,6 +8,7 @@
 
 mod api;
 mod assets;
+mod grpc;
 mod history;
 mod presets;
 mod realtime;
@@ -45,6 +46,8 @@ pub(crate) struct AppState {
     pub(crate) mocks: Mutex<HashMap<String, crate::mock::Mock>>,
     /// Live WebSocket, SSE and Socket.IO connections of the browser UI.
     pub(crate) realtime: realtime::Hub,
+    /// Live gRPC calls of the browser UI.
+    pub(crate) grpc: grpc::Calls,
 }
 
 impl AppState {
@@ -71,6 +74,7 @@ pub(crate) async fn serve(
         mocks: Mutex::new(HashMap::new()),
         sends: Mutex::new(HashMap::new()),
         realtime: realtime::Hub::default(),
+        grpc: grpc::Calls::default(),
     });
     let app = router(Arc::clone(&state));
 
@@ -130,7 +134,12 @@ async fn bind(port: Option<u16>) -> Result<tokio::net::TcpListener, String> {
 
 pub(crate) fn router(state: Arc<AppState>) -> Router {
     Router::new()
-        .nest("/api", api::routes().merge(realtime::routes()))
+        .nest(
+            "/api",
+            api::routes()
+                .merge(realtime::routes())
+                .merge(grpc::routes()),
+        )
         .fallback(assets::serve)
         .layer(middleware::from_fn_with_state(Arc::clone(&state), guard))
         .with_state(state)
@@ -222,6 +231,7 @@ mod tests {
             mocks: Mutex::new(HashMap::new()),
             sends: Mutex::new(HashMap::new()),
             realtime: realtime::Hub::default(),
+            grpc: grpc::Calls::default(),
         });
         (dir, router(state))
     }

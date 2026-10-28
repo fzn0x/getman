@@ -12,6 +12,7 @@ mod error;
 pub mod examples;
 pub mod execute;
 pub mod export;
+pub mod grpc;
 pub mod http;
 pub mod import;
 mod lenient;

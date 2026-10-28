@@ -13,6 +13,7 @@ pub(crate) fn kind_mark(kind: RequestKind) -> Option<&'static str> {
         RequestKind::Websocket => Some("WS"),
         RequestKind::Sse => Some("SSE"),
         RequestKind::Socketio => Some("SIO"),
+        RequestKind::Grpc => Some("GRPC"),
     }
 }
 

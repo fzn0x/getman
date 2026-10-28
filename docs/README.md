@@ -16,6 +16,7 @@ These pages are also published at <https://fzn0x.github.io/getman/>.
 - [Scripts](scripts.md): the `gm` JavaScript API
 - [HTTP and connections](http.md): HTTP/3, proxies, TLS certificates, cookies, timing
 - [WebSocket, SSE and Socket.IO](realtime.md): connections that stay open
+- [gRPC](grpc.md): unary calls and streams, from .proto files or reflection
 - [Running in CI](runner.md): `getman run`, reports, GitHub Actions, GitLab
 - [Examples and mocks](examples-and-mocks.md): saved responses, `getman mock`
 - [AI agents](mcp.md): `getman mcp` for Claude and other MCP clients

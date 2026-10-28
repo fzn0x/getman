@@ -211,7 +211,7 @@ export interface ClientCert {
 }
 
 /** What a request file holds; `http` when the file says nothing. */
-export type RequestKind = "http" | "websocket" | "sse" | "socketio";
+export type RequestKind = "http" | "websocket" | "sse" | "socketio" | "grpc";
 
 export type MessageFormat = "text" | "json" | "binary";
 
@@ -249,9 +249,11 @@ export interface SocketIoSettings {
 
 export interface Request {
   name: string;
+  /** What the request speaks; HTTP when missing. */
   kind?: RequestKind;
   method: string;
   url: string;
+  grpc?: Grpc;
   description?: string;
   path_params?: Vars;
   disabled_params?: KeyValue[];
@@ -277,6 +279,7 @@ export interface Draft {
   kind: RequestKind;
   method: string;
   url: string;
+  grpc: { proto: string; tls: boolean; message: string };
   description: string;
   path_params: Vars;
   disabled_params: KeyValue[];
@@ -451,6 +454,7 @@ export interface Execution {
   skipped: boolean;
   next_request: unknown;
   cancelled?: boolean;
+  grpc?: GrpcCall;
 }
 
 export interface ResolvedVar {
@@ -666,3 +670,65 @@ export interface MockServer {
   mocked: MockedRoute[];
   hits: MockHit[];
 }
+
+// ---- gRPC ---------------------------------------------------------------
+
+export interface Grpc {
+  /** A .proto file or folder; server reflection when empty. */
+  proto?: string;
+  tls?: boolean;
+  /** JSON; streams from the client hold several messages in a row. */
+  message?: string;
+}
+
+export type CallType = "unary" | "server_streaming" | "client_streaming" | "bidi_streaming";
+
+export interface StreamMessage {
+  direction: "sent" | "received";
+  message: unknown;
+  time_ms: number;
+  size: number;
+  error?: string;
+}
+
+export interface GrpcStatus {
+  code: number;
+  name: string;
+  message: string;
+  details?: unknown;
+}
+
+export interface GrpcCall {
+  method: string;
+  call_type: CallType;
+  address: string;
+  tls: boolean;
+  status: GrpcStatus | null;
+  headers: Header[];
+  trailers: Header[];
+  messages: StreamMessage[];
+  dropped_messages?: number;
+  time_ms: number;
+  headers_ms: number | null;
+}
+
+export interface GrpcMethod {
+  name: string;
+  /** What a request's `method` holds: `package.Service/Method`. */
+  path: string;
+  input: string;
+  output: string;
+  call_type: CallType;
+  example: unknown;
+}
+
+export interface GrpcService {
+  name: string;
+  methods: GrpcMethod[];
+}
+
+export type GrpcEvent =
+  | { event: "started"; method: string; call_type: CallType; address: string }
+  | { event: "headers"; headers: Header[]; time_ms: number }
+  | { event: "message"; message: StreamMessage }
+  | { event: "done"; execution: Execution };

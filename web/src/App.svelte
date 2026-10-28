@@ -4,6 +4,8 @@
   import DropZone from "./components/DropZone.svelte";
   import EnvironmentsView from "./components/EnvironmentsView.svelte";
   import FolderView from "./components/FolderView.svelte";
+  import GrpcRequestView from "./components/grpc/GrpcRequestView.svelte";
+  import { grpcPrimary } from "./lib/grpc.svelte";
   import Notices from "./components/Notices.svelte";
   import RequestView from "./components/request/RequestView.svelte";
   import RunnerView from "./components/RunnerView.svelte";
@@ -87,7 +89,9 @@
       action();
     };
     if (matches(event, "mod+enter")) {
-      if (current?.kind === "request") handle(() => void send(current));
+      if (current?.kind === "request" && current.draft.kind === "grpc")
+        handle(() => void grpcPrimary(current));
+      else if (current?.kind === "request") handle(() => void send(current));
     } else if (matches(event, "escape") && current?.kind === "request" && current.sending) {
       if (!event.defaultPrevented) handle(() => void cancelSend(current));
     } else if (matches(event, "mod+s")) {
@@ -215,6 +219,10 @@
       <div class="view">
         {#if !tab}
           <Welcome />
+        {:else if tab.kind === "request" && tab.draft.kind === "grpc"}
+          {#key tab.id}
+            <GrpcRequestView {tab} />
+          {/key}
         {:else if tab.kind === "request"}
           {#key tab.id}
             <RequestView {tab} />
