@@ -11,7 +11,9 @@
   import PromptDialog from "./PromptDialog.svelte";
   import SaveAsDialog from "./SaveAsDialog.svelte";
   import SetVariableDialog from "./SetVariableDialog.svelte";
+  import SettingsDialog from "./SettingsDialog.svelte";
   import ShortcutsDialog from "./ShortcutsDialog.svelte";
+  import UpdateDialog from "./UpdateDialog.svelte";
 
   const current = $derived(dialogs.current);
 </script>
@@ -42,6 +44,10 @@
       <HeaderPresetsDialog />
     {:else if current.kind === "setVariable"}
       <SetVariableDialog value={current.value} name={current.name} tab={current.tab} />
+    {:else if current.kind === "settings"}
+      <SettingsDialog />
+    {:else if current.kind === "update"}
+      <UpdateDialog />
     {/if}
   {/key}
 {/if}

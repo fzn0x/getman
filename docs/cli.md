@@ -41,6 +41,18 @@ the example requests, and lives in your user data folder:
 | macOS | `~/Library/Application Support/getman/workspace` |
 | Windows | `%APPDATA%\getman\workspace` |
 
+## getman desktop
+
+Opens the [desktop app](desktop.md)'s window, on the workspace in `DIR` or
+the one used last. It exists in the `getman` that comes with the desktop
+app on macOS and Linux, where the app's program is the `getman` command;
+the command-line download has no window to open.
+
+```sh
+getman desktop            # the workspace used last
+getman desktop ./api      # this one
+```
+
 ## getman tui
 
 Opens the [terminal UI](terminal.md). Takes the same `DIR`.

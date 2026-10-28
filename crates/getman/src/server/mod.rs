@@ -5,14 +5,20 @@
 //! from other origins are refused, and API calls must carry a token that
 //! only the UI opened from the terminal knows. Without these checks any
 //! website could use the server to send requests or read files.
+//!
+//! `getman` runs it in the foreground with `serve`; the desktop app runs
+//! it in the background of its own process with [`Server`].
 
 mod api;
 mod assets;
+mod background;
 mod grpc;
 mod history;
 mod presets;
 mod realtime;
 mod token;
+
+pub use background::{Options, Server};
 
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr};
@@ -65,17 +71,7 @@ pub(crate) async fn serve(
     let token = token::load_or_create()?;
     let listener = bind(port).await?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
-    let state = Arc::new(AppState {
-        history: history::History::open(&workspace),
-        executor: Executor::with_saved_cookies(workspace),
-        token,
-        port,
-        runs: Mutex::new(HashMap::new()),
-        mocks: Mutex::new(HashMap::new()),
-        sends: Mutex::new(HashMap::new()),
-        realtime: realtime::Hub::default(),
-        grpc: grpc::Calls::default(),
-    });
+    let state = state(workspace, token, port);
     let app = router(Arc::clone(&state));
 
     let address = format!("http://127.0.0.1:{port}/");
@@ -115,6 +111,21 @@ pub(crate) async fn serve(
         .map_err(|e| e.to_string())
 }
 
+/// The state of a server on `port` for `workspace`.
+fn state(workspace: Workspace, token: String, port: u16) -> Arc<AppState> {
+    Arc::new(AppState {
+        history: history::History::open(&workspace),
+        executor: Executor::with_saved_cookies(workspace),
+        token,
+        port,
+        runs: Mutex::new(HashMap::new()),
+        mocks: Mutex::new(HashMap::new()),
+        sends: Mutex::new(HashMap::new()),
+        realtime: realtime::Hub::default(),
+        grpc: grpc::Calls::default(),
+    })
+}
+
 async fn bind(port: Option<u16>) -> Result<tokio::net::TcpListener, String> {
     let localhost = |port| SocketAddr::from((Ipv4Addr::LOCALHOST, port));
     if let Some(port) = port {
@@ -133,13 +144,22 @@ async fn bind(port: Option<u16>) -> Result<tokio::net::TcpListener, String> {
 }
 
 pub(crate) fn router(state: Arc<AppState>) -> Router {
-    Router::new()
-        .nest(
-            "/api",
-            api::routes()
-                .merge(realtime::routes())
-                .merge(grpc::routes()),
-        )
+    router_with(state, None)
+}
+
+/// The router, with the routes of a program that embeds the server served
+/// under `/api/app/`, behind the same guard and token as the rest.
+fn router_with(state: Arc<AppState>, app: Option<&Router>) -> Router {
+    let mut router = Router::new().nest(
+        "/api",
+        api::routes()
+            .merge(realtime::routes())
+            .merge(grpc::routes()),
+    );
+    if let Some(app) = app {
+        router = router.nest_service("/api/app", app.clone());
+    }
+    router
         .fallback(assets::serve)
         .layer(middleware::from_fn_with_state(Arc::clone(&state), guard))
         .with_state(state)

@@ -23,3 +23,8 @@ Thumbs.db
 # Design-tool workspace: decision pages, review captures and downloaded
 # reference images. Not part of the product.
 .impeccable/
+
+# Desktop app: the Tauri command line, and the getman command staged for
+# the Windows installers (see crates/getman-desktop/windows/)
+/crates/getman-desktop/node_modules/
+/crates/getman-desktop/windows/bin/

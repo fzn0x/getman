@@ -1188,7 +1188,9 @@ export type Dialog =
   | { kind: "saveAs"; tab: RequestTab }
   | { kind: "move"; paths: string[] }
   | { kind: "headerPresets" }
-  | { kind: "setVariable"; value: string; name: string; tab: RequestTab | null };
+  | { kind: "setVariable"; value: string; name: string; tab: RequestTab | null }
+  | { kind: "settings" }
+  | { kind: "update" };
 
 export const dialogs = $state({ current: null as Dialog | null });
 

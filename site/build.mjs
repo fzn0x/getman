@@ -27,7 +27,7 @@ const repo = "https://github.com/fzn0x/getman";
 
 // The order of the sidebar, and of previous and next.
 export const sections = [
-  { title: "Start", pages: ["getting-started", "why-getman"] },
+  { title: "Start", pages: ["getting-started", "why-getman", "desktop"] },
   {
     title: "Guides",
     pages: [

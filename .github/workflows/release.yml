@@ -1,7 +1,14 @@
 name: Release
 
 # Pushing a v* tag builds the browser UI once, builds getman with it for
-# every platform, and publishes the archives with checksums.
+# every platform, bundles the desktop app for Windows, macOS and Linux,
+# and publishes the archives and installers with checksums.
+#
+# The desktop files keep the same names in every release, so links to
+# https://github.com/fzn0x/getman/releases/latest/download/<name> never go
+# stale. With the TAURI_SIGNING_PRIVATE_KEY secret set, the installers'
+# update files are signed and latest.json, which the app reads to update
+# itself, is published too; without it a release has no update files.
 
 on:
   push:
@@ -82,9 +89,152 @@ jobs:
           name: release-${{ matrix.target }}
           path: ${{ env.ARCHIVE }}
 
+  desktop:
+    name: Bundle the desktop app for ${{ matrix.name }}
+    needs: web
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows on ARM is cross-compiled; the x64 runner has the ARM64
+          # compilers, and the installers themselves run on either.
+          - name: Windows x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            arch: x64
+          - name: Windows ARM64
+            os: windows-latest
+            target: aarch64-pc-windows-msvc
+            arch: arm64
+          # One app for Apple silicon and Intel Macs.
+          - name: macOS
+            os: macos-latest
+            target: universal-apple-darwin
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+          # The oldest supported Ubuntu, so the AppImage, .deb and .rpm run
+          # on every distribution with the same glibc or a newer one.
+          - name: Linux x86_64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            arch: x86_64
+            deb: amd64
+          - name: Linux ARM64
+            os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            arch: aarch64
+            deb: arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-dist
+          path: web/dist
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets || matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: desktop-${{ matrix.target }}
+      - if: runner.os == 'Linux'
+        uses: ./.github/actions/setup-desktop-linux
+      - if: runner.os == 'Linux'
+        name: Install the AppImage tools' needs
+        run: sudo apt-get install -y --no-install-recommends file xdg-utils
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: crates/getman-desktop/package-lock.json
+      - name: Install the Tauri command line
+        working-directory: crates/getman-desktop
+        run: npm ci
+
+      # On Windows the app is a window program, so the installers bring
+      # the getman command beside it, built just as the CLI archives are.
+      - if: runner.os == 'Windows'
+        name: Build the getman command for the installers
+        shell: bash
+        run: |
+          cargo build --release --locked --package getman --target ${{ matrix.target }}
+          mkdir -p crates/getman-desktop/windows/bin
+          cp "target/${{ matrix.target }}/release/getman.exe" crates/getman-desktop/windows/bin/
+
+      - name: Build and bundle
+        shell: bash
+        working-directory: crates/getman-desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          args=(build --ci --target "${{ matrix.target }}")
+          case "$RUNNER_OS" in
+            Windows) args+=(--bundles nsis,msi --config windows/command-line.json) ;;
+            macOS) args+=(--bundles app,dmg) ;;
+            Linux) args+=(--bundles appimage,deb,rpm) ;;
+          esac
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            args+=(--config '{"bundle":{"createUpdaterArtifacts":true}}')
+          else
+            echo "::warning::TAURI_SIGNING_PRIVATE_KEY is not set, so this release has no update files."
+          fi
+          npx tauri "${args[@]}"
+
+      - name: Name the files
+        shell: bash
+        run: |
+          shopt -s nullglob
+          bundle="target/${{ matrix.target }}/release/bundle"
+          mkdir out
+          # Copies the one file matching a pattern to out/NAME. With
+          # "optional", matching none is fine: update files and their
+          # signatures exist only when the release is signed.
+          put() {
+            local matches=($1)
+            if [ ${#matches[@]} -eq 0 ] && [ "${3:-}" = optional ]; then return; fi
+            if [ ${#matches[@]} -ne 1 ]; then
+              echo "::error::expected one file matching $1, found ${#matches[@]}"
+              exit 1
+            fi
+            cp "${matches[0]}" "out/$2"
+          }
+          case "$RUNNER_OS" in
+            Windows)
+              arch="${{ matrix.arch }}"
+              put "$bundle/nsis/*-setup.exe" "Getman-windows-$arch-setup.exe"
+              put "$bundle/nsis/*-setup.exe.sig" "Getman-windows-$arch-setup.exe.sig" optional
+              put "$bundle/msi/*.msi" "Getman-windows-$arch.msi"
+              put "$bundle/msi/*.msi.sig" "Getman-windows-$arch.msi.sig" optional
+              # The portable copy: the app and the getman command, run from
+              # wherever the zip is unpacked.
+              mkdir -p portable/Getman/bin
+              cp "target/${{ matrix.target }}/release/getman-desktop.exe" portable/Getman/Getman.exe
+              cp crates/getman-desktop/windows/bin/getman.exe portable/Getman/bin/
+              cp README.md LICENSE-MIT LICENSE-APACHE portable/Getman/
+              (cd portable && 7z a "../out/Getman-windows-$arch-portable.zip" Getman > /dev/null)
+              ;;
+            macOS)
+              put "$bundle/dmg/*.dmg" Getman-macos-universal.dmg
+              put "$bundle/macos/*.app.tar.gz" Getman-macos-universal.app.tar.gz optional
+              put "$bundle/macos/*.app.tar.gz.sig" Getman-macos-universal.app.tar.gz.sig optional
+              ;;
+            Linux)
+              arch="${{ matrix.arch }}"
+              put "$bundle/appimage/*.AppImage" "Getman-linux-$arch.AppImage"
+              put "$bundle/appimage/*.AppImage.sig" "Getman-linux-$arch.AppImage.sig" optional
+              put "$bundle/deb/*.deb" "getman-desktop_${{ matrix.deb }}.deb"
+              put "$bundle/rpm/*.rpm" "getman-desktop.$arch.rpm"
+              ;;
+          esac
+          ls -l out
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-${{ matrix.target }}
+          path: out/*
+
   release:
     name: Publish the release
-    needs: build
+    needs: [build, desktop]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -93,6 +243,50 @@ jobs:
           pattern: release-*
           path: dist
           merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: desktop-*
+          path: dist
+          merge-multiple: true
+      - name: Write the release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$GITHUB_REF_NAME" --jq .body > notes.md
+      # latest.json tells the desktop app the newest version, its notes, and
+      # for each platform the signed file that installs it.
+      - name: Describe the update for the desktop app
+        run: |
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
+          platforms='{}'
+          while read -r key file; do
+            [ -f "dist/$file.sig" ] || continue
+            platforms="$(jq --arg key "$key" --arg url "$base/$file" --rawfile signature "dist/$file.sig" \
+              '. + {($key): {signature: $signature, url: $url}}' <<< "$platforms")"
+          done <<'EOF'
+          windows-x86_64 Getman-windows-x64-setup.exe
+          windows-x86_64-nsis Getman-windows-x64-setup.exe
+          windows-x86_64-msi Getman-windows-x64.msi
+          windows-aarch64 Getman-windows-arm64-setup.exe
+          windows-aarch64-nsis Getman-windows-arm64-setup.exe
+          windows-aarch64-msi Getman-windows-arm64.msi
+          darwin-aarch64 Getman-macos-universal.app.tar.gz
+          darwin-aarch64-app Getman-macos-universal.app.tar.gz
+          darwin-x86_64 Getman-macos-universal.app.tar.gz
+          darwin-x86_64-app Getman-macos-universal.app.tar.gz
+          linux-x86_64 Getman-linux-x86_64.AppImage
+          linux-x86_64-appimage Getman-linux-x86_64.AppImage
+          linux-aarch64 Getman-linux-aarch64.AppImage
+          linux-aarch64-appimage Getman-linux-aarch64.AppImage
+          EOF
+          if [ "$platforms" = '{}' ]; then
+            echo "::warning::No signed update files, so there is no latest.json; the desktop app will not offer this release."
+            exit 0
+          fi
+          jq -n --arg version "${GITHUB_REF_NAME#v}" --rawfile notes notes.md \
+            --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson platforms "$platforms" \
+            '{version: $version, notes: $notes, pub_date: $date, platforms: $platforms}' > dist/latest.json
       - name: Write checksums
         working-directory: dist
         run: sha256sum * > SHA256SUMS
@@ -101,4 +295,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* \
-            --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+            --verify-tag --notes-file notes.md --title "$GITHUB_REF_NAME"

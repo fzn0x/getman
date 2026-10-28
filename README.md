@@ -53,6 +53,35 @@ claim and says when to stay.
 
 ## Install
 
+### Desktop app
+
+Getman in its own window, with the `getman` command included:
+
+| System | Download |
+| --- | --- |
+| Windows x64 | [Setup](https://github.com/fzn0x/getman/releases/latest/download/Getman-windows-x64-setup.exe) · [MSI](https://github.com/fzn0x/getman/releases/latest/download/Getman-windows-x64.msi) · [Portable zip](https://github.com/fzn0x/getman/releases/latest/download/Getman-windows-x64-portable.zip) |
+| Windows ARM64 | [Setup](https://github.com/fzn0x/getman/releases/latest/download/Getman-windows-arm64-setup.exe) · [MSI](https://github.com/fzn0x/getman/releases/latest/download/Getman-windows-arm64.msi) · [Portable zip](https://github.com/fzn0x/getman/releases/latest/download/Getman-windows-arm64-portable.zip) |
+| macOS (Apple silicon and Intel) | [Disk image](https://github.com/fzn0x/getman/releases/latest/download/Getman-macos-universal.dmg) |
+| Linux x86_64 | [AppImage](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-x86_64.AppImage) · [.deb](https://github.com/fzn0x/getman/releases/latest/download/getman-desktop_amd64.deb) · [.rpm](https://github.com/fzn0x/getman/releases/latest/download/getman-desktop.x86_64.rpm) |
+| Linux ARM64 | [AppImage](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-aarch64.AppImage) · [.deb](https://github.com/fzn0x/getman/releases/latest/download/getman-desktop_arm64.deb) · [.rpm](https://github.com/fzn0x/getman/releases/latest/download/getman-desktop.aarch64.rpm) |
+
+- **Windows:** run the setup. It installs for your user, without
+  administrator rights, and adds `getman` to your `PATH`. If Windows says
+  "Windows protected your PC", choose **More info**, then **Run anyway**.
+- **macOS:** open the disk image and drag Getman to Applications. The
+  first time, macOS cannot verify it: open **System Settings › Privacy &
+  Security** and click **Open Anyway**. **Settings › About** in the app
+  installs the `getman` command.
+- **Linux:** `chmod +x` the AppImage and run it, or install a package
+  with `sudo apt install ./getman-desktop_amd64.deb` or
+  `sudo dnf install ./getman-desktop.x86_64.rpm`, which also puts
+  `getman` in `/usr/bin`.
+
+The app checks once a day for a new version, which you can turn off. See
+[Desktop app](docs/desktop.md) for the details.
+
+### Command line
+
 Linux and macOS:
 
 ```sh

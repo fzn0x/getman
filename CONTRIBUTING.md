@@ -9,8 +9,10 @@ on the approach before you spend time on it.
 - **Files are the product.** The YAML format is what people commit, so
   changes to it must stay readable, write nothing at its default, and read
   files written by older versions.
-- **Local and private.** Getman never needs an account, never calls home
-  and never sends anything the user did not ask it to. Keep it that way.
+- **Local and private.** Getman never needs an account and never sends
+  anything the user did not ask it to. The one request it makes on its
+  own is the desktop app's daily update check, which the user can turn
+  off. Keep it that way.
 - **The server is an attack surface.** Anything that lets a web page,
   a shared collection or a script reach outside its sandbox is a security
   bug. Read [Security and privacy](docs/security.md) before touching
@@ -51,6 +53,66 @@ npm test
 ```
 
 Clippy runs with its pedantic lints, and the crates deny unsafe code.
+`--workspace` includes the desktop app, which on Linux needs the
+libraries in the next section.
+
+## The desktop app
+
+`crates/getman-desktop` is a [Tauri](https://tauri.app) 2 app that starts
+Getman's server in its own process and shows the UI in a native window.
+It needs Rust 1.90 or newer, and on Linux the WebKitGTK development
+libraries:
+
+```sh
+sudo apt install libwebkit2gtk-4.1-dev librsvg2-dev   # Debian, Ubuntu
+sudo dnf install webkit2gtk4.1-devel librsvg2-devel   # Fedora
+```
+
+Plain `cargo build`, `cargo run` and `cargo test` leave it out, so the
+rest builds without them; `--workspace` or `-p getman-desktop` includes
+it. Build the UI first, as for `getman`; a debug build reads `web/dist`
+from disk, so `npm run build` and a reload in the window show changes.
+
+```sh
+cargo run -p getman-desktop -- desktop /tmp/play   # Windows: without "desktop"
+```
+
+On macOS and Linux its program is the `getman` command too, so without
+`desktop` it runs the command line. Development builds never look for
+updates.
+
+To make the installers for your system, use the Tauri command line
+pinned in `crates/getman-desktop/package.json`:
+
+```sh
+cd crates/getman-desktop
+npm ci
+npx tauri build          # installers in target/release/bundle
+```
+
+On macOS and Linux this renames the app's program to `getman` in
+`target/release`, over the command-line build if there is one. On
+Windows the installers bring `getman.exe` beside the app: build it and
+put it in `crates/getman-desktop/windows/bin` first, then add
+`--config windows/command-line.json`, as the release workflow does.
+
+## Releases
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`, which publishes
+the command-line archives, the desktop installers and `SHA256SUMS`. It
+reads two repository secrets:
+
+| Secret | |
+| --- | --- |
+| `TAURI_SIGNING_PRIVATE_KEY` | The private key that signs the desktop app's update files: the contents of the key file `npx tauri signer generate` writes |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Its password; leave it empty for a key without one |
+
+Without `TAURI_SIGNING_PRIVATE_KEY` a release still has every installer,
+but no update files and no `latest.json`, so installed apps are not
+offered it. The matching public key is `plugins.updater.pubkey` in
+`crates/getman-desktop/tauri.conf.json`. Installed apps accept only
+updates signed with that key, so keep the private key safe and out of
+the repository: a lost key means users must reinstall to get updates.
 
 ## Where things are
 
@@ -66,6 +128,7 @@ Clippy runs with its pedantic lints, and the crates deny unsafe code.
 | `crates/getman/src/commands/` | The command line |
 | `crates/getman/src/server/` | The local server behind the browser UI |
 | `crates/getman/src/tui/` | The terminal UI |
+| `crates/getman-desktop/` | The desktop app: window, updates, installers |
 | `web/src/` | The browser UI |
 | `docs/`, `site/` | Documentation and the website built from it |
 
@@ -74,8 +137,8 @@ Clippy runs with its pedantic lints, and the crates deny unsafe code.
 Commits follow [Conventional Commits](https://www.conventionalcommits.org):
 `type(scope): summary`, such as `fix(core): keep disabled query parameters
 on import`. Common types are `feat`, `fix`, `perf`, `refactor`, `test`,
-`docs`, `build` and `ci`; scopes are `core`, `cli`, `server`, `tui`, `web`
-and `site`. Keep each commit to one logical change that builds and passes
+`docs`, `build` and `ci`; scopes are `core`, `cli`, `server`, `tui`, `web`,
+`desktop` and `site`. Keep each commit to one logical change that builds and passes
 its tests, and use the body to say why.
 
 ## Reporting bugs

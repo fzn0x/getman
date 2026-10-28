@@ -25,20 +25,30 @@ pub(crate) fn find(dir: Option<&Path>) -> Result<Workspace, String> {
 /// current directory, else the personal workspace, created on first use.
 pub(crate) fn find_or_personal(dir: Option<&Path>) -> Result<Workspace, String> {
     if let Some(dir) = dir {
-        let dir = absolute(dir);
-        if let Some(root) = Workspace::discover(&dir) {
-            return Workspace::open(root).map_err(|e| e.to_string());
-        }
-        let name = dir
-            .file_name()
-            .map_or_else(|| "My API".to_owned(), |n| n.to_string_lossy().into_owned());
-        let workspace = Workspace::init(&dir, &name).map_err(|e| e.to_string())?;
-        crate::style::note(&format!("Created a workspace in {}", dir.display()));
-        return Ok(workspace);
+        return open_or_create(dir);
     }
     if let Ok(workspace) = find(None) {
         return Ok(workspace);
     }
+    personal()
+}
+
+/// The workspace containing `dir`, or a new one created in it.
+pub fn open_or_create(dir: &Path) -> Result<Workspace, String> {
+    let dir = absolute(dir);
+    if let Some(root) = Workspace::discover(&dir) {
+        return Workspace::open(root).map_err(|e| e.to_string());
+    }
+    let name = dir
+        .file_name()
+        .map_or_else(|| "My API".to_owned(), |n| n.to_string_lossy().into_owned());
+    let workspace = Workspace::init(&dir, &name).map_err(|e| e.to_string())?;
+    crate::style::note(&format!("Created a workspace in {}", dir.display()));
+    Ok(workspace)
+}
+
+/// The personal workspace, created with example requests on first use.
+pub fn personal() -> Result<Workspace, String> {
     let personal =
         personal_dir().ok_or("cannot find your data directory for the personal workspace")?;
     if Workspace::discover(&personal).is_some() {

@@ -1,6 +1,9 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+# Plain `cargo build`, `run` and `test` leave out the desktop app, which
+# needs a webview's system libraries on Linux; `--workspace` includes it.
+default-members = ["crates/getman", "crates/getman-core"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,6 +14,7 @@ repository = "https://github.com/fzn0x/getman"
 homepage = "https://fzn0x.github.io/getman/"
 
 [workspace.dependencies]
+getman = { path = "crates/getman" }
 getman-core = { path = "crates/getman-core" }
 
 [workspace.lints.rust]
