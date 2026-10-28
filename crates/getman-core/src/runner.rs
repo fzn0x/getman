@@ -315,6 +315,7 @@ pub async fn run(
                 responses += 1;
             }
             let failed = execution.failed();
+            let stop = execution.stop_run;
             let next = execution.next_request.clone();
             on_event(RunEvent::Request {
                 iteration,
@@ -327,6 +328,11 @@ pub async fn run(
                     "{} failed and the run stops at the first failure",
                     item.name
                 ));
+                overlay = context.overlay;
+                break 'iterations;
+            }
+            if stop {
+                summary.stopped = Some(format!("{} stopped the run", item.name));
                 overlay = context.overlay;
                 break 'iterations;
             }
@@ -487,6 +493,48 @@ mod tests {
         assert_eq!(
             report.overlay.session.get("count"),
             Some(&Some("3".to_owned()))
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn stop_execution_finishes_the_request_and_ends_the_run() {
+        let server = test_server::spawn().await;
+        let (_dir, executor) = setup(&server.url(""));
+        let ws = &executor.workspace;
+        ws.create_request(
+            "",
+            "1 stops",
+            &request(
+                "{{base}}/echo",
+                &["status == 200"],
+                "gm.test('still runs', () => {}); bru.runner.stopExecution();",
+            ),
+        )
+        .unwrap();
+        ws.create_request("", "2 never runs", &request("{{base}}/echo", &[], ""))
+            .unwrap();
+        let options = RunOptions {
+            iterations: Some(3),
+            ..RunOptions::default()
+        };
+        let mut seen = Vec::new();
+        let report = run(&executor, &options, &AtomicBool::new(false), |event| {
+            if let RunEvent::Request { execution, .. } = event {
+                seen.push((
+                    execution.name.clone(),
+                    execution.stop_run,
+                    execution.checks.len(),
+                ));
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(seen, [("1 stops".to_owned(), true, 1)]);
+        assert_eq!(report.summary.iterations, 1);
+        assert_eq!(report.summary.tests_passed, 1);
+        assert_eq!(
+            report.summary.stopped.as_deref(),
+            Some("1 stops stopped the run")
         );
     }
 

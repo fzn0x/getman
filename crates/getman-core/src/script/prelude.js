@@ -1,6 +1,7 @@
 // Getman's script runtime, evaluated before the scripts of a request.
 //
-// It defines `gm` (also reachable as `pm`), `console`, `require`, timers,
+// It defines `gm` (also reachable as `pm`), the `bru`, `req` and `res`
+// globals that scripts written for Bruno use, `console`, `require`, timers,
 // `btoa`/`atob` and `crypto.randomUUID`. Rust hands in a JSON snapshot of
 // the request, the response and the variables as `__gm_input`, and reads
 // back what the scripts did from `__gm_finish()`.
@@ -19,6 +20,7 @@
     request: null,
     next_request: undefined,
     skip_request: false,
+    stop_run: false,
   };
   let origin = "";
   const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
@@ -854,6 +856,22 @@
     _changed() {}
   }
 
+  // The fields of a multipart body: text, or a file read when the request
+  // is sent.
+  class FormList extends PropertyList {
+    _normalize(item, value) {
+      const entry = super._normalize(item, value);
+      if (typeof item === "string") return Object.assign(entry, { type: "text" });
+      if (item.type === "file" || item.src) {
+        Object.assign(entry, { type: "file", src: String(item.src ?? ""), value: "" });
+      } else {
+        entry.type = "text";
+      }
+      if (item.contentType) entry.contentType = String(item.contentType);
+      return entry;
+    }
+  }
+
   // ---- The request -------------------------------------------------------
 
   function splitQuery(raw) {
@@ -920,7 +938,24 @@
         return body.raw ?? "";
       },
     };
+    // The fields of a form body are lists that scripts can edit.
+    if (r.body && Array.isArray(r.body.urlencoded)) {
+      body.urlencoded = new PropertyList(
+        r.body.urlencoded.map((f) => ({ key: f.name, value: f.value ?? "", disabled: f.enabled === false })),
+      );
+    }
+    if (r.body && Array.isArray(r.body.formdata)) {
+      body.formdata = new FormList(
+        r.body.formdata.map((f) => {
+          const item = { key: f.name, value: f.value ?? "", disabled: f.enabled === false, type: f.file ? "file" : "text" };
+          if (f.file) item.src = f.file;
+          if (f.content_type) item.contentType = f.content_type;
+          return item;
+        }),
+      );
+    }
     return {
+      id: (input.info && input.info.request_path) || "",
       get url() {
         return url;
       },
@@ -946,6 +981,18 @@
         url: url.toString(),
         headers: headers._items.map((h) => ({ name: h.key, value: storedText(h.value), enabled: !h.disabled })),
         body: body.raw === undefined || body.raw === null ? null : String(body.raw),
+        urlencoded: body.urlencoded
+          ? body.urlencoded._items.map((i) => ({ name: i.key, value: storedText(i.value), enabled: !i.disabled }))
+          : null,
+        formdata: body.formdata
+          ? body.formdata._items.map((i) => ({
+              name: i.key,
+              value: i.type === "file" ? "" : storedText(i.value),
+              file: i.type === "file" ? i.src || null : null,
+              content_type: i.contentType ?? null,
+              enabled: !i.disabled,
+            }))
+          : null,
       }),
     };
   }
@@ -1253,6 +1300,10 @@
       skipRequest() {
         out.skip_request = true;
       },
+      // The request in hand finishes; the rest of the run does not start.
+      stopExecution() {
+        out.stop_run = true;
+      },
       location: [info.request_path || ""],
     },
     crypto: {
@@ -1295,10 +1346,245 @@
     btoa: globalThis.btoa,
     atob: globalThis.atob,
   };
-  globalThis.require = (name) => {
-    if (hasOwn(modules, name)) return modules[name];
-    throw new Error(`require("${name}") is not available in Getman scripts; available modules: ${Object.keys(modules).join(", ")}`);
+
+  // Files of the workspace load as CommonJS modules with a relative path:
+  // `require("./lib/helpers.js")`. From a script the path starts at the
+  // workspace root; from a module it starts at the module's folder. A module
+  // runs once per script run and is cached by its path.
+  const MAX_MODULES = 64;
+  const moduleCache = new Map();
+
+  // The path with `.` and `..` resolved, or null if it leaves the workspace.
+  function normalizePath(path) {
+    const parts = [];
+    for (const part of path.split("/")) {
+      if (part === "" || part === ".") continue;
+      if (part === "..") {
+        if (parts.length === 0) return null;
+        parts.pop();
+      } else {
+        parts.push(part);
+      }
+    }
+    return parts.join("/");
+  }
+
+  const folderOf = (path) => path.slice(0, Math.max(0, path.lastIndexOf("/")));
+
+  function loadModule(folder, name) {
+    if (/[\\:\0]/.test(name)) throw new Error(`require("${name}"): use / between folders, and no drive letters`);
+    let path = normalizePath(`${folder}/${name}`);
+    if (path === null) throw new Error(`require("${name}") is outside the workspace; modules must be inside it`);
+    const last = path.slice(path.lastIndexOf("/") + 1);
+    if (!last.includes(".")) path += ".js";
+    else if (!last.endsWith(".js")) throw new Error(`require("${name}"): only .js files can be required`);
+    const cached = moduleCache.get(path);
+    if (cached) return cached.exports;
+    if (moduleCache.size >= MAX_MODULES) throw new Error(`require("${name}"): a script run can load ${MAX_MODULES} modules at most`);
+    const reply = JSON.parse(native.module(path));
+    if (reply.error) throw new Error(`require("${name}"): ${reply.error}`);
+    const module = { exports: {}, id: path, filename: path };
+    moduleCache.set(path, module);
+    const directory = folderOf(path);
+    try {
+      const wrapper = new Function("module", "exports", "require", "__filename", "__dirname", reply.source);
+      wrapper.call(module.exports, module, module.exports, makeRequire(directory), path, directory);
+    } catch (error) {
+      moduleCache.delete(path);
+      if (error instanceof Error && !error.message.startsWith(path)) error.message = `${path}: ${error.message}`;
+      throw error;
+    }
+    return module.exports;
+  }
+
+  function makeRequire(folder) {
+    return (name) => {
+      name = String(name);
+      if (hasOwn(modules, name)) return modules[name];
+      if (name.startsWith("./") || name.startsWith("../")) return loadModule(folder, name);
+      throw new Error(
+        `require("${name}") is not available in Getman scripts; available modules: ${Object.keys(modules).join(", ")}; ` +
+          `files in the workspace load with a relative path, as in require("./lib/helpers.js")`,
+      );
+    };
+  }
+  globalThis.require = makeRequire("");
+
+  // ---- Scripts written for Bruno ------------------------------------------
+  //
+  // `bru`, `req` and `res` map onto the same state as `gm`. Bruno's runtime
+  // variables are Getman's session variables: they outlive one request.
+
+  const bruNames = (scope) => (name) => scopes[scope][name];
+
+  function bruBody() {
+    const raw = gm.request.body.raw;
+    if (raw === undefined || raw === null) return undefined;
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed !== null && typeof parsed === "object" ? parsed : raw;
+    } catch {
+      return raw;
+    }
+  }
+
+  // What an axios-style response looks like to Bruno scripts.
+  function bruResponse(r) {
+    const headers = {};
+    for (const h of r.headers || []) {
+      const key = h.name.toLowerCase();
+      headers[key] = key in headers ? `${headers[key]}, ${h.value}` : h.value;
+    }
+    let data = r.body || "";
+    try {
+      data = JSON.parse(data);
+    } catch {
+      // Not JSON: the text stays.
+    }
+    return { status: r.code, statusText: r.status, headers, data, responseTime: r.response_time };
+  }
+
+  function bruSend(config, callback) {
+    const request = typeof config === "string" ? { url: config } : config || {};
+    let url = String(request.url || "");
+    if (request.params && typeof request.params === "object") {
+      const query = Object.entries(request.params)
+        .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(storedText(value))}`)
+        .join("&");
+      if (query) url += (url.includes("?") ? "&" : "?") + query;
+    }
+    const outgoing = toOutgoing({
+      url,
+      method: request.method,
+      headers: request.headers,
+      body: request.data !== undefined ? request.data : request.body,
+    });
+    const reply = JSON.parse(native.send(JSON.stringify(outgoing)));
+    const error = reply.error ? new Error(reply.error) : null;
+    const response = reply.response ? bruResponse(reply.response) : null;
+    if (typeof callback === "function") {
+      callback(error, response);
+      return undefined;
+    }
+    return error ? Promise.reject(error) : Promise.resolve(response);
+  }
+
+  const bru = {
+    getEnvName: () => (input.scopes && input.scopes.environment_name) || null,
+    getEnvVar: bruNames("environment"),
+    setEnvVar: (name, value) => void gm.environment.set(name, value),
+    getGlobalEnvVar: bruNames("globals"),
+    setGlobalEnvVar: (name, value) => void gm.globals.set(name, value),
+    getVar: (name) => (name in scopes.local ? scopes.local[name] : scopes.session[name]),
+    setVar: (name, value) => void gm.session.set(name, value),
+    hasVar: (name) => name in scopes.local || name in scopes.session,
+    deleteVar(name) {
+      if (name in scopes.session) gm.session.unset(name);
+      if (name in scopes.local) gm.variables.unset(name);
+    },
+    deleteAllVars() {
+      gm.session.clear();
+      gm.variables.clear();
+    },
+    getCollectionVar: bruNames("collection"),
+    getFolderVar: bruNames("folder"),
+    getRequestVar: bruNames("request"),
+    // Only GETMAN_* variables are readable, as with {{$env.NAME}}.
+    getProcessEnv: (name) => native.env(String(name)) ?? undefined,
+    interpolate(value) {
+      if (typeof value === "string") return interpolate(value);
+      if (value === undefined || value === null) return value;
+      return JSON.parse(interpolate(JSON.stringify(value)));
+    },
+    setNextRequest: (name) => gm.execution.setNextRequest(name),
+    runner: {
+      skipRequest: () => gm.execution.skipRequest(),
+      stopExecution: () => gm.execution.stopExecution(),
+      setNextRequest: (name) => gm.execution.setNextRequest(name),
+    },
+    sendRequest: bruSend,
+    // Waits in real time, but never past the script's time limit.
+    sleep(ms) {
+      native.sleep(Math.max(0, Number(ms) || 0));
+      return Promise.resolve();
+    },
   };
+
+  const req = {
+    getUrl: () => String(gm.request.url),
+    setUrl(url) {
+      gm.request.url = url;
+    },
+    getMethod: () => gm.request.method,
+    setMethod(method) {
+      gm.request.method = method;
+    },
+    getName: () => gm.request.name,
+    getHeader: (name) => gm.request.headers.get(name),
+    getHeaders: () => gm.request.headers.toObject(),
+    setHeader(name, value) {
+      gm.request.headers.upsert({ key: String(name), value });
+    },
+    setHeaders(headers) {
+      gm.request.headers.clear();
+      for (const [name, value] of Object.entries(headers || {})) gm.request.headers.add({ key: name, value });
+    },
+    deleteHeader(name) {
+      gm.request.headers.remove(name);
+    },
+    getBody: bruBody,
+    setBody(data) {
+      gm.request.body.update(data);
+    },
+  };
+
+  // `res(path)` reads a value from the JSON body; the rest is properties.
+  function bruPath(value, path) {
+    const steps = String(path)
+      .replace(/^\$\.?/, "")
+      .replace(/\[(?:"([^"]*)"|'([^']*)'|(-?\d+))\]/g, (_, a, b, c) => `.${a ?? b ?? c}`)
+      .split(".")
+      .filter((step) => step !== "");
+    for (const step of steps) {
+      if (value === null || value === undefined) return undefined;
+      value = Array.isArray(value) && /^-\d+$/.test(step) ? value[value.length + Number(step)] : value[step];
+    }
+    return value;
+  }
+
+  function makeBruResponse(response) {
+    const view = bruResponse({
+      code: response.code,
+      status: response.status,
+      headers: response.headers._items.map((h) => ({ name: h.key, value: h.value })),
+      body: response.text(),
+      response_time: response.responseTime,
+    });
+    const res = (path) => bruPath(view.data, path);
+    const getters = {
+      status: () => view.status,
+      statusText: () => view.statusText,
+      headers: () => view.headers,
+      body: () => view.data,
+      responseTime: () => view.responseTime,
+    };
+    for (const [name, get] of Object.entries(getters)) Object.defineProperty(res, name, { get, enumerable: true });
+    res.getStatus = getters.status;
+    res.getHeader = (name) => view.headers[String(name).toLowerCase()];
+    res.getHeaders = getters.headers;
+    res.getBody = getters.body;
+    res.getResponseTime = getters.responseTime;
+    res.getSize = () => {
+      const headers = response.headers._items.reduce((sum, h) => sum + utf8Encode(`${h.key}: ${h.value}\r\n`).length, 0);
+      return { body: response.responseSize, headers, total: response.responseSize + headers };
+    };
+    return res;
+  }
+
+  globalThis.bru = bru;
+  globalThis.req = req;
+  if (gm.response) globalThis.res = makeBruResponse(gm.response);
+  globalThis.test = test;
 
   // ---- Timers ------------------------------------------------------------
   //

@@ -237,6 +237,7 @@ async fn run(
         )),
         transport: transport.clone(),
         timeout: context.script_timeout,
+        root: Some(executor.workspace.root().to_path_buf()),
     };
 
     // Pre-request scripts. The message is the body they see and edit.
@@ -570,6 +571,7 @@ fn script_request(request: &Request, headers: &[crate::model::KeyValue]) -> Scri
         body: Some(ScriptBody {
             mode: "raw".into(),
             raw: Some(request.grpc.message.clone()),
+            ..ScriptBody::default()
         }),
     }
 }

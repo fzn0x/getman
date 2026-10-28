@@ -176,6 +176,9 @@ pub struct Execution {
     pub warnings: Vec<String>,
     /// Whether a pre-request script skipped the request.
     pub skipped: bool,
+    /// Whether a script asked for the run to stop after this request.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub stop_run: bool,
     /// Where a run goes next, if a script said.
     pub next_request: Option<NextRequest>,
     /// Whether the request was cancelled while it was being sent.
@@ -463,6 +466,7 @@ impl Executor {
             http: Some((Arc::clone(&self.http), tokio::runtime::Handle::current())),
             transport: early.unwrap_or_default(),
             timeout: context.script_timeout,
+            root: Some(self.workspace.root().to_path_buf()),
         };
 
         // Pre-request scripts.
@@ -483,6 +487,7 @@ impl Executor {
                 if let Some(text) = &edited.body {
                     apply_body_text(&mut request.body, text);
                 }
+                apply_form_fields(&mut request.body, edited);
             }
             let failed = absorb(output, context, execution);
             if failed {
@@ -641,6 +646,7 @@ pub(crate) fn absorb(
     execution.tests.extend(output.tests);
     execution.logs.extend(output.logs);
     execution.skipped |= output.skip_request;
+    execution.stop_run |= output.stop_run;
     if output.next_request.is_some() {
         execution.next_request = output.next_request;
     }
@@ -749,23 +755,27 @@ fn script_request(request: &Request, headers: &[crate::model::KeyValue]) -> Scri
             Some(ScriptBody {
                 mode: "raw".into(),
                 raw: Some(content.clone()),
+                ..ScriptBody::default()
             })
         }
         Body::Graphql { query, .. } => Some(ScriptBody {
             mode: "graphql".into(),
             raw: Some(query.clone()),
+            ..ScriptBody::default()
         }),
-        Body::Form { .. } => Some(ScriptBody {
+        Body::Form { fields } => Some(ScriptBody {
             mode: "urlencoded".into(),
-            raw: None,
+            urlencoded: Some(fields.clone()),
+            ..ScriptBody::default()
         }),
-        Body::Multipart { .. } => Some(ScriptBody {
+        Body::Multipart { fields } => Some(ScriptBody {
             mode: "formdata".into(),
-            raw: None,
+            formdata: Some(fields.clone()),
+            ..ScriptBody::default()
         }),
         Body::Binary { .. } => Some(ScriptBody {
             mode: "file".into(),
-            raw: None,
+            ..ScriptBody::default()
         }),
     };
     ScriptRequest {
@@ -773,6 +783,23 @@ fn script_request(request: &Request, headers: &[crate::model::KeyValue]) -> Scri
         url: request.url.clone(),
         headers: headers.to_vec(),
         body,
+    }
+}
+
+/// Puts the form fields a script edited into the body.
+pub(crate) fn apply_form_fields(body: &mut Body, edited: &script::EditedRequest) {
+    match body {
+        Body::Form { fields } => {
+            if let Some(edited) = &edited.urlencoded {
+                fields.clone_from(edited);
+            }
+        }
+        Body::Multipart { fields } => {
+            if let Some(edited) = &edited.formdata {
+                fields.clone_from(edited);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -1154,6 +1181,63 @@ mod tests {
         assert!(execution.skipped);
         assert!(execution.request.is_none());
         assert!(!execution.failed());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn scripts_edit_the_fields_of_form_bodies_before_sending() {
+        let server = test_server::spawn().await;
+        let (_dir, executor) = setup();
+        let request = Request {
+            method: "POST".into(),
+            url: server.url("/echo"),
+            body: Body::Form {
+                fields: vec![
+                    KeyValue::new("grant_type", "password"),
+                    KeyValue::new("drop", "me"),
+                ],
+            },
+            scripts: Scripts {
+                pre_request: "const f = pm.request.body.urlencoded; \
+                    f.upsert({ key: 'grant_type', value: 'client credentials' }); \
+                    f.add({ key: 'scope', value: 'a&b' }); f.remove('drop');"
+                    .into(),
+                post_response: String::new(),
+            },
+            ..Request::default()
+        };
+        let execution = executor
+            .execute(None, &request, &mut Context::default())
+            .await;
+        assert!(!execution.failed(), "{execution:#?}");
+        let echo = execution.response.unwrap().json().unwrap();
+        assert_eq!(echo["body"], "grant_type=client+credentials&scope=a%26b");
+
+        let multipart = Request {
+            method: "POST".into(),
+            url: server.url("/echo"),
+            body: Body::Multipart {
+                fields: vec![crate::model::FormField {
+                    name: "title".into(),
+                    value: "Cat".into(),
+                    file: None,
+                    content_type: None,
+                    enabled: true,
+                }],
+            },
+            scripts: Scripts {
+                pre_request: "pm.request.body.formdata.upsert({ key: 'title', value: 'Dog' });"
+                    .into(),
+                post_response: String::new(),
+            },
+            ..Request::default()
+        };
+        let execution = executor
+            .execute(None, &multipart, &mut Context::default())
+            .await;
+        assert!(!execution.failed(), "{execution:#?}");
+        let echo = execution.response.unwrap().json().unwrap();
+        let body = echo["body"].as_str().unwrap();
+        assert!(body.contains("Dog") && !body.contains("Cat"), "{body}");
     }
 
     #[tokio::test(flavor = "multi_thread")]
