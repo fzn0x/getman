@@ -237,7 +237,10 @@ things, so they are written as script lines: folder headers as
 `pm.request.headers.upsert(...)`, request variables as
 `pm.variables.set(...)`, checks as `pm.test(...)` and captures as
 `set(...)` calls in the test script. Checks without a translation stay
-as comments and are reported.
+as comments and are reported. Every authentication type maps to
+Postman's own, with three exceptions that are reported: private keys
+read from a file are left out (paste the key into Postman), Postman adds
+no `iat` or `exp` to a JWT, and it always signs the payload for AWS.
 
 Environments and globals export as Postman environment files. Values
 kept in git-ignored local files are left out unless you ask for them
@@ -260,7 +263,9 @@ point:
   the example; forms and multipart bodies also get a simple schema.
 - Top-level folders become tags; the request's name is the summary.
 - Authentication becomes security schemes, for the whole document or
-  per operation where it differs.
+  per operation where it differs. JWT and ASAP become bearer JWTs, and
+  OAuth 2.0 grants their flows. Request signing (AWS Signature,
+  OAuth 1.0, Hawk, EdgeGrid) has no scheme in OpenAPI and is left out.
 - A `status == N` check names the expected response. Operations without
   one have no `responses`, which OpenAPI 3.1 allows.
 

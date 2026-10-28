@@ -13,8 +13,8 @@ use super::{Exported, chain_of, items_of};
 use crate::checks::Check;
 use crate::error::Result;
 use crate::model::{
-    ApiKeyLocation, Auth, Body, ClientAuth, Folder, KeyValue, OAuth2Grant, Pkce, Request, Scripts,
-    Settings, Vars,
+    ApiKeyLocation, Auth, Body, ClientAuth, Folder, HawkAlgorithm, JwtAlgorithm, KeyValue,
+    OAuth1Location, OAuth1Method, OAuth2Grant, Pkce, Request, Scripts, Settings, Vars,
 };
 use crate::workspace::{Node, Workspace, slugify};
 
@@ -418,16 +418,129 @@ impl Writer<'_> {
                 "type": "digest",
                 "digest": list(&[("username", username), ("password", password)]),
             }),
-            Auth::AwsSigV4(_)
-            | Auth::Jwt(_)
-            | Auth::Asap(_)
-            | Auth::Oauth1(_)
-            | Auth::Hawk(_)
-            | Auth::Edgegrid(_) => {
-                self.warnings.push(format!(
-                    "{name}: this authentication is not exported to Postman yet; set it there"
-                ));
-                json!({ "type": "noauth" })
+            Auth::AwsSigV4(aws) => {
+                if aws.unsigned_payload {
+                    self.warnings.push(format!(
+                        "{name}: Postman always signs the payload; the unsigned payload setting was left out"
+                    ));
+                }
+                json!({
+                    "type": "awsv4",
+                    "awsv4": entries(vec![
+                        ("accessKey", aws.access_key.as_str().into()),
+                        ("secretKey", aws.secret_key.as_str().into()),
+                        ("sessionToken", aws.session_token.as_str().into()),
+                        ("region", aws.region.as_str().into()),
+                        ("service", aws.service.as_str().into()),
+                        ("addAuthDataToQuery", (aws.location == ApiKeyLocation::Query).into()),
+                    ]),
+                })
+            }
+            Auth::Oauth1(oauth) => {
+                self.key_file_warning(&oauth.private_key_file, name);
+                if oauth.location == OAuth1Location::Body {
+                    self.warnings.push(format!(
+                        "{name}: Postman puts OAuth 1.0 parameters in the header or the URL; they now go in the URL"
+                    ));
+                }
+                json!({
+                    "type": "oauth1",
+                    "oauth1": entries(vec![
+                        ("signatureMethod", oauth1_method(oauth.signature_method).into()),
+                        ("consumerKey", oauth.consumer_key.as_str().into()),
+                        ("consumerSecret", oauth.consumer_secret.as_str().into()),
+                        ("token", oauth.token.as_str().into()),
+                        ("tokenSecret", oauth.token_secret.as_str().into()),
+                        ("privateKey", oauth.private_key.as_str().into()),
+                        ("realm", oauth.realm.as_str().into()),
+                        ("callback", oauth.callback.as_str().into()),
+                        ("verifier", oauth.verifier.as_str().into()),
+                        ("version", or(&oauth.version, "1.0").into()),
+                        ("timestamp", oauth.timestamp.as_str().into()),
+                        ("nonce", oauth.nonce.as_str().into()),
+                        ("includeBodyHash", oauth.body_hash.into()),
+                        ("addParamsToHeader", (oauth.location == OAuth1Location::Header).into()),
+                    ]),
+                })
+            }
+            Auth::Jwt(jwt) => {
+                self.key_file_warning(&jwt.private_key_file, name);
+                if jwt.issued_at || jwt.expires_in.is_some() {
+                    self.warnings.push(format!(
+                        "{name}: Postman does not add iat or exp to a JWT; add them to the payload"
+                    ));
+                }
+                let add_to = if jwt.location == ApiKeyLocation::Query {
+                    "queryParam"
+                } else {
+                    "header"
+                };
+                json!({
+                    "type": "jwt",
+                    "jwt": entries(vec![
+                        ("algorithm", jwt_algorithm(jwt.algorithm).into()),
+                        ("secret", jwt.secret.as_str().into()),
+                        ("isSecretBase64Encoded", jwt.secret_base64.into()),
+                        ("privateKey", jwt.private_key.as_str().into()),
+                        ("header", or(&jwt.header, "{}").into()),
+                        ("payload", or(&jwt.payload, "{}").into()),
+                        ("addTokenTo", add_to.into()),
+                        ("headerPrefix", or(&jwt.prefix, "Bearer").into()),
+                        ("queryParamKey", or(&jwt.param, "token").into()),
+                    ]),
+                })
+            }
+            Auth::Hawk(hawk) => {
+                let algorithm = if hawk.algorithm == HawkAlgorithm::Sha1 {
+                    "sha1"
+                } else {
+                    "sha256"
+                };
+                json!({
+                    "type": "hawk",
+                    "hawk": entries(vec![
+                        ("authId", hawk.id.as_str().into()),
+                        ("authKey", hawk.key.as_str().into()),
+                        ("algorithm", algorithm.into()),
+                        ("extraData", hawk.ext.as_str().into()),
+                        ("app", hawk.app.as_str().into()),
+                        ("delegation", hawk.dlg.as_str().into()),
+                        ("includePayloadHash", hawk.payload_hash.into()),
+                    ]),
+                })
+            }
+            Auth::Edgegrid(edgegrid) => json!({
+                "type": "edgegrid",
+                "edgegrid": entries(vec![
+                    ("clientToken", edgegrid.client_token.as_str().into()),
+                    ("clientSecret", edgegrid.client_secret.as_str().into()),
+                    ("accessToken", edgegrid.access_token.as_str().into()),
+                    ("baseURL", edgegrid.base_url.as_str().into()),
+                    ("headersToSign", edgegrid.headers_to_sign.join(",").into()),
+                    (
+                        "maxBody",
+                        edgegrid.max_body.map(|n| n.to_string()).unwrap_or_default().into(),
+                    ),
+                ]),
+            }),
+            Auth::Asap(asap) => {
+                self.key_file_warning(&asap.private_key_file, name);
+                json!({
+                    "type": "asap",
+                    "asap": entries(vec![
+                        ("alg", asap.algorithm.map_or("RS256", jwt_algorithm).into()),
+                        ("iss", asap.issuer.as_str().into()),
+                        ("sub", asap.subject.as_str().into()),
+                        ("aud", asap.audience.as_str().into()),
+                        ("kid", asap.key_id.as_str().into()),
+                        ("privateKey", asap.private_key.as_str().into()),
+                        ("claims", or(&asap.claims, "{}").into()),
+                        (
+                            "exp",
+                            asap.expires_in.map(|s| s.to_string()).unwrap_or_default().into(),
+                        ),
+                    ]),
+                })
             }
             Auth::Oauth2(oauth) => {
                 let grant = match oauth.grant {
@@ -439,37 +552,71 @@ impl Writer<'_> {
                     OAuth2Grant::AuthorizationCode => "authorization_code_with_pkce",
                     OAuth2Grant::Implicit => "implicit",
                 };
-                let mut pairs = vec![
-                    ("grant_type", grant),
-                    ("accessTokenUrl", oauth.token_url.as_str()),
-                    ("clientId", oauth.client_id.as_str()),
-                    ("clientSecret", oauth.client_secret.as_str()),
-                    ("scope", oauth.scope.as_str()),
-                    (
-                        "client_authentication",
-                        if oauth.client_auth == ClientAuth::Body {
-                            "body"
-                        } else {
-                            "header"
-                        },
-                    ),
-                    ("addTokenTo", "header"),
+                let client_auth = if oauth.client_auth == ClientAuth::Body {
+                    "body"
+                } else {
+                    "header"
+                };
+                let add_to = if oauth.token_in == ApiKeyLocation::Query {
+                    "queryParams"
+                } else {
+                    "header"
+                };
+                let mut pairs: Vec<(&str, Value)> = vec![
+                    ("grant_type", grant.into()),
+                    ("accessTokenUrl", oauth.token_url.as_str().into()),
+                    ("clientId", oauth.client_id.as_str().into()),
+                    ("clientSecret", oauth.client_secret.as_str().into()),
+                    ("scope", oauth.scope.as_str().into()),
+                    ("client_authentication", client_auth.into()),
+                    ("addTokenTo", add_to.into()),
+                    ("headerPrefix", or(&oauth.prefix, "Bearer").into()),
                 ];
+                if oauth.grant.uses_browser() {
+                    pairs.push(("authUrl", oauth.auth_url.as_str().into()));
+                }
+                if !oauth.callback_url.is_empty() {
+                    pairs.push(("redirect_uri", oauth.callback_url.as_str().into()));
+                }
+                match oauth.pkce {
+                    Pkce::Off => {}
+                    Pkce::S256 => pairs.push(("challengeAlgorithm", "S256".into())),
+                    Pkce::Plain => pairs.push(("challengeAlgorithm", "plain".into())),
+                }
                 if !oauth.audience.is_empty() {
-                    pairs.push(("audience", oauth.audience.as_str()));
+                    pairs.push(("audience", oauth.audience.as_str().into()));
+                }
+                if !oauth.resource.is_empty() {
+                    pairs.push(("resource", oauth.resource.as_str().into()));
                 }
                 if oauth.grant == OAuth2Grant::Password {
-                    pairs.push(("username", oauth.username.as_str()));
-                    pairs.push(("password", oauth.password.as_str()));
+                    pairs.push(("username", oauth.username.as_str().into()));
+                    pairs.push(("password", oauth.password.as_str().into()));
+                }
+                if !oauth.auth_params.is_empty() {
+                    pairs.push(("authRequestParams", params(&oauth.auth_params)));
+                }
+                if !oauth.token_params.is_empty() {
+                    pairs.push(("tokenRequestParams", params(&oauth.token_params)));
                 }
                 if !oauth.audience.is_empty() {
                     self.warnings.push(format!(
                         "{name}: Postman sends the OAuth 2.0 audience only in some versions; check the token request"
                     ));
                 }
-                json!({ "type": "oauth2", "oauth2": list(&pairs) })
+                json!({ "type": "oauth2", "oauth2": entries(pairs) })
             }
         })
+    }
+
+    /// Exports never carry a private key file: the key would end up in a
+    /// file people share.
+    fn key_file_warning(&mut self, file: &str, name: &str) {
+        if !file.is_empty() {
+            self.warnings.push(format!(
+                "{name}: the private key in {file} was left out; paste it into Postman"
+            ));
+        }
     }
 
     fn settings_warning(&mut self, settings: &Settings, name: &str) {
@@ -478,6 +625,70 @@ impl Writer<'_> {
                 "{name}: settings on a folder or the workspace have no Postman equivalent; set them on the requests"
             ));
         }
+    }
+}
+
+/// Postman's list of auth settings, with switches as booleans.
+fn entries(pairs: Vec<(&str, Value)>) -> Value {
+    Value::Array(
+        pairs
+            .into_iter()
+            .map(|(key, value)| {
+                let kind = if value.is_boolean() {
+                    "boolean"
+                } else {
+                    "string"
+                };
+                json!({ "key": key, "value": value, "type": kind })
+            })
+            .collect(),
+    )
+}
+
+/// Extra OAuth 2.0 parameters, as Postman lists them.
+fn params(items: &[KeyValue]) -> Value {
+    Value::Array(
+        items
+            .iter()
+            .map(|item| json!({ "key": item.name, "value": item.value, "enabled": item.enabled }))
+            .collect(),
+    )
+}
+
+/// `value`, or `default` when it is empty: Postman writes defaults out.
+fn or<'a>(value: &'a str, default: &'a str) -> &'a str {
+    if value.trim().is_empty() {
+        default
+    } else {
+        value
+    }
+}
+
+fn jwt_algorithm(algorithm: JwtAlgorithm) -> &'static str {
+    match algorithm {
+        JwtAlgorithm::Hs256 => "HS256",
+        JwtAlgorithm::Hs384 => "HS384",
+        JwtAlgorithm::Hs512 => "HS512",
+        JwtAlgorithm::Rs256 => "RS256",
+        JwtAlgorithm::Rs384 => "RS384",
+        JwtAlgorithm::Rs512 => "RS512",
+        JwtAlgorithm::Ps256 => "PS256",
+        JwtAlgorithm::Ps384 => "PS384",
+        JwtAlgorithm::Ps512 => "PS512",
+        JwtAlgorithm::Es256 => "ES256",
+        JwtAlgorithm::Es384 => "ES384",
+    }
+}
+
+fn oauth1_method(method: OAuth1Method) -> &'static str {
+    match method {
+        OAuth1Method::HmacSha1 => "HMAC-SHA1",
+        OAuth1Method::HmacSha256 => "HMAC-SHA256",
+        OAuth1Method::HmacSha512 => "HMAC-SHA512",
+        OAuth1Method::Plaintext => "PLAINTEXT",
+        OAuth1Method::RsaSha1 => "RSA-SHA1",
+        OAuth1Method::RsaSha256 => "RSA-SHA256",
+        OAuth1Method::RsaSha512 => "RSA-SHA512",
     }
 }
 
@@ -960,6 +1171,148 @@ mod tests {
         assert_eq!(list.disabled_params[0].name, "debug");
         assert_eq!(list.path_params["id"], "7");
         assert!(collection(&ws, "nowhere").is_err());
+    }
+
+    #[test]
+    fn signed_auth_round_trips_through_postman() {
+        use crate::model::{
+            Asap, AwsSigV4, EdgeGrid, Hawk, Jwt, OAuth1, OAuth2, OAuth2Grant, Pkce,
+        };
+
+        let dir = tempfile::tempdir().unwrap();
+        let ws = Workspace::init(dir.path(), "Shop").unwrap();
+        let folder = ws.create_folder("", "Signed").unwrap();
+        let auths = [
+            Auth::AwsSigV4(AwsSigV4 {
+                access_key: "{{awsKey}}".into(),
+                secret_key: "{{awsSecret}}".into(),
+                session_token: "{{awsSession}}".into(),
+                region: "eu-west-1".into(),
+                service: "execute-api".into(),
+                location: ApiKeyLocation::Query,
+                ..AwsSigV4::default()
+            }),
+            Auth::Oauth1(OAuth1 {
+                signature_method: OAuth1Method::HmacSha256,
+                consumer_key: "ck".into(),
+                consumer_secret: "{{cs}}".into(),
+                token: "t".into(),
+                token_secret: "{{ts}}".into(),
+                realm: "photos".into(),
+                body_hash: true,
+                location: OAuth1Location::Query,
+                ..OAuth1::default()
+            }),
+            Auth::Jwt(Jwt {
+                algorithm: JwtAlgorithm::Hs384,
+                secret: "{{jwtSecret}}".into(),
+                secret_base64: true,
+                payload: r#"{"sub": "{{user}}"}"#.into(),
+                location: ApiKeyLocation::Query,
+                param: "access".into(),
+                ..Jwt::default()
+            }),
+            Auth::Hawk(Hawk {
+                id: "dh37fgj492je".into(),
+                key: "{{hawkKey}}".into(),
+                algorithm: HawkAlgorithm::Sha1,
+                ext: "some-app-ext-data".into(),
+                payload_hash: true,
+                ..Hawk::default()
+            }),
+            Auth::Edgegrid(EdgeGrid {
+                client_token: "ct".into(),
+                client_secret: "{{edgeSecret}}".into(),
+                access_token: "at".into(),
+                base_url: "https://akab.example.net".into(),
+                headers_to_sign: vec!["X-A".into(), "X-B".into()],
+                max_body: Some(131_072),
+            }),
+            Auth::Asap(Asap {
+                issuer: "shop".into(),
+                audience: "orders".into(),
+                key_id: "shop/key-1".into(),
+                private_key: "{{asapKey}}".into(),
+                expires_in: Some(300),
+                ..Asap::default()
+            }),
+            Auth::Oauth2(OAuth2 {
+                grant: OAuth2Grant::AuthorizationCode,
+                auth_url: "https://id.example.com/authorize".into(),
+                token_url: "https://id.example.com/token".into(),
+                client_id: "shop".into(),
+                callback_url: "http://127.0.0.1:8765/callback".into(),
+                pkce: Pkce::S256,
+                scope: "orders:read".into(),
+                auth_params: vec![KeyValue::new("prompt", "consent")],
+                token_in: ApiKeyLocation::Query,
+                ..OAuth2::default()
+            }),
+        ];
+        for (i, auth) in auths.iter().enumerate() {
+            let request = Request {
+                url: format!("https://api.example.com/{i}"),
+                auth: auth.clone(),
+                ..Request::default()
+            };
+            ws.create_request(&folder, &format!("Request {i}"), &request)
+                .unwrap();
+        }
+
+        let exported = collection(&ws, &folder).unwrap();
+        assert!(exported.warnings.is_empty(), "{:?}", exported.warnings);
+        let doc: Value = serde_json::from_str(&exported.content).unwrap();
+        assert_eq!(doc["item"][0]["request"]["auth"]["type"], "awsv4");
+        assert_eq!(
+            doc["item"][0]["request"]["auth"]["awsv4"][5]["value"], true,
+            "switches are booleans"
+        );
+
+        let other = tempfile::tempdir().unwrap();
+        let back = Workspace::init(other.path(), "Back").unwrap();
+        crate::import::postman::import(&back, "", &exported.content, false).unwrap();
+        for (i, auth) in auths.iter().enumerate() {
+            let request = back
+                .read_request(&format!("signed/request-{i}.yaml"))
+                .unwrap();
+            assert_eq!(&request.auth, auth, "request {i}");
+        }
+    }
+
+    #[test]
+    fn private_key_files_and_unsigned_payloads_are_reported() {
+        use crate::model::{AwsSigV4, Jwt};
+
+        let dir = tempfile::tempdir().unwrap();
+        let ws = Workspace::init(dir.path(), "Shop").unwrap();
+        let jwt = Request {
+            auth: Auth::Jwt(Jwt {
+                algorithm: JwtAlgorithm::Rs256,
+                private_key_file: "keys/signing.pem".into(),
+                expires_in: Some(60),
+                ..Jwt::default()
+            }),
+            ..Request::default()
+        };
+        let s3 = Request {
+            auth: Auth::AwsSigV4(AwsSigV4 {
+                service: "s3".into(),
+                unsigned_payload: true,
+                ..AwsSigV4::default()
+            }),
+            ..Request::default()
+        };
+        ws.create_request("", "Jwt", &jwt).unwrap();
+        ws.create_request("", "S3", &s3).unwrap();
+        let exported = collection(&ws, "").unwrap();
+        let warnings = exported.warnings.join("\n");
+        assert!(
+            warnings.contains("keys/signing.pem was left out"),
+            "{warnings}"
+        );
+        assert!(warnings.contains("iat or exp"), "{warnings}");
+        assert!(warnings.contains("unsigned payload"), "{warnings}");
+        assert!(!exported.content.contains("signing.pem"));
     }
 
     #[test]
