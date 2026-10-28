@@ -12,6 +12,7 @@
   import SaveAsDialog from "./SaveAsDialog.svelte";
   import SetVariableDialog from "./SetVariableDialog.svelte";
   import SettingsDialog from "./SettingsDialog.svelte";
+  import TabSearchDialog from "./TabSearchDialog.svelte";
   import ShortcutsDialog from "./ShortcutsDialog.svelte";
   import UpdateDialog from "./UpdateDialog.svelte";
 
@@ -22,6 +23,8 @@
   {#key current}
     {#if current.kind === "palette"}
       <Palette />
+    {:else if current.kind === "tabs"}
+      <TabSearchDialog />
     {:else if current.kind === "import"}
       <ImportDialog folder={current.folder} files={current.files} />
     {:else if current.kind === "export"}

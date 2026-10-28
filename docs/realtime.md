@@ -168,8 +168,9 @@ or `m`; give both and the first one reached stops. The exit status is 1
 when the connection could not open or failed.
 
 `getman run` skips these requests and says why: a connection that stays
-open has no single response to check. The terminal UI shows them, marked
-`WS`, `SSE` and `SIO`, but does not connect to them yet.
+open has no single response to check. The [terminal UI](terminal.md)
+connects to them, shows their messages as they arrive and sends saved or
+typed ones.
 
 ## What does not run
 

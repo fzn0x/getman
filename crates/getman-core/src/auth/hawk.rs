@@ -35,7 +35,7 @@ pub(super) fn apply(s: &Hawk, outgoing: &mut Outgoing, now: SystemTime) -> Resul
 }
 
 /// The header for a given time and nonce.
-fn authorization(s: &Hawk, outgoing: &Outgoing, ts: u64, nonce: &str) -> Result<String> {
+pub(super) fn authorization(s: &Hawk, outgoing: &Outgoing, ts: u64, nonce: &str) -> Result<String> {
     if s.id.is_empty() || s.key.is_empty() {
         return Err(Error::Invalid("Hawk needs an ID and a key".into()));
     }

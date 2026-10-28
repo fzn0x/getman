@@ -1,22 +1,47 @@
 //! The terminal UI's state and what each key does.
 
 use std::collections::HashSet;
-use std::time::Instant;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use getman_core::Workspace;
-use getman_core::execute::{Context, Execution, Executor, persist_changes};
-use getman_core::model::{Body, KeyValue, Request};
+use getman_core::execute::{CANCELLED, Cancel, Context, Execution, Executor, persist_changes};
+use getman_core::grpc::{Command, Live, LiveEvent};
+use getman_core::model::{Auth, Body, KeyValue, Request, RequestKind};
+use getman_core::realtime::{self, Options, Outbound, StreamEvent};
 use getman_core::runner::{RunEvent, RunOptions};
 use getman_core::workspace::{EnvironmentSummary, Node, TrashItem};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::{mpsc, mpsc::UnboundedSender, oneshot};
 
+use super::oauth::{self, Credentials, Opener, SignIn};
+use super::stream::{self, Link, Stream, Tone};
 use super::text;
 
-/// What the event loop hears back from work done in the background.
+/// How long a gRPC call gets to end by itself after it is cancelled,
+/// before it is dropped. A call that is still connecting does not hear
+/// the cancellation.
+const CANCEL_GRACE: Duration = Duration::from_secs(2);
+
+/// What the event loop hears back from work done in the background. The
+/// number says which send, connection or sign-in the news is about, so
+/// that news of one the user has left is ignored.
 pub(crate) enum Message {
-    Sent(Box<Execution>),
+    Sent(u64, Box<Execution>),
     Run(RunEvent),
+    /// Something happened on a WebSocket, event stream or Socket.IO
+    /// connection.
+    Realtime(u64, StreamEvent),
+    /// That connection reports no more.
+    RealtimeEnded(u64),
+    /// Something happened on a gRPC call.
+    Grpc(u64, LiveEvent),
+    /// The gRPC call is over.
+    GrpcDone(u64, Box<Execution>),
+    /// The call turned down a message the user sent on its stream.
+    GrpcRefused(u64, String),
+    SignIn(u64, oauth::Event),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,6 +65,10 @@ pub(crate) enum Mode {
         path: String,
         name: String,
     },
+    /// Choosing a saved message to send on a connection.
+    Pick,
+    /// Typing a message to send on a connection.
+    Compose,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,6 +159,8 @@ pub(crate) struct RunView {
     pub(crate) lines: Vec<(bool, String)>,
     pub(crate) summary: Option<String>,
     pub(crate) scroll: u16,
+    /// Set to stop the run.
+    stop: Arc<AtomicBool>,
 }
 
 #[allow(clippy::struct_excessive_bools)]
@@ -162,6 +193,25 @@ pub(crate) struct App {
     pub(crate) spinner: usize,
     /// The last item moved to the trash, which `u` puts back.
     trashed: Option<TrashItem>,
+    /// Counts sends, connections and sign-ins.
+    serial: u64,
+    /// The serial of the send or connection whose news is wanted.
+    current: u64,
+    /// Stops the request being sent, or the gRPC call being made.
+    cancel: Option<Cancel>,
+    /// The WebSocket, event stream, Socket.IO or gRPC session of the open
+    /// request.
+    pub(crate) stream: Option<Stream>,
+    /// The saved message chosen in the list.
+    pub(crate) pick: usize,
+    /// The message being typed.
+    pub(crate) compose: String,
+    /// A browser sign-in under way.
+    pub(crate) sign_in: Option<SignIn>,
+    /// The OAuth 2.0 settings the open request uses, and their token.
+    pub(crate) oauth: Option<Credentials>,
+    /// Opens the browser.
+    pub(crate) opener: Opener,
 }
 
 impl App {
@@ -200,6 +250,15 @@ impl App {
             edit: None,
             spinner: 0,
             trashed: None,
+            serial: 0,
+            current: 0,
+            cancel: None,
+            stream: None,
+            pick: 0,
+            compose: String::new(),
+            sign_in: None,
+            oauth: None,
+            opener: oauth::open_browser,
         };
         app.rebuild_rows();
         Ok(app)
@@ -247,8 +306,12 @@ impl App {
 
     pub(crate) fn on_message(&mut self, message: Message) {
         match message {
-            Message::Sent(execution) => {
+            Message::Sent(serial, execution) => {
+                if serial != self.current {
+                    return;
+                }
                 self.sending = false;
+                self.cancel = None;
                 self.response_scroll = 0;
                 self.response_lines = text::response_lines(&execution);
                 let failed = execution.failed();
@@ -317,6 +380,74 @@ impl App {
                     RunEvent::Start { .. } | RunEvent::Iteration { .. } => {}
                 }
             }
+            Message::Realtime(serial, event) => {
+                if let Some(stream) = self.stream_of(serial) {
+                    stream.on_realtime(event);
+                }
+            }
+            Message::RealtimeEnded(serial) => {
+                if let Some(stream) = self.stream_of(serial) {
+                    stream.on_ended();
+                }
+            }
+            Message::Grpc(serial, event) => {
+                if let Some(stream) = self.stream_of(serial) {
+                    stream.on_grpc(event);
+                }
+            }
+            Message::GrpcRefused(serial, message) => {
+                if let Some(stream) = self.stream_of(serial) {
+                    stream.note(Tone::Error, &message);
+                }
+            }
+            Message::GrpcDone(serial, execution) => {
+                if let Some(stream) = self.stream_of(serial) {
+                    stream.on_grpc_done(&execution);
+                    self.cancel = None;
+                    self.execution = Some(execution);
+                }
+            }
+            Message::SignIn(serial, event) => self.on_sign_in(serial, event),
+        }
+    }
+
+    /// The session of the open request, if news from `serial` is about it.
+    fn stream_of(&mut self, serial: u64) -> Option<&mut Stream> {
+        self.stream.as_mut().filter(|s| s.serial == serial)
+    }
+
+    fn on_sign_in(&mut self, serial: u64, event: oauth::Event) {
+        let Some(sign_in) = self.sign_in.as_mut().filter(|s| s.serial == serial) else {
+            return;
+        };
+        match event {
+            oauth::Event::Waiting {
+                authorization,
+                opened,
+            } => {
+                sign_in.authorization = Some(authorization);
+                sign_in.opened = opened;
+                let note = if opened {
+                    "Waiting for you to sign in in the browser · Esc cancels"
+                } else {
+                    "The browser did not open: open the address in the Auth pane · Esc cancels"
+                };
+                self.say(note, !opened);
+            }
+            oauth::Event::Done(Ok(token)) => {
+                self.sign_in = None;
+                self.say(
+                    oauth::describe(&token, getman_core::time::now_millis()),
+                    false,
+                );
+                if let Some(oauth) = &mut self.oauth {
+                    oauth.token = Some(token);
+                }
+            }
+            oauth::Event::Done(Err(message)) => {
+                self.sign_in = None;
+                self.say(message, true);
+            }
         }
     }
 
@@ -330,6 +461,8 @@ impl App {
             Mode::Filter => return self.filter_key(key),
             Mode::Name { folder } => return self.name_key(key, &folder),
             Mode::Delete { path, .. } => return self.delete_key(key, &path),
+            Mode::Pick => return self.pick_key(key),
+            Mode::Compose => return self.compose_key(key, tx),
             Mode::Normal => {}
         }
         if self.help {
@@ -359,6 +492,16 @@ impl App {
             KeyCode::Char('e') => self.cycle_environment(true),
             KeyCode::Char('E') if self.focus != Focus::Request => self.cycle_environment(false),
             KeyCode::Char('s') => self.send(tx),
+            KeyCode::Esc => self.cancel_flight(false),
+            KeyCode::Char('x') => self.cancel_flight(true),
+            KeyCode::Char('m') if self.is_connection() => self.choose_message(tx),
+            KeyCode::Char('t') if self.is_connection() => self.start_typing(),
+            KeyCode::Char('f') if self.is_connection() => self.end_stream(),
+            KeyCode::Char('b')
+                if self.focus == Focus::Request && self.request_pane == RequestPane::Auth =>
+            {
+                self.start_sign_in(tx);
+            }
             KeyCode::Char('w') => self.save(),
             KeyCode::Char('/') => {
                 self.focus = Focus::Tree;
@@ -392,6 +535,7 @@ impl App {
         let current = self.environment.map_or(0, |i| i + 1);
         let next = wrap(current, count, forward);
         self.environment = next.checked_sub(1);
+        self.refresh_credentials();
         self.say(format!("Environment: {}", self.environment_name()), false);
     }
 
@@ -440,6 +584,7 @@ impl App {
         match self.workspace().trash(path) {
             Ok(item) => {
                 if self.open.as_ref().is_some_and(|open| inside(&open.path)) {
+                    self.abandon();
                     self.open = None;
                     self.execution = None;
                     self.response_lines.clear();
@@ -518,6 +663,13 @@ impl App {
     }
 
     pub(crate) fn open_request(&mut self, path: &str) {
+        // Opening the request again must not drop its connection.
+        if self.open.as_ref().is_some_and(|open| open.path == path)
+            && self.stream.as_ref().is_some_and(Stream::is_live)
+        {
+            self.focus = Focus::Request;
+            return;
+        }
         if let Some(open) = &self.open
             && open.path != path
             && open.dirty()
@@ -529,19 +681,6 @@ impl App {
             return;
         }
         match self.workspace().read_request(path) {
-            Ok(request) if !request.kind.is_http() => {
-                let kind = if request.kind == getman_core::model::RequestKind::Grpc {
-                    "gRPC".to_owned()
-                } else {
-                    request.kind.as_str().to_owned()
-                };
-                self.say(
-                    format!(
-                        "The terminal UI cannot open {kind} requests yet; use `getman` for the browser UI, or `getman send {path}`"
-                    ),
-                    true,
-                );
-            }
             Ok(request) => {
                 let saved = serde_yaml_ng::to_string(&request).unwrap_or_default();
                 let cursor = request.url.chars().count();
@@ -551,11 +690,33 @@ impl App {
                     saved,
                     cursor,
                 });
+                self.abandon();
                 self.execution = None;
                 self.response_lines.clear();
                 self.focus = Focus::Request;
+                self.refresh_credentials();
             }
             Err(e) => self.say(e.to_string(), true),
+        }
+    }
+
+    /// Stops whatever the request that was open is doing, and forgets the
+    /// news it would still send.
+    fn abandon(&mut self) {
+        self.serial += 1;
+        self.current = self.serial;
+        self.sending = false;
+        if let Some(cancel) = self.cancel.take() {
+            cancel.cancel();
+        }
+        if let Some(mut stream) = self.stream.take() {
+            stream.stop();
+        }
+        if let Some(sign_in) = self.sign_in.take() {
+            sign_in.cancel(&self.executor);
+        }
+        if self.mode == Mode::Pick || self.mode == Mode::Compose {
+            self.mode = Mode::Normal;
         }
     }
 
@@ -566,16 +727,20 @@ impl App {
                 open.cursor = open.request.url.chars().count();
                 self.mode = Mode::Url;
             }
-            KeyCode::Char('m') => cycle_method(&mut open.request, true),
-            KeyCode::Char('M') => cycle_method(&mut open.request, false),
+            KeyCode::Char('m') if open.request.kind.is_http() => {
+                cycle_method(&mut open.request, true);
+            }
+            KeyCode::Char('M') if open.request.kind.is_http() => {
+                cycle_method(&mut open.request, false);
+            }
             KeyCode::Char(c @ '1'..='5') => {
-                self.request_pane = RequestPane::ALL[(c as usize) - ('1' as usize)];
+                self.set_request_pane(RequestPane::ALL[(c as usize) - ('1' as usize)]);
             }
             KeyCode::Right | KeyCode::Char(']' | 'l') => {
-                self.request_pane = step(&RequestPane::ALL, self.request_pane, true);
+                self.set_request_pane(step(&RequestPane::ALL, self.request_pane, true));
             }
             KeyCode::Left | KeyCode::Char('[' | 'h') => {
-                self.request_pane = step(&RequestPane::ALL, self.request_pane, false);
+                self.set_request_pane(step(&RequestPane::ALL, self.request_pane, false));
             }
             KeyCode::Char('E' | 'o') => {
                 let (text, extension) = editable(&open.request, self.request_pane);
@@ -590,6 +755,15 @@ impl App {
     }
 
     fn response_key(&mut self, key: KeyEvent) {
+        // Scrolling up leaves the end of a log; the log notices when the
+        // user is back at the end.
+        if matches!(
+            key.code,
+            KeyCode::Up | KeyCode::Char('k' | 'g') | KeyCode::PageUp | KeyCode::Home
+        ) && let Some(stream) = &mut self.stream
+        {
+            stream.follow = false;
+        }
         match key.code {
             KeyCode::Down | KeyCode::Char('j') => {
                 self.response_scroll = self.response_scroll.saturating_add(1);
@@ -733,7 +907,11 @@ impl App {
     fn run_key(&mut self, key: KeyEvent) {
         let Some(view) = &mut self.run else { return };
         match key.code {
-            KeyCode::Esc | KeyCode::Char('q') => self.run = None,
+            KeyCode::Esc | KeyCode::Char('q') => {
+                // A run that is still going stops with its view.
+                view.stop.store(true, Ordering::Relaxed);
+                self.run = None;
+            }
             KeyCode::Down | KeyCode::Char('j') => view.scroll = view.scroll.saturating_add(1),
             KeyCode::Up | KeyCode::Char('k') => view.scroll = view.scroll.saturating_sub(1),
             _ => {}
@@ -753,25 +931,46 @@ impl App {
         if self.sending {
             return;
         }
-        if open.request.kind.is_realtime() {
-            let message = format!(
-                "{} requests are not supported in the terminal UI yet; connect with `getman send {}` or in the browser UI",
-                open.request.kind.label(),
-                open.path
-            );
-            self.say(message, true);
+        if self.stream.as_ref().is_some_and(Stream::is_live) {
+            let how = if open.request.kind == RequestKind::Grpc {
+                "x cancels the call"
+            } else {
+                "x disconnects"
+            };
+            self.say(format!("It is already running: {how}"), true);
             return;
         }
+        match open.request.kind {
+            RequestKind::Http => self.send_http(tx),
+            RequestKind::Grpc => self.invoke(tx),
+            RequestKind::Websocket | RequestKind::Sse | RequestKind::Socketio => {
+                self.connect(tx);
+            }
+        }
+    }
+
+    fn next_serial(&mut self) -> u64 {
+        self.serial += 1;
+        self.current = self.serial;
+        self.serial
+    }
+
+    fn send_http(&mut self, tx: &UnboundedSender<Message>) {
+        let Some(open) = &self.open else { return };
         self.sending = true;
         self.focus = Focus::Response;
         let executor = self.executor.clone();
         let request = open.request.clone();
         let path = open.path.clone();
         let environment = self.environment_id();
+        let serial = self.next_serial();
+        let cancel = Cancel::new();
+        self.cancel = Some(cancel.clone());
         let tx = tx.clone();
         tokio::spawn(async move {
             let mut context = Context {
                 environment: environment.clone(),
+                cancel: Some(cancel),
                 ..Context::default()
             };
             let execution = executor.execute(Some(&path), &request, &mut context).await;
@@ -780,8 +979,452 @@ impl App {
                 environment.as_deref(),
                 &execution.changes,
             );
-            let _ = tx.send(Message::Sent(Box::new(execution)));
+            let _ = tx.send(Message::Sent(serial, Box::new(execution)));
         });
+    }
+
+    /// Opens the WebSocket, event stream or Socket.IO connection.
+    fn connect(&mut self, tx: &UnboundedSender<Message>) {
+        let Some(open) = &self.open else { return };
+        let context = Context {
+            environment: self.environment_id(),
+            ..Context::default()
+        };
+        let session = realtime::connect(
+            &self.executor,
+            Some(&open.path),
+            &open.request,
+            &context,
+            Options { lossy: true },
+        );
+        let kind = open.request.kind;
+        match session {
+            Ok(session) => {
+                let serial = self.next_serial();
+                let (control, mut events) = session.into_parts();
+                self.begin_stream(Stream::new(serial, kind, Link::Realtime(control)));
+                let tx = tx.clone();
+                tokio::spawn(async move {
+                    while let Some(event) = events.recv().await {
+                        if tx.send(Message::Realtime(serial, event)).is_err() {
+                            return;
+                        }
+                    }
+                    let _ = tx.send(Message::RealtimeEnded(serial));
+                });
+            }
+            Err(e) => self.say(e.to_string(), true),
+        }
+    }
+
+    /// Starts showing a new session in the response.
+    fn begin_stream(&mut self, stream: Stream) {
+        self.stream = Some(stream);
+        self.execution = None;
+        self.response_lines.clear();
+        self.response_scroll = 0;
+        self.response_pane = ResponsePane::Body;
+        self.focus = Focus::Response;
+    }
+
+    /// Calls the gRPC method. Calls that stream from the client wait for
+    /// messages to be sent.
+    fn invoke(&mut self, tx: &UnboundedSender<Message>) {
+        let Some(open) = &self.open else { return };
+        let executor = self.executor.clone();
+        let request = open.request.clone();
+        let path = open.path.clone();
+        let environment = self.environment_id();
+        let serial = self.next_serial();
+        let cancel = Cancel::new();
+        self.cancel = Some(cancel.clone());
+        let (commands, command_receiver) = mpsc::unbounded_channel();
+        self.begin_stream(Stream::new(serial, RequestKind::Grpc, Link::Grpc(commands)));
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            let (events, mut event_receiver) = mpsc::unbounded_channel();
+            let mut context = Context {
+                environment: environment.clone(),
+                ..Context::default()
+            };
+            let live = Live {
+                commands: command_receiver,
+                events,
+            };
+            let run = executor.execute_live(Some(&path), &request, &mut context, live);
+            let forward = async {
+                while let Some(event) = event_receiver.recv().await {
+                    let _ = tx.send(Message::Grpc(serial, event));
+                }
+            };
+            let work = async { tokio::join!(run, forward).0 };
+            // Asking the call to stop is heard once it has started; this
+            // frees the user from one that is still connecting.
+            let impatient = async {
+                cancel.cancelled().await;
+                tokio::time::sleep(CANCEL_GRACE).await;
+            };
+            let execution = tokio::select! {
+                execution = work => execution,
+                () = impatient => Execution {
+                    path: Some(path.clone()),
+                    name: request.name.clone(),
+                    error: Some(CANCELLED.to_owned()),
+                    cancelled: true,
+                    ..Execution::default()
+                },
+            };
+            let _ = persist_changes(
+                &executor.workspace,
+                environment.as_deref(),
+                &execution.changes,
+            );
+            let _ = tx.send(Message::GrpcDone(serial, Box::new(execution)));
+        });
+    }
+
+    // ---- Connections ---------------------------------------------------------------
+
+    /// Whether the open request is one that is connected to, not sent.
+    fn is_connection(&self) -> bool {
+        self.open
+            .as_ref()
+            .is_some_and(|open| !open.request.kind.is_http())
+    }
+
+    /// Stops what is in flight: the request being sent, the connection or
+    /// call, the sign-in. `asked` is set when the user pressed the key
+    /// that is only for this, so it may say that there was nothing to stop.
+    fn cancel_flight(&mut self, asked: bool) {
+        let mut stopped = false;
+        if let Some(sign_in) = self.sign_in.take() {
+            sign_in.cancel(&self.executor);
+            self.say("Sign-in cancelled", false);
+            stopped = true;
+        }
+        if let Some(stream) = &mut self.stream
+            && stream.is_live()
+        {
+            stream.stop();
+            let what = if stream.kind == RequestKind::Grpc {
+                "Cancelling the call"
+            } else {
+                "Disconnecting"
+            };
+            if let Some(cancel) = &self.cancel {
+                cancel.cancel();
+            }
+            self.say(what, false);
+            stopped = true;
+        } else if self.sending {
+            if let Some(cancel) = &self.cancel {
+                cancel.cancel();
+            }
+            self.say("Cancelling the request", false);
+            stopped = true;
+        }
+        if !stopped && asked {
+            self.say("Nothing is running", true);
+        }
+    }
+
+    /// Whether messages can be sent now; says why not.
+    fn can_send(&mut self) -> bool {
+        let live = self.stream.as_ref().is_some_and(Stream::is_live);
+        if !live {
+            let how = if self
+                .open
+                .as_ref()
+                .is_some_and(|o| o.request.kind == RequestKind::Grpc)
+            {
+                "Not calling: s invokes the method first"
+            } else {
+                "Not connected: s connects first"
+            };
+            self.say(how, true);
+        }
+        live
+    }
+
+    /// Whether the open gRPC call takes messages from the client; says
+    /// why not.
+    fn grpc_takes_messages(&mut self) -> bool {
+        if !self.can_send() {
+            return false;
+        }
+        match self.stream.as_ref().and_then(|s| s.call_type) {
+            None => {
+                self.say("The call is still starting; try again in a moment", true);
+                false
+            }
+            Some(call_type) if !call_type.client_streams() => {
+                self.say(
+                    format!(
+                        "A {} call sends its message when it starts",
+                        stream::call_label(call_type)
+                    ),
+                    true,
+                );
+                false
+            }
+            Some(_) => true,
+        }
+    }
+
+    /// `m`: sends a saved message. On a WebSocket or Socket.IO connection
+    /// it opens the list; on a gRPC stream it sends the request's message.
+    fn choose_message(&mut self, tx: &UnboundedSender<Message>) {
+        let Some(open) = &self.open else { return };
+        match open.request.kind {
+            RequestKind::Grpc => {
+                if !self.grpc_takes_messages() {
+                    return;
+                }
+                let Some(open) = &self.open else { return };
+                let text = open.request.grpc.message.clone();
+                if text.trim().is_empty() {
+                    self.say("The request has no saved message; t types one", true);
+                } else {
+                    self.send_grpc(text, tx);
+                }
+            }
+            RequestKind::Sse => self.say("Event streams only receive", true),
+            _ => {
+                if !self.can_send() {
+                    return;
+                }
+                let Some(open) = &self.open else { return };
+                if stream::saved_messages(&open.request).is_empty() {
+                    self.say("The request has no saved messages; t types one", true);
+                } else {
+                    self.pick = 0;
+                    self.mode = Mode::Pick;
+                }
+            }
+        }
+    }
+
+    /// `t`: starts typing a message to send.
+    fn start_typing(&mut self) {
+        let Some(open) = &self.open else { return };
+        let ready = match open.request.kind {
+            RequestKind::Sse => {
+                self.say("Event streams only receive", true);
+                false
+            }
+            RequestKind::Grpc => self.grpc_takes_messages(),
+            _ => self.can_send(),
+        };
+        if ready {
+            self.compose.clear();
+            self.mode = Mode::Compose;
+        }
+    }
+
+    /// `f`: ends the client's side of a gRPC stream.
+    fn end_stream(&mut self) {
+        if self
+            .open
+            .as_ref()
+            .is_none_or(|o| o.request.kind != RequestKind::Grpc)
+        {
+            self.say(
+                "Only a gRPC stream from the client ends; x disconnects",
+                true,
+            );
+            return;
+        }
+        if !self.grpc_takes_messages() {
+            return;
+        }
+        if let Some(stream) = &mut self.stream
+            && let Link::Grpc(commands) = &stream.link
+        {
+            if commands.send(Command::End).is_ok() {
+                stream.note(Tone::Note, "You ended your side of the stream");
+            } else {
+                self.say("The call has ended", true);
+            }
+        }
+    }
+
+    fn send_outbound(&mut self, outbound: Outbound) {
+        if let Some(stream) = &self.stream
+            && let Link::Realtime(control) = &stream.link
+            && let Err(e) = control.send(outbound)
+        {
+            self.say(e.to_string(), true);
+        }
+    }
+
+    /// Sends messages written as JSON on a gRPC stream.
+    fn send_grpc(&mut self, text: String, tx: &UnboundedSender<Message>) {
+        let Some(stream) = &self.stream else { return };
+        let Link::Grpc(commands) = &stream.link else {
+            return;
+        };
+        let (reply, answer) = oneshot::channel();
+        if commands.send(Command::Send { text, reply }).is_err() {
+            self.say("The call has ended", true);
+            return;
+        }
+        let serial = stream.serial;
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            if let Ok(Err(message)) = answer.await {
+                let _ = tx.send(Message::GrpcRefused(serial, message));
+            }
+        });
+    }
+
+    fn pick_key(&mut self, key: KeyEvent) {
+        let saved = self
+            .open
+            .as_ref()
+            .map(|open| stream::saved_messages(&open.request))
+            .unwrap_or_default();
+        let chosen = match key.code {
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.pick = (self.pick + 1).min(saved.len().saturating_sub(1));
+                return;
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.pick = self.pick.saturating_sub(1);
+                return;
+            }
+            KeyCode::Enter => self.pick,
+            KeyCode::Char(c @ '1'..='9') => (c as usize) - ('1' as usize),
+            KeyCode::Esc | KeyCode::Char('q') => {
+                self.mode = Mode::Normal;
+                return;
+            }
+            _ => return,
+        };
+        self.mode = Mode::Normal;
+        if let Some(saved) = saved.into_iter().nth(chosen)
+            && self.can_send()
+        {
+            self.send_outbound(saved.outbound);
+        }
+    }
+
+    fn compose_key(&mut self, key: KeyEvent, tx: &UnboundedSender<Message>) {
+        match key.code {
+            KeyCode::Esc => self.mode = Mode::Normal,
+            KeyCode::Enter => {
+                self.mode = Mode::Normal;
+                let text = std::mem::take(&mut self.compose);
+                if text.trim().is_empty() || !self.can_send() {
+                    return;
+                }
+                let Some(kind) = self.open.as_ref().map(|o| o.request.kind) else {
+                    return;
+                };
+                if kind == RequestKind::Grpc {
+                    self.send_grpc(text, tx);
+                } else {
+                    match stream::typed(kind, &text) {
+                        Ok(outbound) => self.send_outbound(outbound),
+                        Err(e) => self.say(e, true),
+                    }
+                }
+            }
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.compose.clear();
+            }
+            KeyCode::Char(c) => self.compose.push(c),
+            KeyCode::Backspace => {
+                self.compose.pop();
+            }
+            _ => {}
+        }
+    }
+
+    // ---- OAuth 2.0 -----------------------------------------------------------------
+
+    fn set_request_pane(&mut self, pane: RequestPane) {
+        self.request_pane = pane;
+        if pane == RequestPane::Auth {
+            self.refresh_credentials();
+        }
+    }
+
+    /// Reads the OAuth 2.0 settings the open request ends up with, and the
+    /// token kept for them.
+    pub(crate) fn refresh_credentials(&mut self) {
+        self.oauth = None;
+        let Some(open) = &self.open else { return };
+        let context = Context {
+            environment: self.environment_id(),
+            ..Context::default()
+        };
+        let Ok((effective, vars)) =
+            self.executor
+                .resolve(Some(&open.path), &open.request, &context)
+        else {
+            return;
+        };
+        if let Auth::Oauth2(settings) = &effective.auth {
+            self.oauth = Some(Credentials {
+                browser: settings.grant.uses_browser(),
+                token: self.executor.authenticator.cached_token(settings, &vars),
+            });
+        }
+    }
+
+    /// `b` on the auth pane: opens the browser to sign in, then waits for
+    /// the provider to come back.
+    fn start_sign_in(&mut self, tx: &UnboundedSender<Message>) {
+        let Some(open) = &self.open else { return };
+        if self.sign_in.is_some() {
+            self.say("Already waiting for the browser · Esc cancels", true);
+            return;
+        }
+        let context = Context {
+            environment: self.environment_id(),
+            ..Context::default()
+        };
+        let prepared = self
+            .executor
+            .resolve(Some(&open.path), &open.request, &context)
+            .and_then(|(effective, vars)| {
+                let transport =
+                    self.executor
+                        .transport(Some(&open.path), &open.request, &context)?;
+                Ok((effective.auth, vars, transport))
+            });
+        let (auth, vars, transport) = match prepared {
+            Ok(prepared) => prepared,
+            Err(e) => {
+                self.say(e.to_string(), true);
+                return;
+            }
+        };
+        let Auth::Oauth2(settings) = auth else {
+            self.say(
+                "The request does not use OAuth 2.0: E edits the auth, or a folder sets it",
+                true,
+            );
+            return;
+        };
+        if !settings.grant.uses_browser() {
+            self.say(
+                "This grant needs no browser: the token is fetched when a request needs it",
+                true,
+            );
+            return;
+        }
+        self.serial += 1;
+        self.sign_in = Some(SignIn::start(
+            self.serial,
+            &self.executor,
+            settings,
+            vars,
+            transport,
+            self.opener,
+            tx.clone(),
+        ));
+        self.say("Opening your browser to sign in", false);
     }
 
     fn save(&mut self) {
@@ -811,11 +1454,13 @@ impl App {
         } else {
             target.clone()
         };
+        let stop = Arc::new(AtomicBool::new(false));
         self.run = Some(RunView {
             title,
             lines: Vec::new(),
             summary: None,
             scroll: 0,
+            stop: Arc::clone(&stop),
         });
         let executor = self.executor.clone();
         let options = RunOptions {
@@ -825,8 +1470,7 @@ impl App {
         };
         let tx = tx.clone();
         tokio::spawn(async move {
-            let cancel = std::sync::atomic::AtomicBool::new(false);
-            let result = getman_core::runner::run(&executor, &options, &cancel, |event| {
+            let result = getman_core::runner::run(&executor, &options, &stop, |event| {
                 let _ = tx.send(Message::Run(event));
             })
             .await;
@@ -852,7 +1496,12 @@ impl App {
         };
         let Some(open) = &mut self.open else { return };
         match apply(&mut open.request, edit.pane, &text) {
-            Ok(()) => self.say(format!("{} updated; w saves", edit.pane.label()), false),
+            Ok(()) => {
+                self.say(format!("{} updated; w saves", edit.pane.label()), false);
+                if edit.pane == RequestPane::Auth {
+                    self.refresh_credentials();
+                }
+            }
             Err(e) => self.say(e, true),
         }
     }
@@ -975,6 +1624,9 @@ pub(crate) fn editable(request: &Request, pane: RequestPane) -> (String, &'stati
             (lines.join("\n") + "\n", "txt")
         }
         RequestPane::Headers => (pairs(&request.headers, ": ") + "\n", "txt"),
+        RequestPane::Body if request.kind == RequestKind::Grpc => {
+            (request.grpc.message.clone(), "json")
+        }
         RequestPane::Body => match &request.body {
             Body::Json { content } => (content.clone(), "json"),
             Body::Xml { content } => (content.clone(), "xml"),
@@ -1040,6 +1692,9 @@ pub(crate) fn apply(request: &mut Request, pane: RequestPane, text: &str) -> Res
                 })
                 .collect();
         }
+        RequestPane::Body if request.kind == RequestKind::Grpc => {
+            request.grpc.message = text.to_owned();
+        }
         RequestPane::Body => {
             request.body = match &request.body {
                 Body::Json { .. } => Body::Json {
@@ -1052,9 +1707,14 @@ pub(crate) fn apply(request: &mut Request, pane: RequestPane, text: &str) -> Res
                     content: text.to_owned(),
                     content_type: content_type.clone(),
                 },
-                Body::Graphql { variables, .. } => Body::Graphql {
+                Body::Graphql {
+                    variables,
+                    operation_name,
+                    ..
+                } => Body::Graphql {
                     query: text.to_owned(),
                     variables: variables.clone(),
+                    operation_name: operation_name.clone(),
                 },
                 Body::None if text.trim().is_empty() => Body::None,
                 Body::None => {

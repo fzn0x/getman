@@ -1,6 +1,6 @@
 <script lang="ts">
   import { openSearchPanel } from "@codemirror/search";
-  import { Compartment, EditorState } from "@codemirror/state";
+  import { Compartment, EditorState, type Extension } from "@codemirror/state";
   import { EditorView } from "@codemirror/view";
   import { onMount } from "svelte";
   import {
@@ -29,6 +29,10 @@
     onPaste?: (text: string) => boolean;
     /** Underline URLs and open them when clicked. */
     links?: boolean;
+    /** More extensions, such as a language loaded on demand. */
+    extensions?: Extension;
+    /** Offer the completions of `extensions`' language beside variables. */
+    languageCompletion?: boolean;
     /** Told the selected text, and the line it starts on, as it changes. */
     onSelection?: (text: string, line: string) => void;
     class?: string;
@@ -48,6 +52,8 @@
     onSubmit,
     onPaste,
     links = false,
+    extensions = [],
+    languageCompletion = false,
     onSelection,
     class: className = "",
   }: Props = $props();
@@ -66,6 +72,7 @@
   const readonlySlot = new Compartment();
   const variablesSlot = new Compartment();
   const wrapSlot = new Compartment();
+  const extraSlot = new Compartment();
 
   onMount(() => {
     view = new EditorView({
@@ -78,6 +85,7 @@
             lineNumbers: lineNumbers && !singleLine,
             placeholder,
             completion: { names: completionNames, describe: describeCard },
+            languageCompletion,
             onSubmit: () => onSubmit?.(),
             onPaste: (text) => onPaste?.(text) ?? false,
           }),
@@ -85,6 +93,7 @@
           readonlySlot.of([EditorState.readOnly.of(readonly), EditorView.editable.of(!readonly)]),
           variablesSlot.of(variableMarks(known)),
           wrapSlot.of(wrap ? EditorView.lineWrapping : []),
+          extraSlot.of(extensions),
           EditorView.contentAttributes.of(label ? { "aria-label": label } : {}),
           links ? linkMarks() : [],
           EditorView.updateListener.of((update) => {
@@ -129,6 +138,10 @@
 
   $effect(() => {
     view?.dispatch({ effects: wrapSlot.reconfigure(wrap ? EditorView.lineWrapping : []) });
+  });
+
+  $effect(() => {
+    view?.dispatch({ effects: extraSlot.reconfigure(extensions) });
   });
 
   /** Opens the find bar: next and previous, match case, whole word, regex. */

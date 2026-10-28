@@ -300,6 +300,7 @@ pub(crate) struct ImportArgs {
 }
 
 #[derive(Debug, Args)]
+#[allow(clippy::struct_excessive_bools)]
 pub(crate) struct ExportArgs {
     /// What to export, as a path in the workspace or on disk: a request
     /// for code, or a folder for `postman` and `openapi`. Those export
@@ -323,6 +324,16 @@ pub(crate) struct ExportArgs {
     /// values stay out of it.
     #[arg(long)]
     pub(crate) keep_vars: bool,
+
+    /// Indent code with 2 or 4 spaces, or with tabs. Each language
+    /// keeps its own habit when this is left out.
+    #[arg(long, value_name = "2|4|tab")]
+    pub(crate) indent: Option<getman_core::export::codegen::Indent>,
+
+    /// Leave out the imports and the `main` function, where the language
+    /// has them, and write only the request.
+    #[arg(long)]
+    pub(crate) no_boilerplate: bool,
 
     /// With `--to postman`, export the globals.
     #[arg(long, conflicts_with = "request")]
@@ -545,6 +556,24 @@ mod tests {
             panic!()
         };
         assert!(args.keep_vars);
+        assert!(args.indent.is_none() && !args.no_boilerplate);
+        let cli = Cli::try_parse_from([
+            "getman",
+            "export",
+            "a.yaml",
+            "--to",
+            "go",
+            "--indent",
+            "tab",
+            "--no-boilerplate",
+        ])
+        .unwrap();
+        let Some(Command::Export(args)) = cli.command else {
+            panic!()
+        };
+        assert_eq!(args.indent, Some(getman_core::export::codegen::Indent::Tab));
+        assert!(args.no_boilerplate);
+        assert!(Cli::try_parse_from(["getman", "export", "a.yaml", "--indent", "3"]).is_err());
         assert!(Cli::try_parse_from(["getman", "export", "--to", "cobol"]).is_err());
     }
 
