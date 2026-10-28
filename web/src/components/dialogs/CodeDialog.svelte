@@ -22,6 +22,8 @@
   let code = $state("");
   let error = $state("");
   let missing = $state<string[]>([]);
+  /** Leaves `{{variables}}` as written, so tokens stay out of the code. */
+  let keepVars = $state(false);
 
   const syntax = $derived<EditorLanguage>(
     ws.languages.find((l) => l.id === language)?.syntax === "javascript" ? "javascript" : "text",
@@ -29,6 +31,7 @@
 
   $effect(() => {
     const chosen = language;
+    const keep = keepVars;
     store("codeLanguage", chosen);
     void (async () => {
       try {
@@ -37,6 +40,7 @@
           request: toRequest(tab.draft),
           environment: ws.environment || null,
           language: chosen,
+          keep_vars: keep,
         });
         code = result.code;
         missing = result.missing;
@@ -77,13 +81,23 @@
           />
         </div>
       {/if}
-      <p class="muted note">
-        Variables are filled in{ws.environment ? " from the selected environment" : ""}.
-        {#if missing.length}Not defined, left as written: {missing
-            .map((m) => `{{${m}}}`)
-            .join(", ")}.{/if}
-        Credentials appear as they will be sent.
-      </p>
+      <div class="note">
+        <label class="toggle">
+          <input type="checkbox" class="check" bind:checked={keepVars} />
+          Keep <code>{"{{variables}}"}</code>
+        </label>
+        <p class="muted">
+          {#if keepVars}
+            Variables stay as written, so tokens and other values are not in the code.
+          {:else}
+            Variables are filled in{ws.environment ? " from the selected environment" : ""}.
+            {#if missing.length}Not defined, left as written: {missing
+                .map((m) => `{{${m}}}`)
+                .join(", ")}.{/if}
+            Credentials appear as they will be sent.
+          {/if}
+        </p>
+      </div>
     </div>
   </div>
   {#snippet footer()}
@@ -146,10 +160,30 @@
   }
 
   .note {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s2) var(--s4);
     margin: 0;
     padding: var(--s2) var(--s4);
     border-top: 1px solid var(--rule-3);
     font-size: var(--fs-meta);
+  }
+
+  .note p {
+    flex: 1 1 240px;
+    margin: 0;
+  }
+
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    white-space: nowrap;
+  }
+
+  .toggle code {
+    font-family: var(--font-code);
   }
 
   .error {
