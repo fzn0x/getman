@@ -1,6 +1,6 @@
 {
   "name": "getman-desktop",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "The Tauri command line, which bundles Getman's desktop app into installers",
   "license": "MIT OR Apache-2.0",
