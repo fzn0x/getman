@@ -41,6 +41,11 @@ separated by spaces.
 | `json` | The whole body, parsed as JSON |
 | `json.<path>` | Part of it |
 
+For a [gRPC request](grpc.md#checks-captures-and-scripts), `status` is
+the gRPC status code (`0` is OK), `json` is the response message (the list
+of messages for a stream from the server), and `header.<name>` finds the
+trailers too.
+
 A JSON path is made of `.name`, `[index]` (negative counts from the end),
 `["a key with spaces"]` and `.length` for arrays and strings:
 `json.data[0].id`, `json.items[-1].price`, `json["full name"]`,

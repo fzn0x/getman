@@ -83,6 +83,11 @@ In post-response scripts:
 | `gm.response.responseTime` | Milliseconds |
 | `gm.response.responseSize` | Body size in bytes |
 
+For a [gRPC request](grpc.md#checks-captures-and-scripts),
+`gm.response.code` is the gRPC status code, `gm.response.status` its
+name, the headers include the trailers, and `gm.response.json()` is the
+response message, or the list of messages of a stream from the server.
+
 ## Tests
 
 `gm.test(name, fn)` records a test that passes unless `fn` throws.

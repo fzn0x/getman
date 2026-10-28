@@ -15,6 +15,10 @@ the body, authentication, checks) opens in your own editor:
 `$VISUAL`, then `$EDITOR`, then `vi` (Notepad on Windows). Save and close
 the editor, and the change appears, ready to send and save.
 
+The terminal UI works with HTTP requests. It cannot open
+[gRPC requests](grpc.md) yet: use the browser UI, or `getman send`. Runs
+started from it include them.
+
 ## Keys
 
 Press <kbd>?</kbd> in the terminal UI to see these.

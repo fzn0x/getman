@@ -64,6 +64,13 @@ Sends one request and prints the response body.
 | `--json` | Print everything as JSON: request, response, tests, checks, logs |
 | `--script-timeout SECONDS` | Default 10 |
 
+For a [gRPC request](grpc.md), `send` prints each response message as
+pretty JSON as it arrives, and the status, its message and any error
+details on stderr. `--json` prints one line of JSON per message instead,
+for piping into tools such as `jq`; `-i` adds the response headers before
+the messages and the trailers after them. A status other than `0 OK`
+exits with 1.
+
 ## getman init
 
 Creates `getman.yaml` and a `.gitignore` for local files.
@@ -93,7 +100,7 @@ Prints a request as code, with variables replaced.
 | Option | |
 | --- | --- |
 | `REQUEST` | The request |
-| `-t`, `--to LANGUAGE` | `curl` (default), `httpie`, `powershell`, `fetch`, `python`, `go`, `rust` or `java` |
+| `-t`, `--to LANGUAGE` | `curl` (default), `httpie`, `powershell`, `fetch`, `python`, `go`, `rust` or `java`. gRPC requests print as a `grpcurl` command, also with `--to grpcurl` |
 | `-e`, `--env NAME`, `--var NAME=VALUE` | As for `send` |
 
 ## Exit status
