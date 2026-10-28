@@ -26,7 +26,7 @@ export type Body =
   | { type: "form"; fields: KeyValue[] }
   | { type: "multipart"; fields: FormField[] }
   | { type: "binary"; file: string; content_type?: string | null }
-  | { type: "graphql"; query: string; variables?: string };
+  | { type: "graphql"; query: string; variables?: string; operation_name?: string };
 
 export type BodyType = Body["type"];
 
@@ -468,6 +468,20 @@ export interface ResolvedVar {
 export interface DynamicVar {
   name: string;
   description: string;
+}
+
+/** A GraphQL server's schema: the `data` of its introspection answer. */
+export interface GraphqlSchemaAnswer {
+  /** `null` when nothing is kept for the URL and none was asked for. */
+  schema: unknown;
+  /** The URL the schema belongs to, with variables filled in. */
+  url: string;
+  /** Whether it came from memory, with nothing sent. */
+  cached?: boolean;
+  /** When it was read, in seconds since 1970. */
+  fetched_at?: number;
+  status?: number;
+  time_ms?: number;
 }
 
 export interface Language {
