@@ -121,7 +121,10 @@ In the browser UI, open the request's **Auth** tab and choose
 **Get new token**. Getman opens your browser at the authorization URL and
 listens for the provider to send it back. It checks the `state` it sent,
 exchanges the code for a token (or, for `implicit`, takes the token the
-browser was given) and keeps it. The tab shows when the token expires,
+browser was given) and keeps it. The exchange goes out the way the
+request's other requests do: through the proxy, with the client
+certificate and extra certificate authorities, and with the TLS and HTTP
+version settings of its folder. The tab shows when the token expires,
 and **Clear token** forgets it.
 
 Getman listens on `http://127.0.0.1:<free port>/callback` unless

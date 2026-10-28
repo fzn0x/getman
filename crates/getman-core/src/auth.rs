@@ -153,12 +153,13 @@ pub struct Authenticator {
     flows: Mutex<HashMap<String, Flow>>,
 }
 
-/// A browser sign-in: a way to cancel it, and its listener until someone
-/// waits on it.
+/// A browser sign-in: a way to cancel it, its listener until someone
+/// waits on it, and how its token request goes out.
 #[derive(Debug)]
 struct Flow {
     cancel: Arc<Notify>,
     pending: Option<oauth2::Pending>,
+    transport: Transport,
 }
 
 impl Authenticator {
@@ -316,8 +317,15 @@ impl Authenticator {
     /// Starts a browser sign-in for the authorization code or implicit
     /// grant: listens for the callback and returns the URL to open. Any
     /// sign-in already under way is cancelled. Finish it with
-    /// [`Authenticator::wait_for_token`].
-    pub async fn authorize(&self, settings: &OAuth2, vars: &VarStack) -> Result<Authorization> {
+    /// [`Authenticator::wait_for_token`], which sends the token request
+    /// with `transport`: the proxy and certificates of the request's
+    /// folder.
+    pub async fn authorize(
+        &self,
+        settings: &OAuth2,
+        vars: &VarStack,
+        transport: Transport,
+    ) -> Result<Authorization> {
         let s = oauth2::render(settings, vars);
         {
             // One at a time: this frees the callback port of the last one.
@@ -333,6 +341,7 @@ impl Authenticator {
             Flow {
                 cancel: Arc::new(Notify::new()),
                 pending: Some(pending),
+                transport,
             },
         );
         Ok(authorization)
@@ -344,16 +353,16 @@ impl Authenticator {
         &self,
         http: &HttpClient,
         id: &str,
-        transport: Transport,
         timeout: Duration,
     ) -> Result<Token> {
         let gone = || Error::Invalid("This sign-in was cancelled or has already finished.".into());
-        let (pending, cancel) = {
+        let (pending, cancel, transport) = {
             let mut flows = self.flows.lock().expect("sign-in lock");
             let flow = flows.get_mut(id).ok_or_else(gone)?;
             (
                 flow.pending.take().ok_or_else(gone)?,
                 Arc::clone(&flow.cancel),
+                flow.transport.clone(),
             )
         };
         let key = pending.key();
@@ -811,7 +820,10 @@ mod tests {
             .unwrap_err();
         assert!(error.to_string().contains("Get new token"), "{error}");
 
-        let authorization = authenticator.authorize(&settings, &vars).await.unwrap();
+        let authorization = authenticator
+            .authorize(&settings, &vars, Transport::default())
+            .await
+            .unwrap();
         let url = &authorization.url;
         assert!(url.starts_with("https://id.example.com/authorize?tenant=t1&"));
         assert_eq!(query_param(url, "response_type").as_deref(), Some("code"));
@@ -839,12 +851,7 @@ mod tests {
             assert!(page.contains("Signed in"), "{page}");
         });
         let token = authenticator
-            .wait_for_token(
-                &http,
-                &authorization.id,
-                Transport::default(),
-                Duration::from_secs(10),
-            )
+            .wait_for_token(&http, &authorization.id, Duration::from_secs(10))
             .await
             .unwrap();
         browser.await.unwrap();
@@ -894,7 +901,10 @@ mod tests {
             ..OAuth2::default()
         };
         let vars = VarStack::new();
-        let authorization = authenticator.authorize(&settings, &vars).await.unwrap();
+        let authorization = authenticator
+            .authorize(&settings, &vars, Transport::default())
+            .await
+            .unwrap();
         assert_eq!(
             query_param(&authorization.url, "response_type").as_deref(),
             Some("token")
@@ -916,7 +926,6 @@ mod tests {
             .wait_for_token(
                 &HttpClient::new(),
                 &authorization.id,
-                Transport::default(),
                 Duration::from_secs(10),
             )
             .await
@@ -941,18 +950,16 @@ mod tests {
         let mut settings = code_grant(&server);
         settings.client_secret = "s3cret".into();
         let vars = VarStack::new();
-        let first = authenticator.authorize(&settings, &vars).await.unwrap();
+        let first = authenticator
+            .authorize(&settings, &vars, Transport::default())
+            .await
+            .unwrap();
         let waiting = {
             let authenticator = Arc::clone(&authenticator);
             let id = first.id.clone();
             tokio::spawn(async move {
                 authenticator
-                    .wait_for_token(
-                        &HttpClient::new(),
-                        &id,
-                        Transport::default(),
-                        Duration::from_secs(10),
-                    )
+                    .wait_for_token(&HttpClient::new(), &id, Duration::from_secs(10))
                     .await
             })
         };
@@ -962,28 +969,72 @@ mod tests {
         assert!(error.to_string().contains("cancelled"), "{error}");
 
         // A new sign-in replaces one nobody waits on yet.
-        let second = authenticator.authorize(&settings, &vars).await.unwrap();
-        let third = authenticator.authorize(&settings, &vars).await.unwrap();
+        let second = authenticator
+            .authorize(&settings, &vars, Transport::default())
+            .await
+            .unwrap();
+        let third = authenticator
+            .authorize(&settings, &vars, Transport::default())
+            .await
+            .unwrap();
         let error = authenticator
-            .wait_for_token(
-                &HttpClient::new(),
-                &second.id,
-                Transport::default(),
-                Duration::from_secs(1),
-            )
+            .wait_for_token(&HttpClient::new(), &second.id, Duration::from_secs(1))
             .await
             .unwrap_err();
         assert!(error.to_string().contains("already finished"), "{error}");
         let error = authenticator
-            .wait_for_token(
-                &HttpClient::new(),
-                &third.id,
-                Transport::default(),
-                Duration::from_millis(100),
-            )
+            .wait_for_token(&HttpClient::new(), &third.id, Duration::from_millis(100))
             .await
             .unwrap_err();
         assert!(error.to_string().contains("stopped waiting"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn a_sign_in_exchanges_its_code_the_way_its_folder_sends_requests() {
+        let (proxy, mut heads) = test_server::spawn_raw(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 50\r\nConnection: close\r\n\r\n{\"access_token\":\"via-proxy\",\"token_type\":\"Bearer\"}",
+        )
+        .await;
+        let settings = OAuth2 {
+            grant: OAuth2Grant::AuthorizationCode,
+            auth_url: "https://id.example.com/authorize".into(),
+            token_url: "http://token.example.invalid/token".into(),
+            client_id: "app".into(),
+            pkce: Pkce::Off,
+            ..OAuth2::default()
+        };
+        let transport = Transport {
+            proxy: crate::http::ProxyRoute::Url {
+                url: format!("http://{proxy}"),
+                bypass: String::new(),
+            },
+            ..Transport::default()
+        };
+        let authenticator = Authenticator::new();
+        let authorization = authenticator
+            .authorize(&settings, &VarStack::new(), transport)
+            .await
+            .unwrap();
+        let state = query_param(&authorization.url, "state").unwrap();
+        let redirect = authorization.redirect_uri.clone();
+        let browser = tokio::spawn(async move {
+            visit(format!("{redirect}?code=good-code&state={state}")).await;
+        });
+        let token = authenticator
+            .wait_for_token(
+                &HttpClient::new(),
+                &authorization.id,
+                Duration::from_secs(10),
+            )
+            .await
+            .unwrap();
+        browser.await.unwrap();
+        assert_eq!(token.access_token, "via-proxy");
+        let head = heads.recv().await.unwrap();
+        assert!(
+            head.starts_with("POST http://token.example.invalid/token HTTP/1.1\r\n"),
+            "{head}"
+        );
     }
 
     #[tokio::test]
