@@ -69,6 +69,8 @@ export const SHORTCUTS: { combo: string; action: string }[] = [
   { combo: "alt+c", action: "Copy the request as code" },
   { combo: "mod+b", action: "Show or hide the sidebar" },
   { combo: "alt+i", action: "Import" },
-  { combo: "mod+z", action: "Undo a delete, outside a text field" },
+  { combo: "mod+j", action: "Show or hide the console" },
+  { combo: "mod+z", action: "Undo a delete, rename or move, outside a text field" },
+  { combo: "mod+shift+z", action: "Redo, outside a text field" },
   { combo: "?", action: "Show these shortcuts" },
 ];

@@ -15,6 +15,7 @@ import {
   type SavedSession,
   type SavedTab,
 } from "./session";
+import { logExecution } from "./console.svelte";
 import { isLive } from "./realtime";
 import { primary, type LiveState } from "./realtime.svelte";
 import type { ImportFile } from "./importing";
@@ -1007,6 +1008,7 @@ export async function send(tab: RequestTab): Promise<void> {
       id: tab.sendId,
     });
     tab.execution = execution;
+    logExecution(execution, tab.draft.body.type === "graphql");
     const failing =
       execution.script_errors.length > 0 ||
       [...execution.tests, ...execution.checks].some((t) => !t.passed);
@@ -1037,6 +1039,10 @@ export async function send(tab: RequestTab): Promise<void> {
       skipped: false,
       next_request: null,
     };
+    logExecution(tab.execution, tab.draft.body.type === "graphql", {
+      method: tab.draft.method,
+      url: tab.draft.url,
+    });
   } finally {
     tab.sending = false;
     tab.sendId = undefined;

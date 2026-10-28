@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import ConsolePanel from "./components/ConsolePanel.svelte";
   import DialogHost from "./components/dialogs/DialogHost.svelte";
   import DropZone from "./components/DropZone.svelte";
   import EnvironmentsView from "./components/EnvironmentsView.svelte";
@@ -15,8 +16,9 @@
   import TopBar from "./components/TopBar.svelte";
   import Welcome from "./components/Welcome.svelte";
   import { whenSignedOut } from "./lib/api";
+  import { consoleView, failedCount, toggleConsole } from "./lib/console.svelte";
   import { startDesktop } from "./lib/desktop.svelte";
-  import { matches, typing } from "./lib/keys";
+  import { keyLabel, matches, typing } from "./lib/keys";
   import {
     activeTab,
     cancelSend,
@@ -123,6 +125,8 @@
     } else if (/^[1-9]$/.test(event.key) && event.altKey && !event.ctrlKey && !event.metaKey) {
       const target = tabs.list[Number(event.key) - 1];
       if (target) handle(() => selectTab(target.id));
+    } else if (matches(event, "mod+j")) {
+      handle(() => toggleConsole());
     } else if (matches(event, "mod+z") && !typing(event)) {
       // Undoes what a notice offers to undo, such as a delete.
       if (runNoticeAction()) event.preventDefault();
@@ -157,6 +161,8 @@
     else if (event.key === "ArrowRight")
       prefs.sidebarWidth = Math.min(520, prefs.sidebarWidth + 16);
   }
+
+  const failures = $derived(failedCount());
 
   const requestCount = $derived.by(() => {
     const count = (nodes: typeof ws.tree): number =>
@@ -241,6 +247,9 @@
           {/key}
         {/if}
       </div>
+      {#if consoleView.open}
+        <ConsolePanel />
+      {/if}
     </main>
     <footer class="colophon bitmap">
       <span>Getman {ws.version}</span>
@@ -249,6 +258,16 @@
       <span class="sep" aria-hidden="true"></span>
       <span>{requestCount} requests</span>
       <span class="fill"></span>
+      <button
+        class="link bitmap"
+        class:bad={failures > 0}
+        aria-pressed={consoleView.open}
+        title="Show or hide the console ({keyLabel('mod+j').join(' ')})"
+        onclick={toggleConsole}
+      >
+        Console{failures > 0 ? ` (${failures} failed)` : ""}
+      </button>
+      <span class="sep" aria-hidden="true"></span>
       <button class="link bitmap" onclick={() => openDialog({ kind: "shortcuts" })}>
         Shortcuts ?
       </button>
@@ -331,7 +350,7 @@
   .main {
     grid-area: main;
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
     min-width: 0;
     min-height: 0;
   }
@@ -380,6 +399,10 @@
 
   .link:hover {
     color: var(--ink);
+  }
+
+  .link.bad {
+    color: var(--error);
   }
 
   .app.narrow {
