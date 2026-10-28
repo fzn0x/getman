@@ -129,6 +129,28 @@ async fn a_unary_call_sends_metadata_and_feeds_checks_scripts_and_captures() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn pre_request_scripts_edit_the_message_and_metadata() {
+    let server = test_server::spawn(Reflection::None).await;
+    let (_dir, executor) = setup();
+    let request = Request {
+        scripts: Scripts {
+            pre_request: r"
+                gm.request.body.update({ text: JSON.parse(gm.request.body.raw).text + ' edited' });
+                gm.request.headers.add({ key: 'x-from-script', value: 'yes' });
+            "
+            .into(),
+            post_response: String::new(),
+        },
+        ..call(&server.address, "Unary", r#"{"text": "message"}"#)
+    };
+    let execution = run(&executor, &request).await;
+    assert!(!execution.failed(), "{execution:#?}");
+    let reply = &received(&execution)[0];
+    assert_eq!(reply["text"], "message edited");
+    assert_eq!(reply["metadata"]["x-from-script"], "yes");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn server_streams_arrive_as_a_list() {
     let server = test_server::spawn(Reflection::None).await;
     let (_dir, executor) = setup();
