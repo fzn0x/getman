@@ -100,12 +100,7 @@ pub(super) fn apply(
     }
     // The body hash extension covers bodies the signature does not.
     if s.body_hash && !form_body {
-        let Some(body) = body_bytes(&outgoing.body)? else {
-            return Err(Error::Invalid(
-                "OAuth 1.0 cannot hash a multipart body before it is sent; turn off the body hash"
-                    .into(),
-            ));
-        };
+        let body = body_bytes(outgoing)?;
         let hash = match s.signature_method {
             OAuth1Method::HmacSha256 | OAuth1Method::RsaSha256 => Sha256::digest(&body).to_vec(),
             OAuth1Method::HmacSha512 | OAuth1Method::RsaSha512 => Sha512::digest(&body).to_vec(),

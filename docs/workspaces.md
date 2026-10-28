@@ -90,7 +90,9 @@ Examples are described in [Examples and mocks](examples-and-mocks.md).
 | `graphql` | `query`, `variables` (JSON text), `operation_name` | `application/json`; see [GraphQL](http.md#graphql) |
 
 Paths in `file` are relative to the workspace root, and must stay inside
-it.
+it. Getman builds a multipart body in memory, at most 256 MiB, with a
+random boundary; names and file names with quotes or line breaks are
+percent-encoded, as browsers do.
 
 A request's own `Content-Type` header always wins over the one its body
 type implies.
@@ -123,6 +125,8 @@ with a browser.
 | `timeout_ms` | 30000 | 0 waits forever |
 | `follow_redirects` | true | |
 | `max_redirects` | 10 | |
+| `follow_original_method` | false | true keeps a POST and its body across a 301 or 302 |
+| `follow_authorization` | false | true keeps `Authorization` across a redirect to another host |
 | `verify_tls` | true | false accepts self-signed and expired certificates |
 | `http_version` | `auto` | `http1`, `http2` or `http3` |
 | `title_case_headers` | true | HTTP/1.1 header names as `Content-Type` |

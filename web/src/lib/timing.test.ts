@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commonName, expiry, phases, timingNote } from "./timing";
+import { commonName, expiry, phases, steps, timingNote } from "./timing";
 
 const fresh = {
   dns_ms: 10,
@@ -8,6 +8,29 @@ const fresh = {
   download_ms: 10,
   reused: false,
 };
+
+describe("steps", () => {
+  it("lists the redirects and then the response", () => {
+    const response = {
+      status: 200,
+      url: "https://b.test/",
+      hops: [
+        { status: 301, url: "http://a.test/", time_ms: 12 },
+        { status: 302, url: "https://a.test/", time_ms: 8 },
+      ],
+    };
+    expect(steps(response)).toEqual([
+      { status: 301, url: "http://a.test/", ms: 12 },
+      { status: 302, url: "https://a.test/", ms: 8 },
+      { status: 200, url: "https://b.test/", ms: null },
+    ]);
+  });
+
+  it("is empty without redirects", () => {
+    expect(steps({ status: 200, url: "https://a.test/" })).toEqual([]);
+    expect(steps({ status: 200, url: "https://a.test/", hops: [] })).toEqual([]);
+  });
+});
 
 describe("phases", () => {
   it("lays the phases end to end", () => {

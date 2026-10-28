@@ -682,20 +682,26 @@ fn oauth_settings(
     Ok((settings.clone(), vars))
 }
 
-async fn oauth2_token(State(state): Shared, Json(arg): Json<OAuthArg>) -> ApiResult {
-    let (settings, vars) = oauth_settings(&state, &arg)?;
-    let settings = &settings;
-    // The token request goes the way the requests in that folder go:
-    // through the same proxy, with the same certificates.
+/// How token requests go out: the way the requests in the argument's
+/// folder go, through the same proxy and with the same certificates.
+fn oauth_transport(
+    state: &AppState,
+    arg: &OAuthArg,
+) -> Result<getman_core::http::Transport, ApiError> {
     let request = Request {
         auth: arg.auth.clone(),
         ..Request::default()
     };
     let path = arg.path.as_deref().filter(|p| !p.is_empty());
-    let transport =
-        state
-            .executor
-            .transport(path, &request, &context(arg.environment.as_deref()))?;
+    Ok(state
+        .executor
+        .transport(path, &request, &context(arg.environment.as_deref()))?)
+}
+
+async fn oauth2_token(State(state): Shared, Json(arg): Json<OAuthArg>) -> ApiResult {
+    let (settings, vars) = oauth_settings(&state, &arg)?;
+    let settings = &settings;
+    let transport = oauth_transport(&state, &arg)?;
     let token = state
         .executor
         .authenticator
@@ -708,10 +714,13 @@ async fn oauth2_token(State(state): Shared, Json(arg): Json<OAuthArg>) -> ApiRes
 /// system's browser.
 async fn oauth2_authorize(State(state): Shared, Json(arg): Json<OAuthArg>) -> ApiResult {
     let (settings, vars) = oauth_settings(&state, &arg)?;
+    // The code is exchanged later, once the browser is back, the way the
+    // folder's requests go.
+    let transport = oauth_transport(&state, &arg)?;
     let authorization = state
         .executor
         .authenticator
-        .authorize(&settings, &vars)
+        .authorize(&settings, &vars, transport)
         .await?;
     let opened = open::that_detached(&authorization.url).is_ok();
     let mut value = json!(authorization);
@@ -729,12 +738,7 @@ async fn oauth2_wait(State(state): Shared, Json(arg): Json<SignInId>) -> ApiResu
     let token = state
         .executor
         .authenticator
-        .wait_for_token(
-            &state.executor.http,
-            &arg.id,
-            getman_core::http::Transport::default(),
-            SIGN_IN_TIMEOUT,
-        )
+        .wait_for_token(&state.executor.http, &arg.id, SIGN_IN_TIMEOUT)
         .await?;
     Ok(Json(json!(token)))
 }

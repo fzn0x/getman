@@ -15,7 +15,7 @@ mod sse;
 mod test_servers;
 #[cfg(test)]
 mod tests;
-mod tls;
+pub(crate) mod tls;
 mod websocket;
 
 use std::sync::Arc;
