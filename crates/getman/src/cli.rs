@@ -146,6 +146,11 @@ pub(crate) struct RunArgs {
     #[command(flatten)]
     pub(crate) net: NetArgs,
 
+    /// Run no scripts. Requests go out as saved, and checks and captures
+    /// still run. The result says which scripts were skipped.
+    #[arg(long)]
+    pub(crate) no_scripts: bool,
+
     /// Number of iterations. Defaults to the number of data rows, or 1.
     #[arg(long, short = 'n')]
     pub(crate) iterations: Option<usize>,
@@ -227,6 +232,11 @@ pub(crate) struct SendArgs {
 
     #[command(flatten)]
     pub(crate) net: NetArgs,
+
+    /// Run no scripts. Requests go out as saved, and checks and captures
+    /// still run. The result says which scripts were skipped.
+    #[arg(long)]
+    pub(crate) no_scripts: bool,
 
     /// Print the status line and headers before the body, and the timing
     /// and TLS details after it. For gRPC, the headers before the
@@ -486,6 +496,25 @@ mod tests {
         );
         assert!(parse_until("soon").is_err());
         assert!(parse_until("3h").is_err());
+    }
+
+    #[test]
+    fn send_and_run_can_turn_scripts_off() {
+        let cli = Cli::try_parse_from(["getman", "send", "a.yaml", "--no-scripts"]).unwrap();
+        let Some(Command::Send(args)) = cli.command else {
+            panic!()
+        };
+        assert!(args.no_scripts);
+        let cli = Cli::try_parse_from(["getman", "run", "--no-scripts"]).unwrap();
+        let Some(Command::Run(args)) = cli.command else {
+            panic!()
+        };
+        assert!(args.no_scripts);
+        let cli = Cli::try_parse_from(["getman", "run"]).unwrap();
+        let Some(Command::Run(args)) = cli.command else {
+            panic!()
+        };
+        assert!(!args.no_scripts);
     }
 
     #[test]
