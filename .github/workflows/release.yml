@@ -248,12 +248,30 @@ jobs:
           pattern: desktop-*
           path: dist
           merge-multiple: true
+      # The notes are the changelog's section for this version, with links
+      # to the docs made absolute so they work on the release page and in
+      # the desktop app's update dialog. Without a section, GitHub writes
+      # them from the commits.
       - name: Write the release notes
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api --method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
-            -f tag_name="$GITHUB_REF_NAME" --jq .body > notes.md
+          version="${GITHUB_REF_NAME#v}"
+          awk -v heading="## [$version]" '
+            index($0, heading) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found && /^\[[^]]+\]: / { next }
+            found { print }
+          ' CHANGELOG.md |
+            sed -e '/./,$!d' -e "s#](\(docs/[^)]*\))#](https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/\1)#g" > notes.md
+          if grep -q '[^[:space:]]' notes.md; then
+            printf '\n[Full changelog](https://github.com/%s/blob/%s/CHANGELOG.md)\n' \
+              "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" >> notes.md
+          else
+            echo "::warning::CHANGELOG.md has no section for $version, so the notes are GitHub's."
+            gh api --method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+              -f tag_name="$GITHUB_REF_NAME" --jq .body > notes.md
+          fi
       # latest.json tells the desktop app the newest version, its notes, and
       # for each platform the signed file that installs it.
       - name: Describe the update for the desktop app
