@@ -254,6 +254,24 @@ pub fn generate(language: &str, request: &Outgoing) -> Option<String> {
 /// Writes a request as code with the given options. Returns `None` for
 /// an unknown language.
 pub fn generate_with(language: &str, request: &Outgoing, options: &Options) -> Option<String> {
+    // A prepared multipart request carries the Content-Type with the
+    // boundary its body was built with. Every snippet builds the body
+    // anew, with the client's own boundary, so that header would not match.
+    let own_boundary;
+    let request = if is_multipart(request) {
+        own_boundary = Outgoing {
+            headers: request
+                .headers
+                .iter()
+                .filter(|h| !h.name.eq_ignore_ascii_case("content-type"))
+                .cloned()
+                .collect(),
+            ..request.clone()
+        };
+        &own_boundary
+    } else {
+        request
+    };
     let full = options.boilerplate;
     // What a level of indent is in the text each writer produces, and
     // where its string literals can hold a real line break.
@@ -2404,6 +2422,19 @@ mod tests {
                 .unwrap()
                 .contains("val body = ByteArray(0).toRequestBody()")
         );
+    }
+
+    #[test]
+    fn a_prepared_multipart_boundary_stays_out_of_snippets() {
+        let mut request = upload();
+        request.headers.push(Header {
+            name: "Content-Type".into(),
+            value: "multipart/form-data; boundary=----getmanprepared".into(),
+        });
+        for language in LANGUAGES {
+            let code = generate(language.id, &request).unwrap();
+            assert!(!code.contains("getmanprepared"), "{}: {code}", language.id);
+        }
     }
 
     #[test]
