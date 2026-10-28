@@ -59,7 +59,7 @@ pub(crate) fn response_lines(execution: &Execution) -> Vec<Line<'static>> {
 
 /// Colours one line of pretty-printed JSON: keys bold, strings green,
 /// numbers blue, literals magenta, punctuation dim.
-fn json_line(line: &str) -> Line<'static> {
+pub(crate) fn json_line(line: &str) -> Line<'static> {
     let mut spans = Vec::new();
     let chars: Vec<char> = line.chars().collect();
     let mut i = 0;

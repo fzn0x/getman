@@ -13,6 +13,7 @@
     isDirty,
     moveTab,
     newRequest,
+    openDialog,
     reopenClosedTab,
     revealInTree,
     selectTab,
@@ -218,6 +219,14 @@
       </div>
     {/each}
   </div>
+  <button
+    class="icon-btn add"
+    aria-label="Search tabs"
+    title="Search tabs ({keyLabel('alt+a').join(' ')})"
+    onclick={() => openDialog({ kind: "tabs" })}
+  >
+    <Icon name="search" />
+  </button>
   <button
     class="icon-btn add"
     aria-label="New request"

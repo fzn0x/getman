@@ -76,6 +76,10 @@ pub(crate) struct Pki {
     /// The client certificate and key as PKCS#12, with passphrase
     /// [`P12_PASSPHRASE`].
     pub(crate) client_p12: Vec<u8>,
+    /// The server certificate for 127.0.0.1 and localhost, PEM.
+    pub(crate) server_cert_pem: String,
+    /// The server's private key, PEM.
+    pub(crate) server_key_pem: String,
     ca_der: CertificateDer<'static>,
     server_cert: CertificateDer<'static>,
     server_key: Vec<u8>,
@@ -139,6 +143,8 @@ pub(crate) fn pki() -> &'static Pki {
             client_cert_pem: client.pem(),
             client_key_pem: client_key.serialize_pem(),
             client_p12,
+            server_cert_pem: server.pem(),
+            server_key_pem: server_key.serialize_pem(),
             ca_der: ca.der().clone(),
             server_cert: server.der().clone(),
             server_key: server_key.serialize_der(),

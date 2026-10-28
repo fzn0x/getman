@@ -1,6 +1,7 @@
 //! Turning a stored request into one ready to send: inherited settings
 //! applied, variables replaced, body encoded.
 
+use std::fmt::Write as _;
 use std::path::{Component, Path, PathBuf};
 
 use base64::Engine as _;
@@ -544,19 +545,32 @@ fn build_body(
             );
             (OutgoingBody::File { path }, Some(content_type))
         }
-        Body::Graphql { query, variables } => {
+        Body::Graphql {
+            query,
+            variables,
+            operation_name,
+        } => {
             let mut payload = serde_json::Map::new();
             payload.insert("query".into(), r.render(query).into());
+            let operation = r.render(operation_name);
+            let operation = operation.trim();
             let variables = r.render(variables);
             if r.keep && serde_json::from_str::<serde_json::Value>(&variables).is_err() {
                 // Variables such as `{"id": {{id}}}` are JSON only once
                 // filled in; write them into the payload as they are.
                 let query = serde_json::Value::from(r.render(query));
-                let payload = if variables.trim().is_empty() {
-                    format!("{{\"query\":{query}}}")
-                } else {
-                    format!("{{\"query\":{query},\"variables\":{}}}", variables.trim())
-                };
+                let mut payload = format!("{{\"query\":{query}");
+                if !variables.trim().is_empty() {
+                    let _ = write!(payload, ",\"variables\":{}", variables.trim());
+                }
+                if !operation.is_empty() {
+                    let _ = write!(
+                        payload,
+                        ",\"operationName\":{}",
+                        serde_json::Value::from(operation)
+                    );
+                }
+                payload.push('}');
                 return Ok((bytes(payload), Some("application/json".into())));
             }
             if !variables.trim().is_empty() {
@@ -564,6 +578,9 @@ fn build_body(
                     Error::Invalid(format!("the GraphQL variables are not valid JSON: {e}"))
                 })?;
                 payload.insert("variables".into(), parsed);
+            }
+            if !operation.is_empty() {
+                payload.insert("operationName".into(), operation.into());
             }
             (
                 bytes(serde_json::Value::Object(payload).to_string()),
@@ -950,6 +967,7 @@ mod tests {
             body: Body::Graphql {
                 query: "query { me { id } }".into(),
                 variables: r#"{"n": {{n}}}"#.into(),
+                operation_name: String::new(),
             },
             ..Request::default()
         };
@@ -963,6 +981,7 @@ mod tests {
         request.body = Body::Graphql {
             query: "{ a }".into(),
             variables: "{oops".into(),
+            operation_name: String::new(),
         };
         let effective = Effective::new(&[], &request);
         let error = prepare(
@@ -974,6 +993,52 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.to_string().contains("GraphQL"), "{error}");
+    }
+
+    #[test]
+    fn graphql_sends_the_operation_name() {
+        let mut request = Request {
+            url: "https://example.com/graphql".into(),
+            body: Body::Graphql {
+                query: "query A { a } query B { b }".into(),
+                variables: String::new(),
+                operation_name: " {{op}} ".into(),
+            },
+            ..Request::default()
+        };
+        let body = |prepared: Prepared| {
+            let OutgoingBody::Bytes { data } = prepared.outgoing.body else {
+                panic!()
+            };
+            serde_json::from_slice::<serde_json::Value>(&data.0).unwrap()
+        };
+        let json = body(prepare_simple(&request, &vars(&[("op", "B")])));
+        assert_eq!(json["operationName"], "B");
+        // Unfilled variables stay in the payload for code export.
+        let effective = Effective::new(&[Folder::default()], &request);
+        let kept = prepare_unresolved(
+            &request,
+            &effective.headers,
+            &effective.auth,
+            Path::new("."),
+        )
+        .unwrap();
+        let OutgoingBody::Bytes { data } = &kept.outgoing.body else {
+            panic!()
+        };
+        assert!(
+            data.text().contains(r#""operationName":"{{op}}""#),
+            "{}",
+            data.text()
+        );
+        // A blank name is left out.
+        request.body = Body::Graphql {
+            query: "{ a }".into(),
+            variables: String::new(),
+            operation_name: "  ".into(),
+        };
+        let json = body(prepare_simple(&request, &vars(&[])));
+        assert!(json.get("operationName").is_none(), "{json}");
     }
 
     #[test]

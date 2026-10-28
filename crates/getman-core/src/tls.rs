@@ -6,6 +6,8 @@ use std::net::IpAddr;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
+use rustls::pki_types::pem::PemObject as _;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use serde::{Deserialize, Serialize};
 use x509_parser::extensions::GeneralName;
 
@@ -87,6 +89,34 @@ impl ClientIdentity {
     pub fn pem(&self) -> &[u8] {
         &self.pem
     }
+
+    /// The certificate chain and the private key, for a rustls client.
+    pub(crate) fn rustls_parts(
+        &self,
+    ) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)> {
+        let chain = CertificateDer::pem_slice_iter(&self.pem)
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| Error::Invalid(format!("the client certificate is not valid PEM: {e}")))?;
+        let key = PrivateKeyDer::from_pem_slice(&self.pem)
+            .map_err(|e| Error::Invalid(format!("the client key is not valid PEM: {e}")))?;
+        Ok((chain, key))
+    }
+}
+
+/// The certificates of extra certificate authorities given as PEM text, as
+/// DER, for a rustls client to trust.
+pub(crate) fn ca_roots(pems: &[Vec<u8>]) -> Result<Vec<CertificateDer<'static>>> {
+    let mut roots = Vec::new();
+    for pem in pems {
+        for cert in CertificateDer::pem_slice_iter(pem) {
+            roots.push(
+                cert.map_err(|e| {
+                    Error::Invalid(format!("a CA certificate is not valid PEM: {e}"))
+                })?,
+            );
+        }
+    }
+    Ok(roots)
 }
 
 /// Checks that PEM text holds at least one certificate, for trusting it

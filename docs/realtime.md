@@ -310,5 +310,7 @@ and the results are in every report: the line in the terminal says how many
 messages came, the HTML report lists them, and the JSON report holds the
 whole conversation under `realtime`. See [Runner](runner.md).
 
-The terminal UI shows these requests, marked `WS`, `SSE` and `SIO`, and its
-runs connect to them, but it does not open them yet.
+The [terminal UI](terminal.md) connects to them too, shows their messages
+as they arrive and sends saved or typed ones, and its runs work as
+`getman run` does. A connection opened by hand there does not run scripts or
+checks.

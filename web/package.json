@@ -1,6 +1,6 @@
 {
   "name": "getman-web",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Getman's browser UI, built into the getman binary",
   "license": "MIT OR Apache-2.0",
@@ -26,7 +26,10 @@
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.14",
     "@lezer/highlight": "^1.2.5",
-    "@tauri-apps/api": "^2.12.4"
+    "@tauri-apps/api": "^2.12.4",
+    "cm6-graphql": "^0.2.2",
+    "graphql": "^16.14.2",
+    "graphql-language-service": "^5.7.0"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",

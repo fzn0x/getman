@@ -140,6 +140,8 @@ the globals instead.
 | `-t`, `--to FORMAT` | A language (see [Export as code](import-export.md#export-as-code)), `postman` or `openapi`. gRPC requests print as a `grpcurl` command, also with `--to grpcurl` |
 | `-o`, `--output FILE` | Write to a file instead of standard output; `.yaml` gives YAML for `openapi` |
 | `--keep-vars` | Leave `{{variables}}` as written in code, so tokens stay out of it |
+| `--indent 2\|4\|tab` | Indent code with two spaces, four spaces or tabs, instead of the language's own habit |
+| `--no-boilerplate` | Leave out the imports and the `main` function, where the language has them (see [Indent and boilerplate](import-export.md#indent-and-boilerplate)) |
 | `-e`, `--env NAME` | Environment to fill in variables from; with `--to postman` and no `ITEM`, the environment to export |
 | `--globals` | With `--to postman`, export the globals |
 | `--with-secrets` | With `--to postman`, include values from git-ignored local files |

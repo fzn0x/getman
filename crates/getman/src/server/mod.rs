@@ -12,6 +12,7 @@
 mod api;
 mod assets;
 mod background;
+mod graphql;
 mod grpc;
 mod history;
 mod presets;
@@ -169,7 +170,8 @@ fn router_with(state: Arc<AppState>, app: Option<&Router>) -> Router {
         "/api",
         api::routes()
             .merge(realtime::routes())
-            .merge(grpc::routes()),
+            .merge(grpc::routes())
+            .merge(graphql::routes()),
     );
     if let Some(app) = app {
         router = router.nest_service("/api/app", app.clone());

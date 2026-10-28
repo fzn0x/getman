@@ -5,6 +5,7 @@
 // the server then closes everything the page opened.
 
 import { api } from "./api";
+import { logRealtime } from "./console.svelte";
 import { toRequest } from "./draft";
 import {
   appendCapped,
@@ -59,6 +60,8 @@ export interface LiveState {
 
 /** The logs, outside the reactive tabs so thousands of entries stay cheap. */
 const logs = new Map<string, LogEntry[]>();
+/** When each connection was started, and its request's name, for the console. */
+const started = new Map<string, { at: number; name: string; method: string; url: string }>();
 /** Open connections by the server's id. */
 const sessions = new Map<string, LiveState>();
 /** Events for connections whose id this page does not know yet. */
@@ -222,6 +225,7 @@ function apply(id: string, state: LiveState, events: StreamEvent[]): void {
         state.session = "";
         state.closed = { code: event.code, reason: event.reason, by_client: event.by_client };
         sessions.delete(id);
+        summarize(state);
         break;
       case "result":
         state.results = event;
@@ -237,6 +241,25 @@ function apply(id: string, state: LiveState, events: StreamEvent[]): void {
   state.chars = result.chars;
   state.dropped += result.dropped;
   state.version++;
+}
+
+/** Tells the console how a connection went, once it has closed. */
+function summarize(state: LiveState): void {
+  const begun = started.get(state.key);
+  started.delete(state.key);
+  logRealtime({
+    name: begun?.name ?? "",
+    method: state.request?.method ?? begun?.method ?? "",
+    url: state.request?.url ?? begun?.url ?? "",
+    headers: state.request?.headers ?? [],
+    status: state.handshake?.status ?? null,
+    responseHeaders: state.handshake?.headers ?? [],
+    timeMs: begun ? Date.now() - begun.at : 0,
+    sent: state.sent,
+    received: state.received,
+    closed: state.closed,
+    error: state.error,
+  });
 }
 
 /** Closes the connections of tabs that were closed. */
@@ -274,6 +297,12 @@ export async function connect(tab: RequestTab): Promise<void> {
   state.sent = 0;
   state.received = 0;
   state.results = null;
+  started.set(state.key, {
+    at: Date.now(),
+    name: tab.draft.name,
+    method: tab.draft.method,
+    url: tab.draft.url,
+  });
   try {
     const pageId = await openPage();
     const { id } = await api.realtimeConnect({
@@ -299,6 +328,7 @@ export async function connect(tab: RequestTab): Promise<void> {
     state.status = "closed";
     state.session = "";
     state.error = message(error);
+    summarize(state);
   }
 }
 

@@ -1,14 +1,14 @@
 <script lang="ts">
   import { BODY_TYPES, convertBody } from "../../lib/draft";
   import { prettyJson } from "../../lib/format";
-  import { notify, ws } from "../../lib/store.svelte";
+  import { notify, ws, type RequestTab } from "../../lib/store.svelte";
   import type { Body, FormField } from "../../lib/types";
   import Editor from "../Editor.svelte";
   import Icon from "../Icon.svelte";
   import KeyValueTable from "./KeyValueTable.svelte";
   import VarInput from "./VarInput.svelte";
 
-  let { body = $bindable() }: { body: Body } = $props();
+  let { body = $bindable(), tab }: { body: Body; tab?: RequestTab } = $props();
 
   const known = $derived(new Set(ws.variables.map((v) => v.name)));
 
@@ -240,37 +240,14 @@
         </p>
       </div>
     {:else if body.type === "graphql"}
-      <div class="graphql">
-        <div class="part">
-          <span class="bitmap label">Query</span>
-          <div class="editor-box">
-            <Editor
-              bind:value={body.query}
-              {known}
-              label="GraphQL query"
-              placeholder={"query {\n  me { id }\n}"}
-            />
-          </div>
-        </div>
-        <div class="part">
-          <span class="bitmap label">Variables</span>
-          <div class="editor-box">
-            <Editor
-              bind:value={
-                () => (body.type === "graphql" ? (body.variables ?? "") : ""),
-                (value) => {
-                  if (body.type === "graphql") body.variables = value;
-                }
-              }
-              language="json"
-              lint
-              {known}
-              label="GraphQL variables"
-              placeholder={'{ "id": 1 }'}
-            />
-          </div>
-        </div>
-      </div>
+      <!-- The GraphQL tools load when a GraphQL body is first shown. -->
+      {#await import("./GraphqlPane.svelte") then pane}
+        <pane.default
+          bind:body={() => body as Extract<Body, { type: "graphql" }>, (value) => (body = value)}
+          {tab}
+          {known}
+        />
+      {/await}
     {/if}
   </div>
 </div>
@@ -330,8 +307,7 @@
   }
 
   .content > .none,
-  .content > .scroll,
-  .content > .graphql {
+  .content > .scroll {
     grid-row: 1 / -1;
   }
 
@@ -428,22 +404,7 @@
     gap: 6px;
   }
 
-  .field .bitmap,
-  .label {
+  .field .bitmap {
     color: var(--ink-3);
-  }
-
-  .graphql {
-    display: grid;
-    grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
-    gap: var(--s3);
-    min-height: 0;
-  }
-
-  .part {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 6px;
-    min-height: 0;
   }
 </style>
