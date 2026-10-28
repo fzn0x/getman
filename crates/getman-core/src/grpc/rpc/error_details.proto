@@ -1,5 +1,10 @@
 // The standard error details a google.rpc.Status may carry. Getman
 // shows them as JSON; details of other types show as Base64.
+//
+// The message definitions are those of google/rpc/error_details.proto in
+// https://github.com/googleapis/googleapis, Copyright Google LLC, licensed
+// under the Apache License, Version 2.0, without its comments. See
+// THIRD_PARTY_NOTICES.md at the top of the repository.
 
 syntax = "proto3";
 
