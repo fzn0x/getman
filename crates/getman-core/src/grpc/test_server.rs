@@ -180,6 +180,10 @@ async fn serve(
     let address = listener.local_addr().unwrap().to_string();
     let mut builder = tonic::transport::Server::builder();
     if let Some(config) = tls {
+        // tonic builds the server's TLS config with the process default,
+        // which rustls cannot pick while two providers are compiled in.
+        // Fails only if a provider is installed already, which is fine.
+        let _ = rustls::crypto::ring::default_provider().install_default();
         builder = builder.tls_config(config).unwrap();
     }
     let descriptors: &'static [u8] = Box::leak(descriptor_set().into_boxed_slice());
