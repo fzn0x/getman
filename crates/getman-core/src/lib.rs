@@ -29,6 +29,7 @@ mod test_server;
 pub mod time;
 mod timing;
 pub mod tls;
+mod tunnel;
 pub mod vars;
 pub mod workspace;
 
