@@ -1,5 +1,10 @@
 // The rich error model gRPC servers send in grpc-status-details-bin.
 // Getman decodes it to show the details of a failed call.
+//
+// The message definitions are those of google/rpc/status.proto in
+// https://github.com/googleapis/googleapis, Copyright Google LLC, licensed
+// under the Apache License, Version 2.0. The comments are Getman's own.
+// See THIRD_PARTY_NOTICES.md at the top of the repository.
 
 syntax = "proto3";
 

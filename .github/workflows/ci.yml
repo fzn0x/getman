@@ -103,3 +103,157 @@ jobs:
       # rust-version, the one Tauri needs (see its Cargo.toml), and is
       # built with stable by the other jobs.
       - run: cargo +1.88 check --workspace --exclude getman-desktop --all-targets --locked
+
+  # Advisories, licences and sources of the Rust dependencies, by deny.toml.
+  deny:
+    name: Dependency advisories and licences
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          arguments: --all-features
+
+  npm-licenses:
+    name: npm licences
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: node .github/scripts/check-npm-licenses.mjs
+
+  # Every code-export language, run for real: the tricky requests in
+  # .github/scripts/verify-snippets.mjs are exported with getman and each
+  # snippet is run against a local echo server, which checks that what
+  # arrives is what the request says.
+  getman:
+    name: Build getman for the snippet checks
+    needs: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-dist
+          path: web/dist
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked --package getman
+      - uses: actions/upload-artifact@v7
+        with:
+          name: getman-debug
+          path: target/debug/getman
+          retention-days: 1
+
+  # `getman mcp`, driven by the official MCP Inspector command line.
+  mcp:
+    name: MCP server with the Inspector
+    needs: getman
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: getman-debug
+          path: ${{ runner.temp }}/getman-bin
+      - run: chmod +x "$RUNNER_TEMP/getman-bin/getman"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: node .github/scripts/verify-mcp.mjs --getman "$RUNNER_TEMP/getman-bin/getman"
+
+  snippets:
+    name: Snippets in ${{ matrix.name }}
+    needs: getman
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: curl, langs: "getman,curl,http" }
+          - { name: Wget, langs: wget }
+          - { name: HTTPie, langs: httpie }
+          - { name: PowerShell, langs: powershell }
+          - { name: JavaScript, langs: "fetch,node,axios" }
+          - { name: Python, langs: python }
+          - { name: Go, langs: go }
+          - { name: Rust, langs: rust }
+          - { name: Java, langs: java }
+          - { name: Kotlin, langs: kotlin }
+          - { name: "C#", langs: csharp }
+          - { name: Swift, langs: swift }
+          - { name: PHP, langs: php }
+          - { name: Ruby, langs: ruby }
+          - { name: Dart, langs: dart }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: getman-debug
+          path: ${{ runner.temp }}/getman-bin
+      - run: chmod +x "$RUNNER_TEMP/getman-bin/getman"
+
+      # curl, Wget and PowerShell (pwsh) come with the runner image.
+      - if: matrix.name == 'HTTPie' || matrix.name == 'Python'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - if: matrix.name == 'HTTPie'
+        run: pip install httpie
+      - if: matrix.name == 'Python'
+        run: pip install requests
+      - if: matrix.name == 'JavaScript'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - if: matrix.name == 'Go'
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - if: matrix.name == 'Rust'
+        uses: dtolnay/rust-toolchain@stable
+      - if: matrix.name == 'Java' || matrix.name == 'Kotlin'
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      # JetBrains publishes no setup action; the script installs their
+      # compiler release and OkHttp, each checked against a pinned hash.
+      - if: matrix.name == 'Kotlin'
+        run: bash .github/scripts/setup-kotlin.sh
+      - if: matrix.name == 'C#'
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+      - if: matrix.name == 'Swift'
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.0"
+      - if: matrix.name == 'PHP'
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: curl
+      - if: matrix.name == 'Ruby'
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+      - if: matrix.name == 'Dart'
+        uses: dart-lang/setup-dart@v1
+
+      - name: Run the snippets
+        run: >-
+          node .github/scripts/verify-snippets.mjs
+          --getman "$RUNNER_TEMP/getman-bin/getman"
+          --lang "${{ matrix.langs }}"
+          --work "$RUNNER_TEMP/snippets"
+      - name: Keep the snippets
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: snippets-${{ matrix.name }}
+          path: ${{ runner.temp }}/snippets/snippets
+          retention-days: 7

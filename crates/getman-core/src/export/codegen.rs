@@ -576,7 +576,13 @@ fn httpie(request: &Outgoing) -> String {
     if let OutgoingBody::Multipart { parts } = &request.body {
         for part in parts {
             words.push(match &part.file {
-                Some(path) => sh(&format!("{}@{}", httpie_key(&part.name), path_text(path))),
+                Some(path) => {
+                    let mut field = format!("{}@{}", httpie_key(&part.name), path_text(path));
+                    if let Some(content_type) = &part.content_type {
+                        let _ = write!(field, ";type={content_type}");
+                    }
+                    sh(&field)
+                }
                 None => sh(&format!("{}={}", httpie_key(&part.name), part.value)),
             });
         }
@@ -684,7 +690,8 @@ fn powershell(request: &Outgoing) -> String {
         }
         OutgoingBody::File { path } => args.push(format!("-InFile {}", ps(&path_text(path)))),
         OutgoingBody::Multipart { parts } => {
-            out.push_str("$form = @{\n");
+            // Ordered, so the parts go out in the order they are written.
+            out.push_str("$form = [ordered]@{\n");
             for part in parts {
                 match &part.file {
                     Some(path) => {
@@ -757,7 +764,13 @@ fn raw_http(request: &Outgoing) -> String {
             }
         }
     }
-    out.trim_end_matches('\n').to_owned()
+    // A text body's own trailing line breaks count in its Content-Length.
+    match &request.body {
+        OutgoingBody::Bytes { .. } if !body_text(&request.body).unwrap_or_default().is_empty() => {
+            out
+        }
+        _ => out.trim_end_matches('\n').to_owned(),
+    }
 }
 
 /// A string literal for JavaScript or Python: JSON's syntax is valid in
@@ -864,33 +877,37 @@ fn python(request: &Outgoing, full: bool) -> String {
             args.push("data=data".into());
         }
         OutgoingBody::Multipart { parts } => {
-            let (files, fields): (Vec<_>, Vec<_>) = parts.iter().partition(|p| p.file.is_some());
-            if !fields.is_empty() {
-                out.push_str("data = {\n");
-                for part in &fields {
-                    let _ = writeln!(out, "    {}: {},", js(&part.name), js(&part.value));
+            // One list, so the form is multipart even with no file in it
+            // (`data=` would send it URL-encoded), and names can repeat.
+            out.push_str("files = [\n");
+            for part in parts {
+                match &part.file {
+                    Some(path) => {
+                        let content_type = part
+                            .content_type
+                            .as_ref()
+                            .map(|t| format!(", {}", js(t)))
+                            .unwrap_or_default();
+                        let _ = writeln!(
+                            out,
+                            "    ({}, ({}, open({}, \"rb\"){content_type})),",
+                            js(&part.name),
+                            js(&file_name(path)),
+                            js(&path_text(path))
+                        );
+                    }
+                    None => {
+                        let _ = writeln!(
+                            out,
+                            "    ({}, (None, {})),",
+                            js(&part.name),
+                            js(&part.value)
+                        );
+                    }
                 }
-                out.push_str("}\n");
-                args.push("data=data".into());
             }
-            if !files.is_empty() {
-                out.push_str("files = {\n");
-                for part in &files {
-                    let path = part
-                        .file
-                        .as_deref()
-                        .unwrap_or_else(|| std::path::Path::new(""));
-                    let _ = writeln!(
-                        out,
-                        "    {}: ({}, open({}, \"rb\")),",
-                        js(&part.name),
-                        js(&file_name(path)),
-                        js(&path_text(path))
-                    );
-                }
-                out.push_str("}\n");
-                args.push("files=files".into());
-            }
+            out.push_str("]\n");
+            args.push("files=files".into());
         }
     }
     let _ = write!(
@@ -955,17 +972,33 @@ fn go(request: &Outgoing, full: bool) -> String {
             "body".to_owned()
         }
         OutgoingBody::Multipart { parts } => {
-            imports.extend(["\"bytes\"", "\"mime/multipart\"", "\"os\""]);
+            imports.extend(["\"bytes\"", "\"mime/multipart\""]);
             setup.push_str("\tbody := &bytes.Buffer{}\n\twriter := multipart.NewWriter(body)\n");
             for part in parts {
                 match &part.file {
                     Some(path) => {
+                        imports.push("\"os\"");
+                        // CreateFormFile always says application/octet-stream.
+                        let create = match &part.content_type {
+                            Some(content_type) => {
+                                imports.push("\"net/textproto\"");
+                                format!(
+                                    "header := textproto.MIMEHeader{{}}\n\t\theader.Set(\"Content-Disposition\", fmt.Sprintf(`form-data; name=%q; filename=%q`, {}, {}))\n\t\theader.Set(\"Content-Type\", {})\n\t\tpart, _ := writer.CreatePart(header)",
+                                    go_string(&part.name),
+                                    go_string(&file_name(path)),
+                                    go_string(content_type)
+                                )
+                            }
+                            None => format!(
+                                "part, _ := writer.CreateFormFile({}, {})",
+                                go_string(&part.name),
+                                go_string(&file_name(path))
+                            ),
+                        };
                         let _ = writeln!(
                             setup,
-                            "\tif data, err := os.ReadFile({}); err == nil {{\n\t\tpart, _ := writer.CreateFormFile({}, {})\n\t\tpart.Write(data)\n\t}}",
-                            go_string(&path_text(path)),
-                            go_string(&part.name),
-                            go_string(&file_name(path))
+                            "\tif data, err := os.ReadFile({}); err == nil {{\n\t\t{create}\n\t\tpart.Write(data)\n\t}}",
+                            go_string(&path_text(path))
                         );
                     }
                     None => {
@@ -1071,9 +1104,14 @@ fn rust(request: &Outgoing, full: bool) -> String {
             for part in parts {
                 match &part.file {
                     Some(path) => {
+                        let mime = part
+                            .content_type
+                            .as_ref()
+                            .map(|t| format!(".mime_str({})?", rust_string(t)))
+                            .unwrap_or_default();
                         let _ = write!(
                             setup,
-                            "\n        .part({}, reqwest::multipart::Part::bytes(std::fs::read({})?).file_name({}))",
+                            "\n        .part({}, reqwest::multipart::Part::bytes(std::fs::read({})?).file_name({}){mime})",
                             rust_string(&part.name),
                             rust_string(&path_text(path)),
                             rust_string(&file_name(path))
@@ -2308,6 +2346,14 @@ mod tests {
             ),
             "{code}"
         );
+        // The last line break of a body is part of it: Content-Length
+        // counts it, so the text must keep it.
+        let mut request = post_json();
+        request.body = OutgoingBody::Bytes {
+            data: Payload(b"one\n\n".to_vec()),
+        };
+        let code = generate("http", &request).unwrap();
+        assert!(code.ends_with("Content-Length: 5\n\none\n\n"), "{code:?}");
     }
 
     #[test]
@@ -2365,11 +2411,44 @@ mod tests {
         let request = upload();
         let python = generate("python", &request).unwrap();
         assert!(
-            python.contains("\"avatar\": (\"me.png\", open(\"photos/me.png\", \"rb\")),"),
+            python.contains(
+                "(\"avatar\", (\"me.png\", open(\"photos/me.png\", \"rb\"), \"image/png\")),"
+            ),
             "{python}"
+        );
+        // Fields go in the same list, or requests would URL-encode a form
+        // with no file in it.
+        assert!(python.contains("(\"name\", (None, \"@Ada\")),"), "{python}");
+        assert!(!python.contains("data = {"), "{python}");
+        let powershell = generate("powershell", &request).unwrap();
+        assert!(powershell.contains("$form = [ordered]@{"), "{powershell}");
+        let rust = generate("rust", &request).unwrap();
+        assert!(rust.contains(".mime_str(\"image/png\")?"), "{rust}");
+        let httpie = generate("httpie", &request).unwrap();
+        assert!(
+            httpie.contains("'avatar@photos/me.png;type=image/png'"),
+            "{httpie}"
         );
         let go = generate("go", &request).unwrap();
         assert!(go.contains("writer.FormDataContentType()"), "{go}");
+        // A part with a type needs its own header; CreateFormFile has none.
+        assert!(go.contains("\"Content-Type\", \"image/png\""), "{go}");
+        assert!(go.contains("\"net/textproto\""), "{go}");
+        // With no file, "os" would be an unused import, a compile error.
+        let fields_only = Outgoing {
+            body: OutgoingBody::Multipart {
+                parts: vec![Part {
+                    name: "name".into(),
+                    value: "Ada".into(),
+                    file: None,
+                    content_type: None,
+                }],
+            },
+            ..upload()
+        };
+        let go = generate("go", &fields_only).unwrap();
+        assert!(!go.contains("\"os\""), "{go}");
+        assert!(!go.contains("textproto"), "{go}");
         let java = generate("java", &request).unwrap();
         assert!(
             java.contains("Files.readAllBytes(Path.of(\"photos/me.png\"))"),

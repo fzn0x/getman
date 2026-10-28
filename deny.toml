@@ -1,0 +1,85 @@
+# Checked by `cargo deny check` in CI (.github/workflows/ci.yml): known
+# vulnerabilities in dependencies, their licences, and where they come from.
+# Getman is MIT OR Apache-2.0, so what it links must allow that.
+#
+# Every exception below says why it is safe, and where it goes away.
+
+[graph]
+all-features = true
+
+[advisories]
+# A yanked release is one its authors withdrew for a reason.
+yanked = "deny"
+ignore = [
+  # `rsa` is the 0.10 release candidate on purpose: it is the line that
+  # gets new work, and the stable 0.9 line has the same advisory. The
+  # advisory is unpatched in both, and names the safe use: "local use on a
+  # non-compromised computer". Getman uses the crate only to sign JWT, ASAP
+  # and OAuth 1.0a requests with a private key the user gave it, on the
+  # user's own machine, so no network peer can time the operation. Remove this when
+  # a release without the advisory exists, and move to it.
+  { id = "RUSTSEC-2023-0071", reason = "timing attack on RSA private keys; only local signing, no peer can observe it" },
+
+  # `unsafe-libyaml` comes with `serde_yaml_ng`, which reads and writes the
+  # workspace files. This is a notice that the crate is archived, not a
+  # vulnerability. Move to a maintained YAML crate when one fits the files'
+  # exact format (the format is covered by tests).
+  { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml is archived; no vulnerability" },
+
+  # The desktop app only. `zip` 4 comes with `tauri-plugin-updater`, which
+  # checks an update's signature against the public key in tauri.conf.json
+  # before it extracts anything, so the attacker-controlled archive these
+  # advisories need cannot get that far. Gone when the plugin moves to
+  # `zip` 9.
+  { id = "RUSTSEC-2026-0367", reason = "zip extraction; archives are signature-checked first" },
+  { id = "RUSTSEC-2026-0368", reason = "zip extraction; archives are signature-checked first" },
+  { id = "RUSTSEC-2026-0369", reason = "zip extraction; archives are signature-checked first" },
+
+  # The desktop app only, on Linux: GTK 3 bindings, through Tauri and wry,
+  # use `proc-macro-error`, which runs at build time. Gone when Tauri moves
+  # to GTK 4.
+  { id = "RUSTSEC-2024-0370", reason = "proc-macro-error is unmaintained; build-time only, through Tauri's GTK 3 bindings" },
+
+  # The desktop app only, on Linux: `tauri-plugin-single-instance` talks to
+  # D-Bus with `zbus`, whose parts were merged into one crate. Notices only.
+  # Gone when the plugin moves to zbus 6.
+  { id = "RUSTSEC-2026-0370", reason = "zvariant was merged into zbus; no vulnerability" },
+  { id = "RUSTSEC-2026-0371", reason = "zbus_names was merged into zbus; no vulnerability" },
+  { id = "RUSTSEC-2026-0372", reason = "zvariant_derive was merged into zbus; no vulnerability" },
+]
+
+[licenses]
+confidence-threshold = 0.93
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-3.0",
+  "Zlib",
+  "0BSD",
+  "CC0-1.0",
+  "BSL-1.0",
+  "Unlicense",
+  # Data licence of the Mozilla root certificate list in `webpki-roots`.
+  "CDLA-Permissive-2.0",
+  # File-level copyleft: only changes to the crates' own files must be
+  # shared, and Getman changes none of them. `option-ext` (through `dirs`)
+  # is linked into the command; the CSS parsing crates come with the
+  # desktop app's webview layer.
+  "MPL-2.0",
+]
+
+[bans]
+multiple-versions = "allow"
+# Every dependency from a registry has a version requirement. The
+# workspace's own crates refer to each other by path alone, which
+# cargo-deny counts as a wildcard in a crate that could be published.
+wildcards = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

@@ -332,6 +332,8 @@ cd web && npm run check && npm test
 
 CI runs these on Linux, Windows and macOS, smoke-tests the command line,
 and checks the minimum supported Rust version. See [CONTRIBUTING.md](CONTRIBUTING.md).
+What changed in each release is in [CHANGELOG.md](CHANGELOG.md), and everyone
+taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 

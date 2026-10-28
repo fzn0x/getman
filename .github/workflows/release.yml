@@ -72,7 +72,7 @@ jobs:
         run: |
           name="getman-$GITHUB_REF_NAME-${{ matrix.target }}"
           mkdir "$name"
-          cp README.md LICENSE-MIT LICENSE-APACHE "$name/"
+          cp README.md LICENSE-MIT LICENSE-APACHE THIRD_PARTY_NOTICES.md "$name/"
           if [ "$RUNNER_OS" = "Windows" ]; then
             cp "target/${{ matrix.target }}/release/getman.exe" "$name/"
             7z a "$name.zip" "$name" > /dev/null
@@ -167,9 +167,9 @@ jobs:
         run: |
           args=(build --ci --target "${{ matrix.target }}")
           case "$RUNNER_OS" in
-            Windows) args+=(--bundles nsis,msi --config windows/command-line.json) ;;
-            macOS) args+=(--bundles app,dmg) ;;
-            Linux) args+=(--bundles appimage,deb,rpm) ;;
+            Windows) args+=(--bundles "nsis,msi" --config windows/command-line.json) ;;
+            macOS) args+=(--bundles "app,dmg") ;;
+            Linux) args+=(--bundles "appimage,deb,rpm") ;;
           esac
           if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
             args+=(--config '{"bundle":{"createUpdaterArtifacts":true}}')
@@ -188,6 +188,8 @@ jobs:
           # "optional", matching none is fine: update files and their
           # signatures exist only when the release is signed.
           put() {
+            # The pattern is meant to expand here.
+            # shellcheck disable=SC2206
             local matches=($1)
             if [ ${#matches[@]} -eq 0 ] && [ "${3:-}" = optional ]; then return; fi
             if [ ${#matches[@]} -ne 1 ]; then
@@ -208,7 +210,7 @@ jobs:
               mkdir -p portable/Getman/bin
               cp "target/${{ matrix.target }}/release/getman-desktop.exe" portable/Getman/Getman.exe
               cp crates/getman-desktop/windows/bin/getman.exe portable/Getman/bin/
-              cp README.md LICENSE-MIT LICENSE-APACHE portable/Getman/
+              cp README.md LICENSE-MIT LICENSE-APACHE THIRD_PARTY_NOTICES.md portable/Getman/
               (cd portable && 7z a "../out/Getman-windows-$arch-portable.zip" Getman > /dev/null)
               ;;
             macOS)
@@ -285,12 +287,56 @@ jobs:
           jq -n --arg version "${GITHUB_REF_NAME#v}" --rawfile notes notes.md \
             --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson platforms "$platforms" \
             '{version: $version, notes: $notes, pub_date: $date, platforms: $platforms}' > dist/latest.json
+      # Package manifests for this release, with its version, URLs and
+      # hashes: a Homebrew formula, a Scoop manifest, winget manifests and
+      # a Flatpak manifest. They are only release files for a maintainer to
+      # submit (see "Packages" in CONTRIBUTING.md); nothing publishes them.
+      # A failure here is a warning, so packaging never blocks a release.
+      - name: Write the package manifests
+        continue-on-error: true
+        run: node packaging/render.mjs --tag "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dist dist
       - name: Write checksums
         working-directory: dist
-        run: sha256sum * > SHA256SUMS
+        run: sha256sum -- * > SHA256SUMS
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* \
             --verify-tag --notes-file notes.md --title "$GITHUB_REF_NAME"
+
+  # Publishing the manifests is switched off: it needs repositories and a
+  # token that do not exist yet. "Packages" in CONTRIBUTING.md lists what to
+  # create first. Then remove the comment marks, set `if` to true, and add
+  # the secret PACKAGES_TOKEN: a fine-grained personal access token with
+  # read and write access to the contents of fzn0x/homebrew-tap and
+  # fzn0x/scoop-bucket, and a fork of microsoft/winget-pkgs.
+  #
+  # publish-packages:
+  #   name: Publish the package manifests
+  #   needs: release
+  #   if: false
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     GH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+  #   steps:
+  #     - name: Download the manifests from the release
+  #       run: |
+  #         gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir manifests \
+  #           --pattern getman.rb --pattern getman.json --pattern 'fzn0x.Getman*.yaml'
+  #     - name: Update the Homebrew tap
+  #       run: |
+  #         gh repo clone fzn0x/homebrew-tap tap
+  #         mkdir -p tap/Formula && cp manifests/getman.rb tap/Formula/getman.rb
+  #         git -C tap add Formula/getman.rb
+  #         git -C tap -c user.name=fzn0x -c user.email=noreply@github.com \
+  #           commit -m "getman $GITHUB_REF_NAME" && git -C tap push
+  #     - name: Update the Scoop bucket
+  #       run: |
+  #         gh repo clone fzn0x/scoop-bucket bucket
+  #         mkdir -p bucket/bucket && cp manifests/getman.json bucket/bucket/getman.json
+  #         git -C bucket add bucket/getman.json
+  #         git -C bucket -c user.name=fzn0x -c user.email=noreply@github.com \
+  #           commit -m "getman $GITHUB_REF_NAME" && git -C bucket push
+  #     # winget takes a pull request to microsoft/winget-pkgs, from a fork,
+  #     # with the three files under manifests/f/fzn0x/Getman/<version>/.
