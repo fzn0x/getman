@@ -27,7 +27,14 @@ export const OPERATORS = [
 ] as const;
 
 /** Operators that take no value. */
-export const UNARY = new Set(["exists", "!exists", "is empty", "is not empty", "is truthy", "is falsy"]);
+export const UNARY = new Set([
+  "exists",
+  "!exists",
+  "is empty",
+  "is not empty",
+  "is truthy",
+  "is falsy",
+]);
 
 /** Operators written with more than one word, longest first. */
 const MULTI_WORD = ["is not empty", "is empty", "is truthy", "is falsy", "not in"];
@@ -77,7 +84,11 @@ export function parseCheck(line: string): CheckRow {
   for (const multi of MULTI_WORD) {
     const count = multi.split(" ").length;
     if (words.slice(0, count).join(" ") === multi) {
-      return { target, operator: multi, value: UNARY.has(multi) ? "" : words.slice(count).join(" ") };
+      return {
+        target,
+        operator: multi,
+        value: UNARY.has(multi) ? "" : words.slice(count).join(" "),
+      };
     }
   }
   const space = rest.search(/\s/);
