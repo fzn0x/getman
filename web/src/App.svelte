@@ -108,6 +108,8 @@
       if (current) handle(() => closeTab(current.id));
     } else if (matches(event, "alt+shift+t") || matches(event, "mod+shift+t")) {
       handle(() => void reopenClosedTab());
+    } else if (matches(event, "alt+a")) {
+      handle(() => openDialog({ kind: "tabs" }));
     } else if (matches(event, "alt+]")) {
       handle(() => cycleTab(1));
     } else if (matches(event, "alt+[")) {

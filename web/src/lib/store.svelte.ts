@@ -713,14 +713,16 @@ async function restoreTabs(): Promise<void> {
   void refreshVariables();
 }
 
-/** Reopens the tab closed last. */
-export async function reopenClosedTab(): Promise<void> {
-  const saved = closedTabs.list.at(-1);
+/** Reopens the tab closed last, or a given closed tab. */
+export async function reopenClosedTab(which?: SavedTab): Promise<void> {
+  const saved = which ?? closedTabs.list.at(-1);
   if (!saved) {
     notify("No closed tabs to reopen.");
     return;
   }
-  closedTabs.list = closedTabs.list.slice(0, -1);
+  closedTabs.list = which
+    ? closedTabs.list.filter((tab) => tab !== which)
+    : closedTabs.list.slice(0, -1);
   const id = savedId(saved);
   if (id && tabs.list.some((tab) => tab.id === id)) {
     focusTab(id);
@@ -1188,6 +1190,7 @@ export async function stopRun(tab: RunnerTab): Promise<void> {
 
 export type Dialog =
   | { kind: "palette" }
+  | { kind: "tabs" }
   | { kind: "import"; folder: string; files?: ImportFile[] }
   | { kind: "export"; target: "folder" | "environment" | "globals"; path: string; name: string }
   | { kind: "code"; tab: RequestTab }

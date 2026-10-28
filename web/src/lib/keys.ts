@@ -62,6 +62,7 @@ export const SHORTCUTS: { combo: string; action: string }[] = [
   { combo: "alt+n", action: "New request" },
   { combo: "alt+w", action: "Close the tab" },
   { combo: "alt+shift+t", action: "Reopen the tab closed last" },
+  { combo: "alt+a", action: "Search open and recently closed tabs" },
   { combo: "alt+]", action: "Next tab" },
   { combo: "alt+[", action: "Previous tab" },
   { combo: "alt+l", action: "Edit the URL" },
