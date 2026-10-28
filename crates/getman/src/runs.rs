@@ -146,6 +146,7 @@ fn file(workspace: &Workspace, id: &str) -> Result<PathBuf, String> {
 pub(crate) fn save(workspace: &Workspace, run: &StoredRun) -> Result<(), String> {
     let path = file(workspace, &run.id)?;
     let folder = dir(workspace);
+    workspace.ensure_state_dir().map_err(|e| e.to_string())?;
     fs::create_dir_all(&folder).map_err(|e| format!("{}: {e}", folder.display()))?;
     let text = serde_json::to_string(run).map_err(|e| e.to_string())?;
     fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;

@@ -28,7 +28,7 @@ use crate::model::{Environment, Folder, Request, Vars};
 
 mod trash;
 
-pub use trash::{TRASH_DIR, TrashItem, TrashKind};
+pub use trash::{TRASH_DIR, TrashItem, TrashKind, create_state_dir};
 
 /// File that marks the root of a workspace and holds its settings.
 pub const WORKSPACE_FILE: &str = "getman.yaml";

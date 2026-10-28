@@ -580,11 +580,7 @@ pub(super) fn save(path: &Path, tokens: &BTreeMap<String, Record>) -> Result<()>
         return Ok(());
     }
     if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
-        let ignore = dir.join(".gitignore");
-        if !ignore.exists() {
-            std::fs::write(&ignore, "*\n").map_err(|e| Error::io(&ignore, e))?;
-        }
+        crate::workspace::create_state_dir(dir)?;
     }
     let text = serde_json::to_string_pretty(tokens)
         .map_err(|e| Error::Invalid(format!("Could not save the OAuth 2.0 tokens: {e}")))?;

@@ -653,7 +653,7 @@ fn parse_jar(text: &str) -> Option<cookie_store::CookieStore> {
 /// replacing it in one step so a crash cannot leave half a file.
 fn write_private(file: &Path, text: &str) -> Result<()> {
     if let Some(dir) = file.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
+        crate::workspace::create_state_dir(dir)?;
     }
     let temporary = file.with_extension("json.tmp");
     std::fs::write(&temporary, text).map_err(|e| Error::io(&temporary, e))?;

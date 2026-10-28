@@ -57,17 +57,25 @@ pub struct TrashItem {
     pub after: Option<String>,
 }
 
+/// Creates `dir`, Getman's state directory, with a `.gitignore` that keeps
+/// everything in it out of git, whatever the repository's own ignore rules
+/// say. Everything that writes there goes through this.
+pub fn create_state_dir(dir: &Path) -> Result<()> {
+    fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
+    let ignore = dir.join(".gitignore");
+    if !ignore.exists() {
+        fs::write(&ignore, "# Getman's local state\n*\n").map_err(|e| Error::io(&ignore, e))?;
+    }
+    Ok(())
+}
+
 impl Workspace {
     /// The directory of Getman's state, created with a `.gitignore` that
     /// keeps everything in it out of git, whatever the repository's own
     /// ignore rules say.
     pub fn ensure_state_dir(&self) -> Result<PathBuf> {
         let dir = self.state_dir();
-        fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
-        let ignore = dir.join(".gitignore");
-        if !ignore.exists() {
-            fs::write(&ignore, "# Getman's local state\n*\n").map_err(|e| Error::io(&ignore, e))?;
-        }
+        create_state_dir(&dir)?;
         Ok(dir)
     }
 
