@@ -66,15 +66,15 @@ own pages for every claim and says when to stay.
 
 ## Fast
 
-Measured on Windows 11 x64 with the release builds, on 28 October 2026:
+Measured on Windows 11 x64 with the 0.3.0 release files, on 28 October 2026:
 
 | | |
 | --- | --- |
-| `getman` command, browser UI included | 10.0 MiB to download, 25.7 MiB on disk |
-| `getman` start-up | 8 ms |
-| Browser UI server, idle | 10 MiB of memory |
-| Desktop app setup, `getman` command included | 15.5 MiB |
-| Desktop app, launch to a loaded window | 0.45 to 0.6 s |
+| `getman` command, browser UI included | 9.5 MiB to download, 25.6 MiB on disk |
+| `getman` start-up | 7 ms |
+| Browser UI server, idle | 2 MiB of memory |
+| Desktop app setup, `getman` command included | 15.2 MiB |
+| Desktop app, launch to a loaded window | 0.45 s, 0.8 s the first time |
 | Desktop app, idle | 94 MiB of memory: 5 MiB is Getman, the rest the system's WebView2 |
 
 Memory is the private working set, which Task Manager shows. Numbers vary
