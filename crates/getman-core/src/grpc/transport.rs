@@ -25,9 +25,10 @@ use rustls_platform_verifier::BuilderVerifierExt as _;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc;
 
+use super::proxy;
 use super::status::{Code, Status};
 use crate::error::{Error, Result};
-use crate::http::Header;
+use crate::http::{Header, Transport};
 
 /// Largest message Getman sends or reads.
 pub(crate) const MAX_MESSAGE_BYTES: usize = 64 * 1024 * 1024;
@@ -96,7 +97,32 @@ impl Target {
         }
     }
 
-    /// The URL of a path on the server.
+    /// The server's name as HTTP writes it: the port is left out when it
+    /// is the scheme's default.
+    pub(crate) fn http_authority(&self) -> String {
+        let default = if self.tls { 443 } else { 80 };
+        if self.port == default {
+            if self.host.contains(':') {
+                format!("[{}]", self.host)
+            } else {
+                self.host.clone()
+            }
+        } else {
+            self.authority()
+        }
+    }
+
+    /// The URL a call to a path on the server is made to, which is also
+    /// what a request signature covers.
+    pub(crate) fn http_url(&self, path: &str) -> String {
+        format!(
+            "{}://{}{path}",
+            if self.tls { "https" } else { "http" },
+            self.http_authority()
+        )
+    }
+
+    /// The URL of a path on the server, with its port.
     pub(crate) fn url(&self, path: &str) -> String {
         format!(
             "{}://{}{path}",
@@ -111,48 +137,107 @@ impl Target {
 pub(crate) struct Connection {
     sender: SendRequest<Outbound>,
     target: Target,
+    /// What to add when the server closes the connection on a call: with
+    /// TLS 1.3 a refused client certificate shows only then.
+    closed_hint: Option<&'static str>,
 }
 
-/// Opens a connection. `timeout` bounds connecting and the TLS handshake.
+/// A byte stream under HTTP/2: a socket, or a tunnel and TLS over one.
+trait Io: AsyncRead + AsyncWrite + Unpin + Send {}
+
+impl<T: AsyncRead + AsyncWrite + Unpin + Send> Io for T {}
+
+/// Opens a connection the way `transport` says: through its proxy,
+/// trusting its certificate authorities, and presenting its client
+/// certificate. `timeout` bounds connecting and each handshake.
 pub(crate) async fn connect(
     target: &Target,
-    verify_tls: bool,
+    transport: &Transport,
     timeout: Duration,
 ) -> Result<Connection> {
     let authority = target.authority();
-    let failed =
-        |reason: String| Error::Http(format!("Could not connect to {authority}: {reason}"));
-    let tcp = tokio::time::timeout(
-        timeout,
-        tokio::net::TcpStream::connect((target.host.as_str(), target.port)),
-    )
-    .await
-    .map_err(|_| failed(format!("no answer within {} s", timeout.as_secs())))?
-    .map_err(|e| failed(e.to_string()))?;
+    let proxy = proxy::route(target, &transport.proxy)?;
+    let failed = |reason: String| match &proxy {
+        Some(proxy) => Error::Http(format!(
+            "Could not connect to {authority} through the proxy {}: {reason}",
+            proxy.authority()
+        )),
+        None => Error::Http(format!("Could not connect to {authority}: {reason}")),
+    };
+    let (host, port) = match &proxy {
+        Some(proxy) => (proxy.host.as_str(), proxy.port),
+        None => (target.host.as_str(), target.port),
+    };
+    let tcp = tokio::time::timeout(timeout, tokio::net::TcpStream::connect((host, port)))
+        .await
+        .map_err(|_| failed(format!("no answer within {} s", timeout.as_secs())))?
+        .map_err(|e| failed(e.to_string()))?;
     let _ = tcp.set_nodelay(true);
+    let mut stream: Box<dyn Io> = Box::new(tcp);
 
-    let sender = if target.tls {
-        let config = tls_config(verify_tls).map_err(|e| failed(e.to_string()))?;
-        let name = ServerName::try_from(target.host.clone())
-            .map_err(|e| failed(format!("{} is not a valid server name: {e}", target.host)))?;
-        let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
-        let stream = tokio::time::timeout(timeout, connector.connect(name, tcp))
+    if let Some(proxy) = &proxy {
+        if proxy.kind == proxy::Kind::Https {
+            // TLS to the proxy itself; the client certificate is for the
+            // server behind it.
+            let config =
+                tls_config(transport, false, Vec::new()).map_err(|e| failed(e.to_string()))?;
+            stream = secure(stream, &proxy.host, config, timeout)
+                .await
+                .map_err(failed)?;
+        }
+        tokio::time::timeout(timeout, proxy::tunnel(&mut stream, proxy, target))
             .await
             .map_err(|_| {
                 failed(format!(
-                    "the TLS handshake took longer than {} s",
+                    "the proxy did not set up the tunnel within {} s",
                     timeout.as_secs()
                 ))
             })?
-            .map_err(|e| failed(format!("TLS failed: {e}")))?;
-        handshake(stream).await.map_err(failed)?
-    } else {
-        handshake(tcp).await.map_err(failed)?
+            .map_err(failed)?;
+    }
+
+    if target.tls {
+        let config =
+            tls_config(transport, true, vec![b"h2".to_vec()]).map_err(|e| failed(e.to_string()))?;
+        stream = secure(stream, &target.host, config, timeout)
+            .await
+            .map_err(failed)?;
+    }
+    let closed_hint = match (target.tls, &transport.client_identity) {
+        (false, _) => None,
+        (true, None) => {
+            Some("if the server asks for a client certificate, set one in the request's settings")
+        }
+        (true, Some(_)) => Some("the server may have refused the client certificate"),
     };
+    let sender = handshake(stream).await.map_err(|reason| {
+        failed(match closed_hint {
+            Some(hint) => format!("{reason}; {hint}"),
+            None => reason,
+        })
+    })?;
     Ok(Connection {
         sender,
         target: target.clone(),
+        closed_hint,
     })
+}
+
+/// Runs the TLS handshake with `host` over `stream`.
+async fn secure(
+    stream: Box<dyn Io>,
+    host: &str,
+    config: rustls::ClientConfig,
+    timeout: Duration,
+) -> Result<Box<dyn Io>, String> {
+    let name = ServerName::try_from(host.to_owned())
+        .map_err(|e| format!("{host} is not a valid server name: {e}"))?;
+    let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
+    let stream = tokio::time::timeout(timeout, connector.connect(name, stream))
+        .await
+        .map_err(|_| format!("the TLS handshake took longer than {} s", timeout.as_secs()))?
+        .map_err(|e| format!("TLS failed: {e}"))?;
+    Ok(Box::new(stream))
 }
 
 async fn handshake<T>(io: T) -> Result<SendRequest<Outbound>, String>
@@ -171,19 +256,43 @@ where
     Ok(sender)
 }
 
-fn tls_config(verify: bool) -> Result<rustls::ClientConfig, rustls::Error> {
+/// The TLS settings of `transport`: the certificates it trusts besides the
+/// system's, or none when checking is off, and with `identity` its client
+/// certificate.
+fn tls_config(
+    transport: &Transport,
+    identity: bool,
+    alpn: Vec<Vec<u8>>,
+) -> Result<rustls::ClientConfig, Error> {
+    let tls = |e: rustls::Error| Error::Http(format!("Could not set up TLS: {e}"));
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let builder = rustls::ClientConfig::builder_with_provider(Arc::clone(&provider))
-        .with_safe_default_protocol_versions()?;
-    let mut config = if verify {
-        builder.with_platform_verifier()?.with_no_client_auth()
-    } else {
+        .with_safe_default_protocol_versions()
+        .map_err(tls)?;
+    let builder = if !transport.verify_tls {
         builder
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(AnyCertificate(provider)))
-            .with_no_client_auth()
+    } else if transport.ca_certs.is_empty() {
+        builder
+            .with_platform_verifier()
+            .map_err(|e| Error::Http(format!("Could not load the system's certificates: {e}")))?
+    } else {
+        let roots = crate::tls::ca_roots(&transport.ca_certs)?;
+        let verifier = rustls_platform_verifier::Verifier::new_with_extra_roots(roots, provider)
+            .map_err(|e| Error::Http(format!("Could not load the system's certificates: {e}")))?;
+        builder
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(verifier))
     };
-    config.alpn_protocols = vec![b"h2".to_vec()];
+    let mut config = match (&transport.client_identity, identity) {
+        (Some(client), true) => {
+            let (chain, key) = client.rustls_parts()?;
+            builder.with_client_auth_cert(chain, key).map_err(tls)?
+        }
+        _ => builder.with_no_client_auth(),
+    };
+    config.alpn_protocols = alpn;
     Ok(config)
 }
 
@@ -257,7 +366,7 @@ impl Connection {
         let (sender, receiver) = mpsc::unbounded_channel();
         let mut request = http::Request::builder()
             .method(Method::POST)
-            .uri(self.target.url(path))
+            .uri(self.target.http_url(path))
             .body(Outbound { receiver })
             .map_err(|e| Error::Invalid(format!("{path:?} is not a valid method path: {e}")))?;
         let headers = request.headers_mut();
@@ -288,6 +397,7 @@ impl Connection {
         }
         let response = self.sender.send_request(request);
         Ok(Call {
+            closed_hint: self.closed_hint,
             outbound: Some(sender),
             stage: Stage::Waiting(Box::pin(response)),
             head: None,
@@ -352,6 +462,7 @@ pub(crate) struct Head {
 
 /// A call in progress.
 pub(crate) struct Call {
+    closed_hint: Option<&'static str>,
     outbound: Option<mpsc::UnboundedSender<Bytes>>,
     stage: Stage,
     head: Option<Head>,
@@ -368,6 +479,16 @@ impl std::fmt::Debug for Call {
     }
 }
 
+/// A message as it goes on the wire: not compressed, and led by its
+/// length.
+pub(crate) fn frame(message: &[u8]) -> Bytes {
+    let mut frame = BytesMut::with_capacity(message.len() + 5);
+    frame.put_u8(0);
+    frame.put_u32(u32::try_from(message.len()).expect("checked size"));
+    frame.extend_from_slice(message);
+    frame.freeze()
+}
+
 impl Call {
     /// Sends one encoded message.
     pub(crate) fn send(&self, message: &[u8]) -> Result<()> {
@@ -382,12 +503,8 @@ impl Call {
                 message.len()
             )));
         }
-        let mut frame = BytesMut::with_capacity(message.len() + 5);
-        frame.put_u8(0);
-        frame.put_u32(u32::try_from(message.len()).expect("checked size"));
-        frame.extend_from_slice(message);
         outbound
-            .send(frame.freeze())
+            .send(frame(message))
             .map_err(|_| Error::Http("the server closed the stream".into()))
     }
 
@@ -409,7 +526,15 @@ impl Call {
     /// Waits for the response headers. Safe to cancel and call again.
     pub(crate) async fn wait_head(&mut self) -> Result<&Head> {
         if let Stage::Waiting(response) = &mut self.stage {
-            let response = response.await.map_err(|e| Error::Http(describe(&e)))?;
+            let response = response.await.map_err(|e| {
+                let hint = self
+                    .closed_hint
+                    .filter(|_| e.is_canceled() || e.is_closed());
+                Error::Http(match hint {
+                    Some(hint) => format!("{}; {hint}", describe(&e)),
+                    None => describe(&e),
+                })
+            })?;
             let (parts, body) = response.into_parts();
             self.head = Some(Head {
                 status: parts.status,

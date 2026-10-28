@@ -2,12 +2,15 @@
 
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD as BASE64, STANDARD_NO_PAD};
+use std::path::Path;
 
-use super::transport::decode_binary;
+use super::transport::{Target, decode_binary, frame};
 use crate::auth::Authenticator;
 use crate::error::{Error, Result};
-use crate::http::{Header, HttpClient, Transport, set_header};
-use crate::model::{Auth, KeyValue};
+use crate::http::{
+    Header, HttpClient, Outgoing, OutgoingBody, Payload, Transport, find_header, set_header,
+};
+use crate::model::{ApiKeyLocation, Auth, KeyValue, OAuth1Location};
 use crate::vars::VarStack;
 
 /// Names gRPC sets itself. Headers with these names, such as a folder's
@@ -26,10 +29,12 @@ const RESERVED: &[&str] = &[
     "grpc-accept-encoding",
 ];
 
-/// Renders the effective headers and adds the credentials. Names are
-/// lowercased; values of names ending in `-bin` must be Base64 and are
-/// sent unpadded; other values must be printable ASCII. OAuth 2.0 tokens
-/// are fetched with `credentials`, and left out without them.
+/// Renders the effective headers and adds the credentials that do not
+/// depend on the call. Names are lowercased; values of names ending in
+/// `-bin` must be Base64 and are sent unpadded; other values must be
+/// printable ASCII. OAuth 2.0 tokens are fetched with `credentials`, and
+/// left out without them. Tokens and signatures made from the call itself
+/// are added by [`Signing::apply`].
 pub(crate) async fn build(
     headers: &[KeyValue],
     auth: &Auth,
@@ -99,19 +104,163 @@ pub(crate) async fn build(
                 "Digest authentication does not work with gRPC; use Basic, Bearer, an API key or OAuth 2.0".into(),
             ));
         }
+        // Signed credentials come from `Signing`, once the call is known.
         Auth::AwsSigV4(_)
         | Auth::Jwt(_)
         | Auth::Asap(_)
         | Auth::Oauth1(_)
         | Auth::Hawk(_)
-        | Auth::Edgegrid(_) => {
-            return Err(Error::Invalid(
-                "This authentication is not sent with gRPC calls yet; use Basic, Bearer, an API key or OAuth 2.0".into(),
-            ));
-        }
-        Auth::Inherit | Auth::None => {}
+        | Auth::Edgegrid(_)
+        | Auth::Inherit
+        | Auth::None => {}
     }
     Ok(metadata)
+}
+
+/// What a request signature covers of a call's body.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Body<'a> {
+    /// The call's one message, protobuf-encoded: unary and server-streaming
+    /// calls, whose whole body is known up front.
+    Message(&'a [u8]),
+    /// Messages not known up front: client and bidirectional streams, and
+    /// server reflection.
+    Stream,
+}
+
+/// What it takes to sign a call with the authentication that is computed
+/// from the request: AWS Signature, JWT, ASAP, OAuth 1.0, Hawk and
+/// EdgeGrid.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Signing<'a> {
+    /// The effective authentication.
+    pub(crate) auth: &'a Auth,
+    /// Variables for the authentication's settings.
+    pub(crate) vars: &'a VarStack,
+    /// The workspace root, where key files are looked up.
+    pub(crate) root: &'a Path,
+    /// The server.
+    pub(crate) target: &'a Target,
+}
+
+impl Signing<'_> {
+    /// `base` with the token or signature for a call to `path`, such as
+    /// `/shop.Orders/GetOrder`, added.
+    ///
+    /// The call is signed as the HTTP/2 request it is: a `POST` to
+    /// `https://host/shop.Orders/GetOrder` (`http` without TLS) with the
+    /// metadata as headers and the length-prefixed message as the body.
+    /// JWT and ASAP tokens do not depend on either. When the body is a
+    /// [`Body::Stream`], the signature leaves it out: AWS Signature signs
+    /// `UNSIGNED-PAYLOAD`, OAuth 1.0 sends no body hash, and Hawk no
+    /// payload hash. EdgeGrid, which signs the body of a `POST`, cannot.
+    /// Variables the settings use but lack are added to `missing`.
+    pub(crate) fn apply(
+        &self,
+        base: &[Header],
+        path: &str,
+        body: Body<'_>,
+        missing: &mut Vec<String>,
+    ) -> Result<Vec<Header>> {
+        let Some(auth) = self.prepared(body)? else {
+            return Ok(base.to_vec());
+        };
+        let url = self.target.http_url(path);
+        let mut headers = vec![Header::new("content-type", "application/grpc")];
+        for header in base {
+            set_header(&mut headers, &header.name, &header.value);
+        }
+        let before = headers.clone();
+        let mut outgoing = Outgoing {
+            method: "POST".into(),
+            url: url.clone(),
+            headers,
+            body: match body {
+                Body::Message(message) => OutgoingBody::Bytes {
+                    data: Payload(frame(message).to_vec()),
+                },
+                Body::Stream => OutgoingBody::None,
+            },
+        };
+        let mut render = |text: &str| {
+            let out = self.vars.interpolate(text);
+            for name in out.missing {
+                if !missing.contains(&name) {
+                    missing.push(name);
+                }
+            }
+            out.text
+        };
+        crate::auth::sign(&auth, &mut render, &mut outgoing, self.root)?;
+
+        // What signing added or changed is what the call sends.
+        let mut metadata = base.to_vec();
+        for header in &outgoing.headers {
+            if find_header(&before, &header.name) != Some(header.value.as_str()) {
+                add(
+                    &mut metadata,
+                    &header.name.to_ascii_lowercase(),
+                    &header.value,
+                )?;
+            }
+        }
+        // A JWT may be set to go in the query string; as metadata, that is
+        // an entry of the parameter's name.
+        if outgoing.url != url
+            && let Ok(signed) = url::Url::parse(&outgoing.url)
+        {
+            for (name, value) in signed.query_pairs() {
+                add(&mut metadata, &name.to_ascii_lowercase(), &value)?;
+            }
+        }
+        Ok(metadata)
+    }
+
+    /// The authentication as it signs a call with this `body`, or `None`
+    /// if it is not one that signs.
+    fn prepared(&self, body: Body<'_>) -> Result<Option<Auth>> {
+        let stream = matches!(body, Body::Stream);
+        Ok(Some(match self.auth {
+            Auth::AwsSigV4(settings) => {
+                if settings.location != ApiKeyLocation::Header {
+                    return Err(Error::Invalid(
+                        "AWS Signature can sign a gRPC call only in the header; a presigned query string has no place in one".into(),
+                    ));
+                }
+                let mut settings = settings.clone();
+                settings.unsigned_payload |= stream;
+                Auth::AwsSigV4(settings)
+            }
+            Auth::Jwt(_) | Auth::Asap(_) => self.auth.clone(),
+            Auth::Oauth1(settings) => {
+                if settings.location != OAuth1Location::Header {
+                    return Err(Error::Invalid(
+                        "OAuth 1.0 can sign a gRPC call only in the header; a query string or a form body has no place in one".into(),
+                    ));
+                }
+                let mut settings = settings.clone();
+                settings.body_hash &= !stream;
+                Auth::Oauth1(settings)
+            }
+            Auth::Hawk(settings) => {
+                let mut settings = settings.clone();
+                settings.payload_hash &= !stream;
+                Auth::Hawk(settings)
+            }
+            Auth::Edgegrid(settings) => {
+                if stream {
+                    return Err(Error::Invalid(
+                        "Akamai EdgeGrid signs the body of a POST, so it cannot sign a call that streams messages from the client or a schema read with reflection; use unary or server-streaming methods, and a .proto file".into(),
+                    ));
+                }
+                let mut settings = settings.clone();
+                // The call goes to its own address.
+                settings.base_url.clear();
+                Auth::Edgegrid(settings)
+            }
+            _ => return Ok(None),
+        }))
+    }
 }
 
 /// Adds one entry, replacing any with the same name.

@@ -12,7 +12,7 @@ use crate::model::{Auth, Grpc, KeyValue, Request, RequestKind, Scripts, Settings
 use crate::runner::{self, RunEvent, RunOptions};
 use crate::workspace::Workspace;
 
-fn setup() -> (tempfile::TempDir, Executor) {
+pub(super) fn setup() -> (tempfile::TempDir, Executor) {
     let dir = tempfile::tempdir().unwrap();
     let workspace = Workspace::init(dir.path(), "gRPC").unwrap();
     let proto = dir.path().join(PROTO_PATH);
@@ -21,7 +21,7 @@ fn setup() -> (tempfile::TempDir, Executor) {
     (dir, Executor::new(workspace))
 }
 
-fn call(address: &str, method: &str, message: &str) -> Request {
+pub(super) fn call(address: &str, method: &str, message: &str) -> Request {
     Request {
         name: method.into(),
         kind: RequestKind::Grpc,
@@ -36,13 +36,13 @@ fn call(address: &str, method: &str, message: &str) -> Request {
     }
 }
 
-async fn run(executor: &Executor, request: &Request) -> Execution {
+pub(super) async fn run(executor: &Executor, request: &Request) -> Execution {
     executor
         .execute(None, request, &mut Context::default())
         .await
 }
 
-fn received(execution: &Execution) -> Vec<serde_json::Value> {
+pub(super) fn received(execution: &Execution) -> Vec<serde_json::Value> {
     execution
         .grpc
         .as_ref()
