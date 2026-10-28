@@ -1,6 +1,7 @@
 //! Writing requests out for other tools.
 
 pub mod codegen;
+pub mod openapi;
 pub mod postman;
 
 use serde::Serialize;
