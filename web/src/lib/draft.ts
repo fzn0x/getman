@@ -57,6 +57,7 @@ export function toRequest(draft: Draft): Request {
   const body = clone(draft.body);
   if (body.type === "form") body.fields = filled(body.fields);
   if (body.type === "multipart") body.fields = filled(body.fields);
+  if (body.type === "graphql" && !body.operation_name?.trim()) delete body.operation_name;
   const settings: Settings = {};
   for (const [key, value] of Object.entries(draft.settings)) {
     if (value !== null && value !== undefined && value !== "") {

@@ -19,6 +19,11 @@ pub struct Language {
     pub label: &'static str,
     /// Syntax for highlighting the snippet.
     pub syntax: &'static str,
+    /// Whether the snippet has an indent that [`Options::indent`] changes.
+    pub indent: bool,
+    /// Whether the snippet has imports or a `main` function that
+    /// [`Options::boilerplate`] leaves out.
+    pub boilerplate: bool,
 }
 
 /// Every language [`generate`] supports.
@@ -27,91 +32,127 @@ pub const LANGUAGES: &[Language] = &[
         id: "curl",
         label: "cURL",
         syntax: "shell",
+        indent: true,
+        boilerplate: false,
     },
     Language {
         id: "httpie",
         label: "HTTPie",
         syntax: "shell",
+        indent: false,
+        boilerplate: false,
     },
     Language {
         id: "wget",
         label: "Wget",
         syntax: "shell",
+        indent: true,
+        boilerplate: false,
     },
     Language {
         id: "powershell",
         label: "PowerShell",
         syntax: "powershell",
+        indent: true,
+        boilerplate: false,
     },
     Language {
         id: "http",
         label: "HTTP/1.1 (raw)",
         syntax: "http",
+        indent: false,
+        boilerplate: false,
     },
     Language {
         id: "fetch",
         label: "JavaScript (fetch)",
         syntax: "javascript",
+        indent: true,
+        boilerplate: true,
     },
     Language {
         id: "axios",
         label: "JavaScript (axios)",
         syntax: "javascript",
+        indent: true,
+        boilerplate: true,
     },
     Language {
         id: "node",
         label: "Node.js (node:https)",
         syntax: "javascript",
+        indent: true,
+        boilerplate: true,
     },
     Language {
         id: "python",
         label: "Python (requests)",
         syntax: "python",
+        indent: true,
+        boilerplate: true,
     },
     Language {
         id: "go",
         label: "Go (net/http)",
         syntax: "go",
+        indent: true,
+        boilerplate: true,
     },
     Language {
         id: "rust",
         label: "Rust (reqwest)",
         syntax: "rust",
+        indent: true,
+        boilerplate: true,
     },
     Language {
         id: "java",
         label: "Java (HttpClient)",
         syntax: "java",
+        indent: true,
+        boilerplate: true,
     },
     Language {
         id: "kotlin",
         label: "Kotlin (OkHttp)",
         syntax: "kotlin",
+        indent: true,
+        boilerplate: true,
     },
     Language {
         id: "csharp",
         label: "C# (HttpClient)",
         syntax: "csharp",
+        indent: false,
+        boilerplate: true,
     },
     Language {
         id: "swift",
         label: "Swift (URLSession)",
         syntax: "swift",
+        indent: false,
+        boilerplate: true,
     },
     Language {
         id: "php",
         label: "PHP (cURL)",
         syntax: "php",
+        indent: true,
+        boilerplate: false,
     },
     Language {
         id: "ruby",
         label: "Ruby (Net::HTTP)",
         syntax: "ruby",
+        indent: true,
+        boilerplate: true,
     },
     Language {
         id: "dart",
         label: "Dart (http)",
         syntax: "dart",
+        indent: true,
+        boilerplate: true,
     },
 ];
 
@@ -149,28 +190,165 @@ pub fn relativize(request: &mut Outgoing, root: &std::path::Path) {
     }
 }
 
+/// How a snippet is indented.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Indent {
+    /// Two spaces.
+    Two,
+    /// Four spaces.
+    Four,
+    /// One tab per level.
+    Tab,
+}
+
+impl Indent {
+    /// The text of one level.
+    fn unit(self) -> &'static str {
+        match self {
+            Indent::Two => "  ",
+            Indent::Four => "    ",
+            Indent::Tab => "\t",
+        }
+    }
+}
+
+impl std::str::FromStr for Indent {
+    type Err = String;
+
+    fn from_str(text: &str) -> std::result::Result<Self, String> {
+        match text.trim().to_ascii_lowercase().as_str() {
+            "2" => Ok(Indent::Two),
+            "4" => Ok(Indent::Four),
+            "tab" | "tabs" => Ok(Indent::Tab),
+            other => Err(format!("{other:?} is not an indent; use 2, 4 or tab")),
+        }
+    }
+}
+
+/// How to write a snippet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Options {
+    /// The indent to use. `None` keeps each language's own habit: tabs
+    /// for Go, two spaces for JavaScript, Ruby and Dart, four elsewhere.
+    pub indent: Option<Indent>,
+    /// Whether to write the imports and the `main` function around the
+    /// request, in the languages that need them. Without them the
+    /// snippet is the statements that make the request.
+    pub boilerplate: bool,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Options {
+            indent: None,
+            boilerplate: true,
+        }
+    }
+}
+
 /// Writes a request as code. Returns `None` for an unknown language.
 pub fn generate(language: &str, request: &Outgoing) -> Option<String> {
-    Some(match language {
-        "curl" => curl(request),
-        "httpie" => httpie(request),
-        "wget" => wget(request),
-        "powershell" => powershell(request),
-        "http" => raw_http(request),
-        "fetch" => fetch(request),
-        "axios" => axios(request),
-        "node" => node(request),
-        "python" => python(request),
-        "go" => go(request),
-        "rust" => rust(request),
-        "java" => java(request),
-        "kotlin" => kotlin(request),
-        "csharp" => csharp(request),
-        "swift" => swift(request),
-        "php" => php(request),
-        "ruby" => ruby(request),
-        "dart" => dart(request),
+    generate_with(language, request, &Options::default())
+}
+
+/// Writes a request as code with the given options. Returns `None` for
+/// an unknown language.
+pub fn generate_with(language: &str, request: &Outgoing, options: &Options) -> Option<String> {
+    let full = options.boilerplate;
+    // What a level of indent is in the text each writer produces, and
+    // where its string literals can hold a real line break.
+    let (code, native, literals) = match language {
+        "curl" => (curl(request), "  ", Literals::SingleQuotes),
+        "httpie" => (httpie(request), "", Literals::SingleQuotes),
+        "wget" => (wget(request), "  ", Literals::SingleQuotes),
+        "powershell" => (powershell(request), "    ", Literals::SingleQuotes),
+        "http" => (raw_http(request), "", Literals::None),
+        "fetch" => (fetch(request, full), "  ", Literals::None),
+        "axios" => (axios(request, full), "  ", Literals::None),
+        "node" => (node(request, full), "  ", Literals::None),
+        "python" => (python(request, full), "    ", Literals::None),
+        "go" => (go(request, full), "\t", Literals::Go),
+        "rust" => (rust(request, full), "    ", Literals::None),
+        "java" => (java(request, full), "    ", Literals::None),
+        "kotlin" => (kotlin(request, full), "    ", Literals::None),
+        "csharp" => (csharp(request, full), "", Literals::None),
+        "swift" => (swift(request, full), "", Literals::None),
+        "php" => (php(request), "    ", Literals::Escaped),
+        "ruby" => (ruby(request, full), "  ", Literals::Escaped),
+        "dart" => (dart(request, full), "  ", Literals::None),
         _ => return None,
+    };
+    Some(match options.indent {
+        Some(indent) if !native.is_empty() && indent.unit() != native => {
+            map_lines(&code, literals, |line| {
+                let mut rest = line;
+                let mut levels = 0;
+                while let Some(after) = rest.strip_prefix(native) {
+                    rest = after;
+                    levels += 1;
+                }
+                format!("{}{rest}", indent.unit().repeat(levels))
+            })
+        }
+        _ => code,
+    })
+}
+
+/// Where a language's string literals can hold a real line break, so
+/// that the lines inside one are left as they are.
+#[derive(Clone, Copy)]
+enum Literals {
+    None,
+    /// Single quotes without escapes: the shell and PowerShell.
+    SingleQuotes,
+    /// Single and double quotes with backslash escapes: PHP and Ruby.
+    Escaped,
+    /// Double quotes with backslash escapes, and raw backquotes.
+    Go,
+}
+
+/// Rewrites each line of `code` with `change`, except the lines that
+/// continue a string literal.
+fn map_lines(code: &str, literals: Literals, mut change: impl FnMut(&str) -> String) -> String {
+    // The quotes, whether a backslash escapes inside them, and whether
+    // it does outside them (the shell writes a quote as `'\''`).
+    let (quotes, escapes, escapes_outside): (&[char], bool, bool) = match literals {
+        Literals::None => (&[], false, false),
+        Literals::SingleQuotes => (&['\''], false, true),
+        Literals::Escaped => (&['\'', '"'], true, false),
+        Literals::Go => (&['"', '`'], true, false),
+    };
+    let mut open: Option<char> = None;
+    let mut lines = Vec::new();
+    for line in code.split('\n') {
+        lines.push(if open.is_none() {
+            change(line)
+        } else {
+            line.to_owned()
+        });
+        let mut chars = line.chars();
+        while let Some(c) = chars.next() {
+            match open {
+                None if escapes_outside && c == '\\' => {
+                    chars.next();
+                }
+                None if quotes.contains(&c) => open = Some(c),
+                Some(quote) if escapes && c == '\\' && quote != '`' => {
+                    chars.next();
+                }
+                Some(quote) if c == quote => open = None,
+                _ => {}
+            }
+        }
+    }
+    lines.join("\n")
+}
+
+/// Takes one level of indent off every line, for code that was written
+/// inside a function and is now the whole snippet.
+fn dedent(code: &str, unit: &str, literals: Literals) -> String {
+    map_lines(code, literals, |line| {
+        line.strip_prefix(unit).unwrap_or(line).to_owned()
     })
 }
 
@@ -588,7 +766,7 @@ fn js(text: &str) -> String {
     serde_json::to_string(text).unwrap_or_default()
 }
 
-fn fetch(request: &Outgoing) -> String {
+fn fetch(request: &Outgoing, full: bool) -> String {
     let mut out = String::new();
     let mut options = vec![format!("  method: {}", js(&request.method))];
     let headers = merged_headers(request);
@@ -617,8 +795,10 @@ fn fetch(request: &Outgoing) -> String {
             }
         }
         OutgoingBody::File { path } => {
-            out.push_str("// In Node.js; in a browser, use a File from an <input>.\n");
-            out.push_str("import { readFile } from \"node:fs/promises\";\n\n");
+            if full {
+                out.push_str("// In Node.js; in a browser, use a File from an <input>.\n");
+                out.push_str("import { readFile } from \"node:fs/promises\";\n\n");
+            }
             options.push(format!("  body: await readFile({})", js(&path_text(path))));
         }
         OutgoingBody::Multipart { parts } => {
@@ -653,8 +833,11 @@ fn fetch(request: &Outgoing) -> String {
     out
 }
 
-fn python(request: &Outgoing) -> String {
-    let mut out = String::from("import requests\n\n");
+fn python(request: &Outgoing, full: bool) -> String {
+    let mut out = String::new();
+    if full {
+        out.push_str("import requests\n\n");
+    }
     let headers = merged_headers(request);
     let mut args = vec![js(&request.method), "url".to_owned()];
     let _ = writeln!(out, "url = {}", js(&request.url));
@@ -748,7 +931,7 @@ fn go_string(text: &str) -> String {
     out
 }
 
-fn go(request: &Outgoing) -> String {
+fn go(request: &Outgoing, full: bool) -> String {
     let mut imports = vec!["\"fmt\"", "\"io\"", "\"net/http\""];
     let mut setup = String::new();
     let body_var = match &request.body {
@@ -801,10 +984,7 @@ fn go(request: &Outgoing) -> String {
     };
     imports.sort_unstable();
     imports.dedup();
-    let mut out = format!(
-        "package main\n\nimport (\n\t{}\n)\n\nfunc main() {{\n",
-        imports.join("\n\t")
-    );
+    let mut out = String::new();
     out.push_str(&setup);
     let _ = writeln!(
         out,
@@ -829,9 +1009,15 @@ fn go(request: &Outgoing) -> String {
         out.push_str("\treq.Header.Set(\"Content-Type\", writer.FormDataContentType())\n");
     }
     out.push_str(
-        "\n\tres, err := http.DefaultClient.Do(req)\n\tif err != nil {\n\t\tpanic(err)\n\t}\n\tdefer res.Body.Close()\n\n\tdata, _ := io.ReadAll(res.Body)\n\tfmt.Println(res.Status)\n\tfmt.Println(string(data))\n}",
+        "\n\tres, err := http.DefaultClient.Do(req)\n\tif err != nil {\n\t\tpanic(err)\n\t}\n\tdefer res.Body.Close()\n\n\tdata, _ := io.ReadAll(res.Body)\n\tfmt.Println(res.Status)\n\tfmt.Println(string(data))",
     );
-    out
+    if !full {
+        return dedent(&out, "\t", Literals::Go);
+    }
+    format!(
+        "package main\n\nimport (\n\t{}\n)\n\nfunc main() {{\n{out}\n}}",
+        imports.join("\n\t")
+    )
 }
 
 /// A Rust string literal: Rust's own escaping, as `Debug` writes it.
@@ -839,11 +1025,8 @@ fn rust_string(text: &str) -> String {
     format!("{text:?}")
 }
 
-fn rust(request: &Outgoing) -> String {
+fn rust(request: &Outgoing, full: bool) -> String {
     let multipart = matches!(request.body, OutgoingBody::Multipart { .. });
-    let mut out = String::from(
-        "// Cargo.toml: reqwest = { version = \"0.13\", features = [\"multipart\"] }, tokio = { version = \"1\", features = [\"full\"] }\n\n#[tokio::main]\nasync fn main() -> Result<(), Box<dyn std::error::Error>> {\n",
-    );
     let mut setup = String::new();
     let method = match request.method.as_str() {
         m @ ("GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS") => {
@@ -910,12 +1093,17 @@ fn rust(request: &Outgoing) -> String {
             chain.push_str("\n        .multipart(form)");
         }
     }
-    out.push_str(&setup);
+    let mut out = setup;
     out.push_str(&chain);
     out.push_str(
-        "\n        .send()\n        .await?;\n\n    println!(\"{}\", response.status());\n    println!(\"{}\", response.text().await?);\n    Ok(())\n}",
+        "\n        .send()\n        .await?;\n\n    println!(\"{}\", response.status());\n    println!(\"{}\", response.text().await?);",
     );
-    out
+    if !full {
+        return dedent(&out, "    ", Literals::None);
+    }
+    format!(
+        "// Cargo.toml: reqwest = {{ version = \"0.13\", features = [\"multipart\"] }}, tokio = {{ version = \"1\", features = [\"full\"] }}\n\n#[tokio::main]\nasync fn main() -> Result<(), Box<dyn std::error::Error>> {{\n{out}\n    Ok(())\n}}"
+    )
 }
 
 /// A Java string literal. Line terminators must not be written as
@@ -944,8 +1132,8 @@ fn java_string(text: &str) -> String {
     out
 }
 
-fn java(request: &Outgoing) -> String {
-    let mut out = String::from(
+fn java(request: &Outgoing, full: bool) -> String {
+    let mut imports = String::from(
         "import java.net.URI;\nimport java.net.http.HttpClient;\nimport java.net.http.HttpRequest;\nimport java.net.http.HttpResponse;\n",
     );
     let publisher = match &request.body {
@@ -955,7 +1143,7 @@ fn java(request: &Outgoing) -> String {
             java_string(&body_text(&request.body).unwrap_or_default())
         ),
         OutgoingBody::File { path } => {
-            out.push_str("import java.nio.file.Path;\n");
+            imports.push_str("import java.nio.file.Path;\n");
             format!(
                 "HttpRequest.BodyPublishers.ofFile(Path.of({}))",
                 java_string(&path_text(path))
@@ -963,12 +1151,12 @@ fn java(request: &Outgoing) -> String {
         }
         // Java's client has no multipart helper: write the form by hand.
         OutgoingBody::Multipart { parts } => {
-            out.push_str("import java.nio.charset.StandardCharsets;\n");
+            imports.push_str("import java.nio.charset.StandardCharsets;\n");
             let chunks = multipart_chunks(parts);
             if chunks.iter().any(|c| matches!(c, Chunk::File(_))) {
-                out.push_str("import java.nio.file.Files;\nimport java.nio.file.Path;\n");
+                imports.push_str("import java.nio.file.Files;\nimport java.nio.file.Path;\n");
             }
-            out.push_str("import java.util.List;\n");
+            imports.push_str("import java.util.List;\n");
             let items: Vec<String> = chunks
                 .iter()
                 .map(|chunk| match chunk {
@@ -986,9 +1174,7 @@ fn java(request: &Outgoing) -> String {
             )
         }
     };
-    out.push_str(
-        "\npublic class Main {\n    public static void main(String[] args) throws Exception {\n",
-    );
+    let mut out = String::new();
     let _ = write!(
         out,
         "        HttpRequest request = HttpRequest.newBuilder()\n            .uri(URI.create({}))\n            .method({}, {publisher})",
@@ -1010,9 +1196,18 @@ fn java(request: &Outgoing) -> String {
         );
     }
     out.push_str(
-        "\n            .build();\n\n        HttpResponse<String> response = HttpClient.newHttpClient()\n            .send(request, HttpResponse.BodyHandlers.ofString());\n\n        System.out.println(response.statusCode());\n        System.out.println(response.body());\n    }\n}",
+        "\n            .build();\n\n        HttpResponse<String> response = HttpClient.newHttpClient()\n            .send(request, HttpResponse.BodyHandlers.ofString());\n\n        System.out.println(response.statusCode());\n        System.out.println(response.body());",
     );
-    out
+    if !full {
+        return dedent(
+            &dedent(&out, "    ", Literals::None),
+            "    ",
+            Literals::None,
+        );
+    }
+    format!(
+        "{imports}\npublic class Main {{\n    public static void main(String[] args) throws Exception {{\n{out}\n    }}\n}}"
+    )
 }
 
 /// Headers as the lines of a JavaScript object literal.
@@ -1049,7 +1244,7 @@ fn node_form(parts: &[Part]) -> String {
     out
 }
 
-fn axios(request: &Outgoing) -> String {
+fn axios(request: &Outgoing, full: bool) -> String {
     let mut imports = vec!["import axios from \"axios\";".to_owned()];
     let mut setup = String::new();
     let mut options = format!(
@@ -1095,13 +1290,17 @@ fn axios(request: &Outgoing) -> String {
     }
     // Answer with the response whatever its status, as the other snippets do.
     options.push_str("  validateStatus: () => true,\n");
-    format!(
-        "{}\n\n{setup}const response = await axios.request({{\n{options}}});\n\nconsole.log(response.status);\nconsole.log(response.data);",
-        imports.join("\n")
-    )
+    let code = format!(
+        "{setup}const response = await axios.request({{\n{options}}});\n\nconsole.log(response.status);\nconsole.log(response.data);"
+    );
+    if full {
+        format!("{}\n\n{code}", imports.join("\n"))
+    } else {
+        code
+    }
 }
 
-fn node(request: &Outgoing) -> String {
+fn node(request: &Outgoing, full: bool) -> String {
     let module = if request.url.starts_with("http://") {
         "http"
     } else {
@@ -1151,7 +1350,11 @@ fn node(request: &Outgoing) -> String {
         out.push_str("request.write(body);\n");
     }
     out.push_str("request.end();");
-    format!("{}\n\n{out}", imports.join("\n"))
+    if full {
+        format!("{}\n\n{out}", imports.join("\n"))
+    } else {
+        out
+    }
 }
 
 /// Writes `\uXXXX` for the characters a C-like string literal cannot hold
@@ -1185,7 +1388,7 @@ fn kotlin_string(text: &str) -> String {
     out
 }
 
-fn kotlin(request: &Outgoing) -> String {
+fn kotlin(request: &Outgoing, full: bool) -> String {
     let mut imports = vec![
         "okhttp3.MediaType.Companion.toMediaTypeOrNull",
         "okhttp3.OkHttpClient",
@@ -1269,10 +1472,11 @@ fn kotlin(request: &Outgoing) -> String {
     };
     imports.sort_unstable();
     imports.dedup();
-    let mut out: String = imports.iter().map(|i| format!("import {i}\n")).collect();
+    let imports: String = imports.iter().map(|i| format!("import {i}\n")).collect();
+    let mut out = String::new();
     let _ = write!(
         out,
-        "\nfun main() {{\n    val client = OkHttpClient()\n{note}    val body = {body}\n    val request = Request.Builder()\n        .url({})\n        .method({}, body)",
+        "    val client = OkHttpClient()\n{note}    val body = {body}\n    val request = Request.Builder()\n        .url({})\n        .method({}, body)",
         kotlin_string(&request.url),
         kotlin_string(&request.method)
     );
@@ -1289,9 +1493,12 @@ fn kotlin(request: &Outgoing) -> String {
         );
     }
     out.push_str(
-        "\n        .build()\n\n    client.newCall(request).execute().use { response ->\n        println(response.code)\n        println(response.body?.string())\n    }\n}",
+        "\n        .build()\n\n    client.newCall(request).execute().use { response ->\n        println(response.code)\n        println(response.body?.string())\n    }",
     );
-    out
+    if !full {
+        return dedent(&out, "    ", Literals::None);
+    }
+    format!("{imports}\nfun main() {{\n{out}\n}}")
 }
 
 /// A C# string literal. C# also ends a line at U+0085, U+2028 and U+2029,
@@ -1308,8 +1515,12 @@ fn csharp_string(text: &str) -> String {
     out
 }
 
-fn csharp(request: &Outgoing) -> String {
-    let mut out = String::from("using System.Text;\n\nusing var client = new HttpClient();\n");
+fn csharp(request: &Outgoing, full: bool) -> String {
+    let mut out = String::new();
+    if full {
+        out.push_str("using System.Text;\n\n");
+    }
+    out.push_str("using var client = new HttpClient();\n");
     let _ = writeln!(
         out,
         "using var request = new HttpRequestMessage(new HttpMethod({}), {});",
@@ -1402,10 +1613,13 @@ fn swift_string(text: &str) -> String {
     out
 }
 
-fn swift(request: &Outgoing) -> String {
-    let mut out = String::from(
-        "import Foundation\n#if canImport(FoundationNetworking)\nimport FoundationNetworking\n#endif\n\n",
-    );
+fn swift(request: &Outgoing, full: bool) -> String {
+    let mut out = String::new();
+    if full {
+        out.push_str(
+            "import Foundation\n#if canImport(FoundationNetworking)\nimport FoundationNetworking\n#endif\n\n",
+        );
+    }
     let _ = writeln!(
         out,
         "var request = URLRequest(url: URL(string: {})!)\nrequest.httpMethod = {}",
@@ -1545,7 +1759,7 @@ fn ruby_string(text: &str) -> String {
     format!("'{}'", text.replace('\\', "\\\\").replace('\'', "\\'"))
 }
 
-fn ruby(request: &Outgoing) -> String {
+fn ruby(request: &Outgoing, full: bool) -> String {
     let class = match request.method.as_str() {
         "GET" => Some("Get"),
         "POST" => Some("Post"),
@@ -1557,10 +1771,11 @@ fn ruby(request: &Outgoing) -> String {
         "TRACE" => Some("Trace"),
         _ => None,
     };
-    let mut out = format!(
-        "require \"net/http\"\nrequire \"uri\"\n\nuri = URI({})\n",
-        ruby_string(&request.url)
-    );
+    let mut out = String::new();
+    if full {
+        out.push_str("require \"net/http\"\nrequire \"uri\"\n\n");
+    }
+    let _ = writeln!(out, "uri = URI({})", ruby_string(&request.url));
     match class {
         Some(class) => {
             let _ = writeln!(out, "request = Net::HTTP::{class}.new(uri)");
@@ -1658,7 +1873,7 @@ fn dart_string(text: &str) -> String {
     out
 }
 
-fn dart(request: &Outgoing) -> String {
+fn dart(request: &Outgoing, full: bool) -> String {
     let mut imports = vec!["dart:convert", "package:http/http.dart"];
     let mut setup = String::new();
     let headers = merged_headers(request);
@@ -1747,9 +1962,13 @@ fn dart(request: &Outgoing) -> String {
             }
         })
         .collect();
-    format!(
-        "{imports}\nFuture<void> main() async {{\n{setup}\n  final response = await http.Response.fromStream(await request.send());\n  print(response.statusCode);\n  print(utf8.decode(response.bodyBytes));\n}}"
-    )
+    let code = format!(
+        "{setup}\n  final response = await http.Response.fromStream(await request.send());\n  print(response.statusCode);\n  print(utf8.decode(response.bodyBytes));"
+    );
+    if !full {
+        return dedent(&code, "  ", Literals::None);
+    }
+    format!("{imports}\nFuture<void> main() async {{\n{code}\n}}")
 }
 
 #[cfg(test)]
@@ -2188,5 +2407,227 @@ mod tests {
             wget.starts_with("# Wget cannot send a multipart form"),
             "{wget}"
         );
+    }
+
+    /// A body whose second line starts with four spaces, which must reach
+    /// the server as it is whatever the indent of the code around it.
+    fn spaced_body() -> Outgoing {
+        Outgoing {
+            method: "POST".into(),
+            url: "https://api.example.com/notes".into(),
+            headers: vec![Header::new("Content-Type", "text/plain")],
+            body: OutgoingBody::Bytes {
+                data: Payload(b"{\n    \"a\": 1,\n\t\"b\": 2\n}".to_vec()),
+            },
+        }
+    }
+
+    fn with(indent: Option<Indent>, boilerplate: bool) -> Options {
+        Options {
+            indent,
+            boilerplate,
+        }
+    }
+
+    /// The leading whitespace of the lines that start with some.
+    fn indents(code: &str) -> Vec<&str> {
+        code.lines()
+            .filter(|l| l.starts_with([' ', '\t']))
+            .map(|l| &l[..l.len() - l.trim_start().len()])
+            .collect()
+    }
+
+    #[test]
+    fn indent_parses_two_four_and_tab() {
+        assert_eq!("2".parse(), Ok(Indent::Two));
+        assert_eq!("4".parse(), Ok(Indent::Four));
+        assert_eq!("Tab".parse(), Ok(Indent::Tab));
+        assert!("3".parse::<Indent>().is_err());
+    }
+
+    #[test]
+    fn default_options_change_nothing() {
+        for language in LANGUAGES {
+            for request in [post_json(), upload()] {
+                assert_eq!(
+                    generate_with(language.id, &request, &Options::default()),
+                    generate(language.id, &request),
+                    "{}",
+                    language.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn indent_applies_to_every_language_that_indents() {
+        let flat = |text: &str| {
+            text.lines()
+                .map(|l| l.trim_start().to_owned())
+                .collect::<Vec<_>>()
+        };
+        for language in LANGUAGES {
+            for request in [post_json(), upload()] {
+                let plain = generate(language.id, &request).unwrap();
+                for (indent, unit) in [
+                    (Indent::Two, "  "),
+                    (Indent::Four, "    "),
+                    (Indent::Tab, "\t"),
+                ] {
+                    let code =
+                        generate_with(language.id, &request, &with(Some(indent), true)).unwrap();
+                    // Every indented line uses only the chosen unit.
+                    for lead in indents(&code) {
+                        assert!(
+                            lead.replace(unit, "").is_empty(),
+                            "{} {indent:?}: {lead:?}\n{code}",
+                            language.id
+                        );
+                    }
+                    // Nothing but the indent changed.
+                    assert_eq!(flat(&code), flat(&plain), "{}", language.id);
+                }
+            }
+        }
+        // Languages with no indent have nothing to change.
+        for id in ["httpie", "http", "csharp", "swift"] {
+            assert_eq!(
+                generate_with(id, &post_json(), &with(Some(Indent::Tab), true)),
+                generate(id, &post_json()),
+                "{id}"
+            );
+        }
+    }
+
+    #[test]
+    fn indent_keeps_string_literals_exact() {
+        let request = spaced_body();
+        let body = "{\n    \"a\": 1,\n\t\"b\": 2\n}";
+        for language in ["curl", "wget", "powershell", "go", "php", "ruby"] {
+            for indent in [Indent::Two, Indent::Four, Indent::Tab] {
+                for full in [true, false] {
+                    let code =
+                        generate_with(language, &request, &with(Some(indent), full)).unwrap();
+                    assert!(code.contains(body), "{language} {indent:?} {full}:\n{code}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn indent_rewrites_levels() {
+        let write = |language: &str, indent| {
+            generate_with(language, &post_json(), &with(Some(indent), true)).unwrap()
+        };
+        let go = write("go", Indent::Four);
+        assert!(go.contains("\n    req, err := http.NewRequest("), "{go}");
+        assert!(go.contains("\n        panic(err)\n"), "{go}");
+        let python = write("python", Indent::Tab);
+        assert!(
+            python.contains("\n\t\"Content-Type\": \"application/json\","),
+            "{python}"
+        );
+        let java = write("java", Indent::Two);
+        assert!(java.contains("\n  public static void main("), "{java}");
+        assert!(java.contains("\n      .uri(URI.create("), "{java}");
+        let fetch = write("fetch", Indent::Tab);
+        assert!(fetch.contains("\n\tmethod: \"POST\","), "{fetch}");
+        assert!(fetch.contains("\n\t\t\"Content-Type\": "), "{fetch}");
+        let curl = write("curl", Indent::Four);
+        assert!(curl.contains(" \\\n    -H "), "{curl}");
+    }
+
+    #[test]
+    fn no_boilerplate_leaves_the_request_alone() {
+        let request = upload();
+        let bare = |language: &str| generate_with(language, &request, &with(None, false)).unwrap();
+        let go = bare("go");
+        assert!(go.starts_with("body := &bytes.Buffer{}"), "{go}");
+        for word in ["package main", "import (", "func main"] {
+            assert!(!go.contains(word), "{go}");
+        }
+        assert!(go.ends_with("fmt.Println(string(data))"), "{go}");
+        let rust = bare("rust");
+        assert!(
+            rust.starts_with("let form = reqwest::multipart::Form::new()"),
+            "{rust}"
+        );
+        assert!(
+            !rust.contains("fn main") && !rust.contains("Ok(())"),
+            "{rust}"
+        );
+        let java = bare("java");
+        assert!(
+            java.starts_with("HttpRequest request = HttpRequest.newBuilder()"),
+            "{java}"
+        );
+        assert!(
+            !java.contains("import ") && !java.contains("class Main"),
+            "{java}"
+        );
+        let kotlin = bare("kotlin");
+        assert!(
+            kotlin.starts_with("val client = OkHttpClient()"),
+            "{kotlin}"
+        );
+        assert!(
+            !kotlin.contains("import ") && !kotlin.contains("fun main"),
+            "{kotlin}"
+        );
+        let dart = bare("dart");
+        assert!(
+            dart.starts_with("final request = http.MultipartRequest("),
+            "{dart}"
+        );
+        assert!(
+            !dart.contains("import ") && !dart.contains("main()"),
+            "{dart}"
+        );
+        assert!(bare("python").starts_with("url = "));
+        assert!(bare("ruby").starts_with("uri = URI("));
+        let csharp = bare("csharp");
+        assert!(csharp.starts_with("using var client"), "{csharp}");
+        assert!(!csharp.contains("using System.Text"), "{csharp}");
+        assert!(bare("swift").starts_with("var request = URLRequest"));
+        let node = bare("node");
+        assert!(!node.contains("import "), "{node}");
+        assert!(node.contains("await openAsBlob("), "{node}");
+        let axios = bare("axios");
+        assert!(!axios.contains("import "), "{axios}");
+        assert!(axios.contains("axios.request("), "{axios}");
+        let fetch = generate_with("fetch", &post_json(), &with(None, false)).unwrap();
+        assert!(
+            fetch.starts_with("const response = await fetch("),
+            "{fetch}"
+        );
+    }
+
+    #[test]
+    fn no_boilerplate_changes_only_languages_that_have_some() {
+        for id in ["curl", "httpie", "wget", "powershell", "http", "php"] {
+            assert_eq!(
+                generate_with(id, &post_json(), &with(None, false)),
+                generate(id, &post_json()),
+                "{id}"
+            );
+        }
+        for id in [
+            "go", "rust", "java", "kotlin", "dart", "python", "ruby", "swift", "csharp", "axios",
+            "node",
+        ] {
+            let full = generate(id, &post_json()).unwrap();
+            let bare = generate_with(id, &post_json(), &with(None, false)).unwrap();
+            assert!(bare.len() < full.len(), "{id}: {bare}");
+            assert!(bare.contains("api.example.com"), "{id}: {bare}");
+        }
+    }
+
+    #[test]
+    fn no_boilerplate_dedents_the_body_of_main() {
+        let go = generate_with("go", &spaced_body(), &with(Some(Indent::Tab), false)).unwrap();
+        // The raw string's own lines stay as they were.
+        assert!(go.contains("\n\t\"b\": 2\n}`)"), "{go}");
+        assert!(go.contains("\nreq, err := http.NewRequest("), "{go}");
+        assert!(go.contains("\n\tpanic(err)\n"), "{go}");
     }
 }

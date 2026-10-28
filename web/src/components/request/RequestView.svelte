@@ -506,7 +506,7 @@
             </div>
           </div>
         {:else if tab.requestPane === "body"}
-          <BodyPane bind:body={draft.body} />
+          <BodyPane bind:body={draft.body} {tab} />
         {:else if tab.requestPane === "auth"}
           <AuthPane bind:auth={draft.auth} path={contextPath(tab)} />
         {:else if tab.requestPane === "scripts"}

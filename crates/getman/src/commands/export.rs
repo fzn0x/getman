@@ -114,7 +114,11 @@ fn code(
     }
     let mut outgoing = prepared.outgoing;
     codegen::relativize(&mut outgoing, executor.workspace.root());
-    let snippet = codegen::generate(language, &outgoing)
+    let options = codegen::Options {
+        indent: args.indent,
+        boilerplate: !args.no_boilerplate,
+    };
+    let snippet = codegen::generate_with(language, &outgoing, &options)
         .ok_or_else(|| format!("{language} is not a language Getman writes"))?;
     Ok(Exported {
         content: snippet,
