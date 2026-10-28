@@ -5,6 +5,7 @@
     parseCheck,
     TARGETS,
     UNARY,
+    VALUE_HINTS,
     type CheckRow,
   } from "../../lib/checks";
   import type { Response, TestResult, Vars } from "../../lib/types";
@@ -110,7 +111,7 @@
                 class="input mono"
                 value={row.value}
                 disabled={UNARY.has(row.operator)}
-                placeholder={UNARY.has(row.operator) ? "" : "value"}
+                placeholder={UNARY.has(row.operator) ? "" : (VALUE_HINTS[row.operator] ?? "value")}
                 aria-label="Expected value"
                 spellcheck="false"
                 oninput={(event) => update(i, { value: event.currentTarget.value })}
