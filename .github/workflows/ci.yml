@@ -129,6 +129,23 @@ jobs:
           path: target/debug/getman
           retention-days: 1
 
+  # `getman mcp`, driven by the official MCP Inspector command line.
+  mcp:
+    name: MCP server with the Inspector
+    needs: getman
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: getman-debug
+          path: ${{ runner.temp }}/getman-bin
+      - run: chmod +x "$RUNNER_TEMP/getman-bin/getman"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: node .github/scripts/verify-mcp.mjs --getman "$RUNNER_TEMP/getman-bin/getman"
+
   snippets:
     name: Snippets in ${{ matrix.name }}
     needs: getman
