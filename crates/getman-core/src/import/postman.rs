@@ -427,6 +427,7 @@ fn body(value: &Value, headers: &[KeyValue], name: &str, warnings: &mut Vec<Stri
                 Value::Null => String::new(),
                 other => serde_json::to_string_pretty(other).unwrap_or_default(),
             },
+            operation_name: String::new(),
         },
         other => {
             warnings.push(format!(

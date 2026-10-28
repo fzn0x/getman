@@ -394,6 +394,7 @@ impl Reader {
                         Value::String(s) => s.clone(),
                         other => serde_json::to_string_pretty(other).unwrap_or_default(),
                     },
+                    operation_name: text(&parsed["operationName"]).unwrap_or_default(),
                 }
             }
             _ if body.get("fileName").is_some() => Body::Binary {
@@ -713,7 +714,7 @@ mod tests {
             panic!()
         };
         assert!(
-            matches!(&graph.body, Body::Graphql { query, variables } if query.contains("orders") && variables.contains("\"first\""))
+            matches!(&graph.body, Body::Graphql { query, variables, .. } if query.contains("orders") && variables.contains("\"first\""))
         );
 
         let warnings = c.warnings.join("\n");

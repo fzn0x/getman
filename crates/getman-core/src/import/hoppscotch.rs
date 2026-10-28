@@ -134,6 +134,7 @@ impl Reader {
                 body: Body::Graphql {
                     query: template(&text_or_empty(&source["query"])),
                     variables: template(&text_or_empty(&source["variables"])),
+                    operation_name: String::new(),
                 },
                 ..Request::default()
             };

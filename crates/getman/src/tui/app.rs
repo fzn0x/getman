@@ -1052,9 +1052,14 @@ pub(crate) fn apply(request: &mut Request, pane: RequestPane, text: &str) -> Res
                     content: text.to_owned(),
                     content_type: content_type.clone(),
                 },
-                Body::Graphql { variables, .. } => Body::Graphql {
+                Body::Graphql {
+                    variables,
+                    operation_name,
+                    ..
+                } => Body::Graphql {
                     query: text.to_owned(),
                     variables: variables.clone(),
+                    operation_name: operation_name.clone(),
                 },
                 Body::None if text.trim().is_empty() => Body::None,
                 Body::None => {
