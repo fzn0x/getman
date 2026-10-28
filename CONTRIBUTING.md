@@ -114,6 +114,37 @@ offered it. The matching public key is `plugins.updater.pubkey` in
 updates signed with that key, so keep the private key safe and out of
 the repository: a lost key means users must reinstall to get updates.
 
+### Packages
+
+Each release also carries manifests for package managers, written from
+the release's own files by `packaging/render.mjs`: `getman.rb` (Homebrew),
+`getman.json` (Scoop), `fzn0x.Getman*.yaml` (winget) and
+`io.github.fzn0x.getman.yml` (Flatpak, for the desktop app). They hold
+the version, the download URLs and the SHA-256 sums, and they are
+only release files: nothing publishes them yet, so Getman is not
+available from any of these package managers.
+
+To publish them, the maintainer first has to create:
+
+| What | For |
+| --- | --- |
+| A repository `fzn0x/homebrew-tap` with a `Formula` folder | Homebrew: `brew install fzn0x/tap/getman` |
+| A repository `fzn0x/scoop-bucket` with a `bucket` folder | Scoop: `scoop bucket add fzn0x https://github.com/fzn0x/scoop-bucket` |
+| A fork of `microsoft/winget-pkgs` | winget: a pull request adding the three files under `manifests/f/fzn0x/Getman/<version>/`; the first one is reviewed by hand |
+| A Flathub submission, or a Flatpak repository | Flatpak: the manifest repackages the `.deb`; try it first with `flatpak-builder` |
+| A repository secret `PACKAGES_TOKEN`: a fine-grained personal access token with read and write access to the contents of the tap and the bucket | The publishing job in `release.yml`, which is commented out |
+
+Then uncomment the `publish-packages` job at the end of
+`.github/workflows/release.yml`, set its `if` to `true`, and check it on
+a release candidate tag first. Try the manifests by hand before that:
+`brew install --formula ./getman.rb`, `scoop install ./getman.json`,
+`winget validate` on the folder of winget files, and `flatpak-builder`
+on the Flatpak one. To render them from a release you have downloaded:
+
+```sh
+node packaging/render.mjs --tag v0.2.0 --dist downloads --out manifests
+```
+
 ## Where things are
 
 | | |

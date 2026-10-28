@@ -1,0 +1,86 @@
+# Flatpak manifest for the Getman desktop app, written for each release by
+# packaging/render.mjs. It repackages the release's .deb, so it needs no
+# build of its own:
+#
+#   flatpak-builder --user --install --force-clean build-dir io.github.fzn0x.getman.yml
+#
+# Notes for whoever submits it to a Flatpak remote:
+#
+# - The desktop app checks for updates daily and cannot replace itself
+#   inside a Flatpak; Flatpak updates it. Turn the check off in Settings.
+# - The app opens workspaces anywhere in your files, so it asks for the home
+#   folder. Narrow `--filesystem` if you only keep workspaces in one place.
+app-id: io.github.fzn0x.getman
+runtime: org.gnome.Platform
+runtime-version: "48"
+sdk: org.gnome.Sdk
+command: getman
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --filesystem=home
+modules:
+  - name: getman
+    buildsystem: simple
+    build-commands:
+      - ar x getman-desktop.deb
+      - tar -xf data.tar.*
+      - install -Dm755 usr/bin/getman /app/bin/getman
+      - |
+        for icon in usr/share/icons/hicolor/*/apps/getman.png; do
+          size="$(basename "$(dirname "$(dirname "$icon")")")"
+          install -Dm644 "$icon" "/app/share/icons/hicolor/$size/apps/io.github.fzn0x.getman.png"
+        done
+      - install -Dm644 io.github.fzn0x.getman.desktop /app/share/applications/io.github.fzn0x.getman.desktop
+      - install -Dm644 io.github.fzn0x.getman.metainfo.xml /app/share/metainfo/io.github.fzn0x.getman.metainfo.xml
+    sources:
+      - type: file
+        url: {{url:getman-desktop_amd64.deb}}
+        sha256: {{sha256:getman-desktop_amd64.deb}}
+        dest-filename: getman-desktop.deb
+        only-arches: [x86_64]
+      - type: file
+        url: {{url:getman-desktop_arm64.deb}}
+        sha256: {{sha256:getman-desktop_arm64.deb}}
+        dest-filename: getman-desktop.deb
+        only-arches: [aarch64]
+      - type: inline
+        dest-filename: io.github.fzn0x.getman.desktop
+        contents: |
+          [Desktop Entry]
+          Type=Application
+          Name=Getman
+          Comment=A local-first API client
+          Categories=Development;
+          Icon=io.github.fzn0x.getman
+          Exec=getman desktop
+          StartupWMClass=getman
+          Terminal=false
+      - type: inline
+        dest-filename: io.github.fzn0x.getman.metainfo.xml
+        contents: |
+          <?xml version="1.0" encoding="UTF-8"?>
+          <component type="desktop-application">
+            <id>io.github.fzn0x.getman</id>
+            <name>Getman</name>
+            <summary>A local-first, account-free API client</summary>
+            <metadata_license>CC0-1.0</metadata_license>
+            <project_license>MIT OR Apache-2.0</project_license>
+            <developer_name>fzn0x</developer_name>
+            <url type="homepage">https://fzn0x.github.io/getman/</url>
+            <url type="bugtracker">https://github.com/{{repo}}/issues</url>
+            <description>
+              <p>Send requests, test APIs and run collections from plain YAML files in your repository. No account, no cloud.</p>
+            </description>
+            <launchable type="desktop-id">io.github.fzn0x.getman.desktop</launchable>
+            <provides>
+              <binary>getman</binary>
+            </provides>
+            <releases>
+              <release version="{{version}}" date="{{date}}"/>
+            </releases>
+            <content_rating type="oars-1.1"/>
+          </component>

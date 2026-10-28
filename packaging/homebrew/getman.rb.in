@@ -1,0 +1,40 @@
+# Homebrew formula for the getman command, for the tap fzn0x/homebrew-tap
+# (Formula/getman.rb). Written for each release by packaging/render.mjs.
+class Getman < Formula
+  desc "Local-first, account-free API client: a Postman alternative"
+  homepage "https://fzn0x.github.io/getman/"
+  version "{{version}}"
+  license any_of: ["MIT", "Apache-2.0"]
+
+  on_macos do
+    on_arm do
+      url "{{cliurl:aarch64-apple-darwin}}"
+      sha256 "{{clisha256:aarch64-apple-darwin}}"
+    end
+    on_intel do
+      url "{{cliurl:x86_64-apple-darwin}}"
+      sha256 "{{clisha256:x86_64-apple-darwin}}"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "{{cliurl:aarch64-unknown-linux-gnu}}"
+      sha256 "{{clisha256:aarch64-unknown-linux-gnu}}"
+    end
+    on_intel do
+      url "{{cliurl:x86_64-unknown-linux-gnu}}"
+      sha256 "{{clisha256:x86_64-unknown-linux-gnu}}"
+    end
+  end
+
+  def install
+    bin.install "getman"
+  end
+
+  test do
+    assert_match version.to_s, shell_output("#{bin}/getman --version")
+    system bin/"getman", "init", testpath/"workspace"
+    assert_path_exists testpath/"workspace/getman.yaml"
+  end
+end
