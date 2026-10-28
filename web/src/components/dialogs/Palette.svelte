@@ -43,10 +43,17 @@
       { id: "new", title: "New request", icon: "plus", keys: "alt+n", run: () => newRequest() },
       {
         id: "import",
-        title: "Import a cURL command or Postman export",
+        title: "Import a collection, API spec, HAR file or cURL command",
         icon: "import",
         keys: "alt+i",
         run: () => openDialog({ kind: "import", folder: "" }),
+      },
+      {
+        id: "export",
+        title: "Export the workspace",
+        detail: "As a Postman collection or an OpenAPI document",
+        icon: "export",
+        run: () => openDialog({ kind: "export", target: "folder", path: "", name: ws.name }),
       },
       { id: "run", title: "Run the whole workspace", icon: "play", run: () => openRunner("") },
       {

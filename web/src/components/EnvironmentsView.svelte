@@ -3,6 +3,7 @@
   import {
     confirmDialog,
     message,
+    openDialog,
     notify,
     promptDialog,
     refreshTree,
@@ -218,6 +219,16 @@
           <button class="btn quiet danger" onclick={remove}><Icon name="trash" /> Delete</button>
         {/if}
         {#if isGlobals || ws.environments.length > 0}
+          <button
+            class="btn quiet"
+            onclick={() =>
+              openDialog({
+                kind: "export",
+                target: isGlobals ? "globals" : "environment",
+                path: isGlobals ? "" : selected,
+                name: displayName,
+              })}><Icon name="export" /> Export</button
+          >
           <button class="btn primary" onclick={saveRows} disabled={!dirty}
             ><Icon name="save" /> Save</button
           >
