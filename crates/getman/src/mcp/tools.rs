@@ -1,5 +1,5 @@
-//! The tools `getman mcp` offers, and the masking of secret values in
-//! everything they return.
+//! The tools `getman mcp` offers. Everything they return is masked first
+//! (see [`super::mask`]).
 
 use std::sync::atomic::AtomicBool;
 
@@ -11,14 +11,10 @@ use getman_core::runner::{self, RunEvent, RunOptions};
 use getman_core::workspace::Node;
 use serde_json::{Map, Value, json};
 
+use super::mask::{MASK, Masker};
 use crate::report::{failures, outcome};
 use crate::workspaces;
 
-/// What replaces a secret value in results.
-const MASK: &str = "[secret]";
-/// Secret values shorter than this are left alone; masking every `1` or
-/// `true` would garble the results and hide nothing.
-const MIN_SECRET_CHARS: usize = 4;
 /// Body characters returned unless the caller asks for another limit.
 const DEFAULT_BODY_CHARS: usize = 20_000;
 const MAX_BODY_CHARS: usize = 200_000;
@@ -511,65 +507,5 @@ fn variables(arguments: &Arguments) -> Result<Vars, String> {
             })
             .collect(),
         Some(_) => Err("variables must be an object of name: value".into()),
-    }
-}
-
-/// Replaces values that must not leave the machine: everything in the
-/// git-ignored `*.local.yaml` files, environment variables marked secret,
-/// and `GETMAN_*` variables of the process.
-pub(super) struct Masker {
-    secrets: Vec<String>,
-}
-
-impl Masker {
-    pub(super) fn load(workspace: &Workspace) -> Self {
-        let mut secrets = Vec::new();
-        if let Ok(local) = workspace.read_local_state() {
-            secrets.extend(local.variables.into_values());
-            secrets.extend(local.globals.into_values());
-        }
-        for summary in workspace.environments().unwrap_or_default() {
-            if let Ok(files) = workspace.read_environment(&summary.id) {
-                for name in &files.shared.secrets {
-                    if let Some(value) = files.shared.variables.get(name) {
-                        secrets.push(value.clone());
-                    }
-                }
-                secrets.extend(files.local.into_values());
-            }
-        }
-        for (name, value) in std::env::vars() {
-            if name.starts_with(getman_core::vars::ENV_PREFIX) {
-                secrets.push(value);
-            }
-        }
-        secrets.retain(|s| s.chars().count() >= MIN_SECRET_CHARS);
-        secrets.sort_by_key(|s| std::cmp::Reverse(s.len()));
-        secrets.dedup();
-        Self { secrets }
-    }
-
-    pub(super) fn mask(&self, text: &str) -> String {
-        let mut text = text.to_owned();
-        for secret in &self.secrets {
-            if text.contains(secret.as_str()) {
-                text = text.replace(secret.as_str(), MASK);
-            }
-        }
-        text
-    }
-
-    pub(super) fn mask_value(&self, value: &mut Value) {
-        match value {
-            Value::String(text) => {
-                let masked = self.mask(text);
-                if masked != *text {
-                    *text = masked;
-                }
-            }
-            Value::Array(list) => list.iter_mut().for_each(|v| self.mask_value(v)),
-            Value::Object(map) => map.values_mut().for_each(|v| self.mask_value(v)),
-            _ => {}
-        }
     }
 }

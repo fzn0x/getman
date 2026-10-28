@@ -26,6 +26,7 @@ pub(crate) async fn send(args: SendArgs) -> Outcome {
         overlay,
         script_timeout: super::script_timeout(&args.vars),
         settings: args.net.settings(),
+        no_scripts: args.no_scripts,
         ..Context::default()
     };
     let executor = Executor::new(workspace);
@@ -90,6 +91,9 @@ pub(super) fn print_problems(execution: &Execution) {
     }
     for name in &execution.missing_variables {
         style::warn(&missing_reason(name));
+    }
+    for warning in &execution.warnings {
+        style::warn(warning);
     }
     if let Some(error) = &execution.error {
         style::error(error);

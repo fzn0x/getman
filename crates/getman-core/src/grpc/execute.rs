@@ -22,7 +22,9 @@ use super::transport::{self, Connection, Head, Target, header_list};
 use super::{CallType, Direction, GrpcCall, StreamMessage, reflected, reflection};
 use crate::checks::{run_captures, run_checks};
 use crate::error::{Error, Result};
-use crate::execute::{Context, Execution, Executor, absorb, run_scripts, script_scopes, var_stack};
+use crate::execute::{
+    Context, Execution, Executor, absorb, run_scripts, script_scopes, skip_scripts, var_stack,
+};
 use crate::http::{Header, Outgoing, OutgoingBody, Payload, Response, Size, Transport};
 use crate::model::{Folder, Request, Settings};
 use crate::prepare::Effective;
@@ -222,6 +224,7 @@ async fn run(
     let effective = Effective::new(&chain, &request);
     let transport = executor.transport(path, &request, context)?;
     let mut headers = effective.headers.clone();
+    let skip_scripts = skip_scripts(&files, context, &effective, execution);
     let info = ScriptInfo {
         request_name: request.name.clone(),
         request_path: path.unwrap_or_default().to_owned(),
@@ -235,10 +238,11 @@ async fn run(
         )),
         transport: transport.clone(),
         timeout: context.script_timeout,
+        root: Some(executor.workspace.root().to_path_buf()),
     };
 
     // Pre-request scripts. The message is the body they see and edit.
-    if !effective.pre_request.is_empty() {
+    if !skip_scripts && !effective.pre_request.is_empty() {
         let input = ScriptInput {
             event: Event::PreRequest,
             info: info.clone(),
@@ -366,7 +370,7 @@ async fn run(
     // Post-response scripts, then checks and captures, on the call as a
     // response.
     let response = response_view(call, &target);
-    if !effective.post_response.is_empty() {
+    if !skip_scripts && !effective.post_response.is_empty() {
         let input = ScriptInput {
             event: Event::PostResponse,
             info,
@@ -589,6 +593,7 @@ fn script_request(request: &Request, headers: &[crate::model::KeyValue]) -> Scri
         body: Some(ScriptBody {
             mode: "raw".into(),
             raw: Some(request.grpc.message.clone()),
+            ..ScriptBody::default()
         }),
     }
 }

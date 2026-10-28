@@ -1,6 +1,6 @@
 <script lang="ts">
-  // The top bar's buttons that only the desktop app has: open another
-  // workspace folder, and Settings. In a browser tab there are none.
+  // The top bar's buttons that only the desktop app has, to open another
+  // workspace folder, and Settings, which every window has.
   import { desktop, openWorkspaceFolder } from "../lib/desktop.svelte";
   import { openDialog } from "../lib/store.svelte";
   import Icon from "./Icon.svelte";
@@ -19,16 +19,16 @@
   >
     <Icon name="folder" />
   </button>
-  <button
-    class="icon-btn settings"
-    aria-label={update ? "Settings: a new version is ready" : "Settings"}
-    title={update ? "Settings · a new version is ready" : "Settings"}
-    onclick={() => openDialog({ kind: "settings" })}
-  >
-    <Icon name="gear" />
-    {#if update}<span class="badge" aria-hidden="true"></span>{/if}
-  </button>
 {/if}
+<button
+  class="icon-btn settings"
+  aria-label={update ? "Settings: a new version is ready" : "Settings"}
+  title={update ? "Settings · a new version is ready" : "Settings"}
+  onclick={() => openDialog({ kind: "settings" })}
+>
+  <Icon name="gear" />
+  {#if update}<span class="badge" aria-hidden="true"></span>{/if}
+</button>
 
 <style>
   .settings {

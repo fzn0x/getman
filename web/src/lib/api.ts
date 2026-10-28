@@ -214,6 +214,8 @@ export const api = {
     value: string;
     environment?: string | null;
   }) => post("/variables/set", args),
+  /** Forgets the variables scripts stored for the session. */
+  clearSession: () => post("/session/clear", {}),
   dynamic: () => call<DynamicVar[]>("GET", "/dynamic"),
   oauthToken: (args: OAuthArgs) => post<Token>("/oauth2/token", args),
   oauthAuthorize: (args: OAuthArgs) => post<Authorization>("/oauth2/authorize", args),

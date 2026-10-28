@@ -345,6 +345,8 @@ export interface EnvironmentFiles {
 export interface LocalState {
   variables?: Vars;
   globals?: Vars;
+  /** Scripts are turned off for this workspace, on this machine. */
+  scripts_off?: boolean;
 }
 
 export interface WorkspaceInfo {
@@ -445,7 +447,7 @@ export interface LogEntry {
 }
 
 export interface VarChange {
-  scope: "environment" | "collection" | "global" | "local";
+  scope: "environment" | "collection" | "global" | "session" | "local";
   name: string;
   value: string | null;
 }
@@ -472,7 +474,8 @@ export interface Execution {
 export interface ResolvedVar {
   name: string;
   value: string;
-  scope: "global" | "workspace" | "environment" | "folder" | "request" | "data" | "local";
+  scope:
+    "global" | "workspace" | "environment" | "folder" | "request" | "data" | "session" | "local";
   /** The environment marks it secret; mask the value until asked. */
   secret?: boolean;
 }

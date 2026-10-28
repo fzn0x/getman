@@ -149,6 +149,10 @@ pub struct LocalState {
         deserialize_with = "lenient::vars"
     )]
     pub globals: Vars,
+    /// Whether scripts are turned off for this workspace on this machine.
+    /// Requests are sent without running their scripts.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub scripts_off: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]

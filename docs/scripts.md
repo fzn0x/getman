@@ -3,7 +3,8 @@
 Scripts are JavaScript that runs before a request is sent and after its
 response arrives. They can change the request, set variables, test the
 response and send other requests. They run in an embedded QuickJS engine
-inside Getman: no Node.js, no browser, no access to your files.
+inside Getman: no Node.js, no browser, and no access to your files except
+the `.js` modules of the workspace that they `require`.
 
 ```yaml
 scripts:
@@ -27,7 +28,8 @@ script can define helpers on `globalThis` for the others.
 **Coming from Postman?** `pm` is the same object as `gm`, and the older
 `tests["name"] = ...`, `responseBody`, `responseCode` and
 `postman.setNextRequest` globals exist too, so most scripts run as they
-are.
+are. **Coming from Bruno?** `bru`, `req`, `res`, `test` and `expect` work
+too; see [Scripts written for Bruno](#scripts-written-for-bruno).
 
 ## Variables
 
@@ -38,6 +40,7 @@ are.
 | `gm.globals` | Globals |
 | `gm.variables` | Reads any scope, strongest first; writes local variables that last for the rest of a run |
 | `gm.iterationData` | The current data row in a run (read only) |
+| `gm.session` | Session variables: they last while the UI server runs, or for a whole `getman run`, and are never saved |
 
 Each has `get(name)`, `set(name, value)`, `has(name)`, `unset(name)`,
 `clear()`, `toObject()` and `replaceIn(text)`, which replaces
@@ -62,11 +65,36 @@ gm.request.headers.upsert({ key: "Authorization", value: `Bearer ${token}` });
 gm.request.headers.remove("X-Old");
 gm.request.body.update({ sku: "BOOK-42" }); // objects become JSON
 gm.request.body.raw; // the body text
+gm.request.id; // the request's path in the workspace, such as "orders/create.yaml"
 ```
 
-Header and query lists have `get`, `has`, `one`, `add`, `upsert`,
+Header, query and form lists have `get`, `has`, `one`, `add`, `upsert`,
 `remove`, `clear`, `all`, `each`, `map`, `filter`, `find`, `toObject` and
 `count`.
+
+### Form bodies
+
+When the body is a form, its fields are lists you can edit before the
+request goes out. `gm.request.body.mode` says which: `urlencoded` or
+`formdata` (multipart). The other list is `undefined`.
+
+```js
+// A URL-encoded form
+const form = gm.request.body.urlencoded;
+form.upsert({ key: "grant_type", value: "client_credentials" });
+form.add({ key: "scope", value: "read write" });
+form.remove("debug");
+
+// A multipart form: text fields and files
+const parts = gm.request.body.formdata;
+parts.upsert({ key: "title", value: "Cat" });
+parts.add({ key: "photo", type: "file", src: "img/cat.png", contentType: "image/png" });
+parts.one("photo").src; // "img/cat.png"
+```
+
+A file field names a file inside the workspace, and is read when the
+request is sent, as in the request's Body tab. You cannot turn another
+kind of body into a form from a script.
 
 ## The response
 
@@ -178,6 +206,7 @@ or a plain object, sent as JSON.
 gm.execution.setNextRequest("Get order"); // jump, by name or path
 gm.execution.setNextRequest(null);        // end this iteration
 gm.execution.skipRequest();               // in a pre-request script: don't send
+gm.execution.stopExecution();             // the request finishes; the rest of the run does not start
 gm.info.requestName; gm.info.iteration; gm.info.iterationCount; gm.info.eventName;
 ```
 
@@ -194,7 +223,68 @@ CryptoJS.HmacSHA256(message, secret).toString(CryptoJS.enc.Base64);
 ```
 
 `require` also knows `uuid`, `chai`, `btoa` and `atob`. Other modules are
-not available.
+not available, and nothing is downloaded: there is no `npm`.
+
+### Your own modules
+
+Put helpers in `.js` files of the workspace and `require` them with a
+relative path. They are CommonJS modules, so use `module.exports`:
+
+```js
+// lib/helpers.js
+const CryptoJS = require("crypto-js");
+module.exports = {
+  sign: (body, secret) => CryptoJS.HmacSHA256(body, secret).toString(),
+};
+```
+
+```js
+// in any script
+const { sign } = require("./lib/helpers.js");
+gm.request.headers.upsert({ key: "X-Signature", value: sign(gm.request.body.raw, secret) });
+```
+
+- A path in a script starts at the workspace root; in a module it starts
+  at the module's own folder, so `require("./sign.js")` inside
+  `lib/helpers.js` loads `lib/sign.js`. `.js` may be left out.
+- Only files inside the workspace load. A path that leaves it with `..`,
+  or reaches it through a link, is refused. So are files that are not
+  `.js`, and files over 256 KiB.
+- A module runs once per script run, however many scripts require it,
+  and every script of the request gets the same exports. Modules that
+  require each other get what the other has exported so far, as in
+  Node.js. The `process`, `fs` and `Buffer` globals of Node.js do not
+  exist.
+- A module that throws, or has a syntax error, fails the script that
+  required it, with the module's path in the message.
+
+## Scripts written for Bruno
+
+Scripts from a [Bruno import](import-export.md#from-bruno) run as they
+are. Getman provides the globals Bruno's scripts use:
+
+| | |
+| --- | --- |
+| `bru.getVar`, `setVar`, `hasVar`, `deleteVar`, `deleteAllVars` | Bruno's runtime variables, which here are [session variables](variables.md#session-variables): they last while Getman runs |
+| `bru.getEnvVar`, `setEnvVar`, `getEnvName` | The selected environment |
+| `bru.getGlobalEnvVar`, `setGlobalEnvVar` | Globals |
+| `bru.getCollectionVar`, `getFolderVar`, `getRequestVar` | The workspace's, the enclosing folders' and the request's variables (read only) |
+| `bru.getProcessEnv(name)` | A process environment variable; only `GETMAN_*` names are readable, others give `undefined` |
+| `bru.interpolate(text)` | Replaces `{{variables}}`, in a string or in the strings of an object |
+| `bru.setNextRequest(name)`, `bru.runner.setNextRequest(name)` | As `gm.execution.setNextRequest` |
+| `bru.runner.skipRequest()`, `bru.runner.stopExecution()` | Skip this request; finish this request and end the run |
+| `bru.sendRequest(config, callback)` | Sends a request with `{ url, method, headers, data, params }` and gives `{ status, statusText, headers, data }`, with any status; without a callback it returns a promise |
+| `bru.sleep(ms)` | Waits, in real time, but never past the script time limit |
+| `req.getUrl`, `setUrl`, `getMethod`, `setMethod`, `getName` | The request, with its `{{variables}}` still in place |
+| `req.getHeader`, `getHeaders`, `setHeader`, `setHeaders`, `deleteHeader` | Headers |
+| `req.getBody`, `req.setBody` | The body, as an object if it is JSON |
+| `res(path)`, `res.status`, `statusText`, `headers`, `body`, `responseTime` | The response, after it arrives; `res("data.items[0].id")` reads the JSON body |
+| `res.getStatus`, `getHeader`, `getHeaders`, `getBody`, `getResponseTime`, `getSize` | The same, as calls |
+| `test(name, fn)`, `expect(value)` | As `gm.test` and `gm.expect` |
+
+`res` exists in post-response scripts only. Bruno's other calls (for
+example `bru.cwd`) are not provided; the importer lists the ones a
+script uses.
 
 ## Console and timers
 
@@ -204,6 +294,19 @@ tab of the response and to `getman run --verbose`.
 `setTimeout`, `setInterval` and `setImmediate` work, on a virtual clock:
 callbacks run in order without waiting, so a script never slows a run
 down.
+
+## Turning scripts off
+
+You may not want to run scripts that came with a workspace you have
+not read. Settings in the UI has a "Run scripts" switch; it writes
+`scripts_off: true` to `getman.local.yaml`, which stays on your machine.
+`getman send --no-scripts` and `getman run --no-scripts` skip scripts
+for one command. Requests are sent as saved, checks and captures still
+run, and the result says how many scripts did not run:
+
+```text
+Scripts are turned off for this run, so 2 scripts did not run.
+```
 
 ## Limits
 

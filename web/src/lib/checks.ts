@@ -17,9 +17,34 @@ export const OPERATORS = [
   "exists",
   "!exists",
   "is",
+  "in",
+  "not in",
+  "between",
+  "is empty",
+  "is not empty",
+  "is truthy",
+  "is falsy",
 ] as const;
 
-export const UNARY = new Set(["exists", "!exists"]);
+/** Operators that take no value. */
+export const UNARY = new Set([
+  "exists",
+  "!exists",
+  "is empty",
+  "is not empty",
+  "is truthy",
+  "is falsy",
+]);
+
+/** Operators written with more than one word, longest first. */
+const MULTI_WORD = ["is not empty", "is empty", "is truthy", "is falsy", "not in"];
+
+/** What each operator wants as its value, for the placeholder. */
+export const VALUE_HINTS: Record<string, string> = {
+  in: "200, 201 or [200, 201]",
+  "not in": "400, 404 or [400, 404]",
+  between: "1 and 10",
+};
 
 export interface CheckRow {
   target: string;
@@ -53,6 +78,17 @@ export function parseCheck(line: string): CheckRow {
       rest = `${symbol} ${target.slice(at + symbol.length)} ${rest}`.trim();
       target = target.slice(0, at);
       break;
+    }
+  }
+  const words = rest.split(/\s+/);
+  for (const multi of MULTI_WORD) {
+    const count = multi.split(" ").length;
+    if (words.slice(0, count).join(" ") === multi) {
+      return {
+        target,
+        operator: multi,
+        value: UNARY.has(multi) ? "" : words.slice(count).join(" "),
+      };
     }
   }
   const space = rest.search(/\s/);

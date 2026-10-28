@@ -62,6 +62,10 @@ A JSON path is made of `.name`, `[index]` (negative counts from the end),
 | `matches` `!matches` | matches a regular expression |
 | `exists` `!exists` | is there at all (`null` exists); takes no value |
 | `is` | has a type: `string`, `number`, `integer`, `boolean`, `array`, `object` or `null` |
+| `in` `not in` | is, or is not, one of a list: a JSON array (`in [200, 201]`) or values separated by commas (`in 200, 201, 204`) |
+| `between A and B` | is a number from A to B, both included |
+| `is empty` `is not empty` | has nothing in it (`""`, `[]`, `{}` or `null`), or has something; take no value |
+| `is truthy` `is falsy` | is true or false as in JavaScript: `false`, `0`, `""` and `null` are falsy, everything else is truthy, even an empty array; take no value |
 
 ### Values
 
@@ -70,6 +74,19 @@ A value that is valid JSON is compared as JSON: `== 42` is a number,
 `contains {"id": 1}` an object. Anything else is text, so
 `== Ada Lovelace` needs no quotes. Numbers and numeric strings compare
 equal (`"3" == 3`), which suits headers and query values.
+
+```yaml
+checks:
+  - status in 200, 201, 204
+  - json.role not in [guest, banned]
+  - time between 1 and 500
+  - json.data is not empty
+  - json.user.verified is truthy
+```
+
+Items of a list are read like any other value, so `in 200, 201` compares
+numbers and `in admin, editor` text. Numbers and numeric strings compare
+equal here too.
 
 Lines starting with `#` are ignored, so you can keep a check without
 running it.

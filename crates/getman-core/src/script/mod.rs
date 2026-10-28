@@ -7,10 +7,14 @@
 //! comes back the same way: test results, logs, variable changes and edits
 //! to the request.
 //!
+//! Scripts can also use the `bru`, `req` and `res` globals of scripts
+//! written for Bruno, and `require` the `.js` files of the workspace.
+//!
 //! Scripts are stopped after [`DEFAULT_TIMEOUT`] and may use 256 MiB of
 //! memory.
 
 use std::cell::Cell;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -28,7 +32,7 @@ use sha2::Digest as _;
 
 use crate::checks::TestResult;
 use crate::http::{CookieInfo, Header, HttpClient, Outgoing, Response, Transport};
-use crate::model::{KeyValue, Vars};
+use crate::model::{FormField, KeyValue, Vars};
 use crate::prepare::Script;
 
 const PRELUDE: &str = include_str!("prelude.js");
@@ -38,6 +42,8 @@ pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 const MEMORY_LIMIT: usize = 256 * 1024 * 1024;
 const STACK_LIMIT: usize = 1024 * 1024;
 const MAX_TICKS: usize = 100_000;
+/// The largest module a script may `require`.
+const MODULE_LIMIT: u64 = 256 * 1024;
 
 /// When a script runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,6 +85,8 @@ pub struct ScriptScopes {
     pub request: Vars,
     /// The current row of a data file, with its JSON types.
     pub data: serde_json::Map<String, Value>,
+    /// Variables set by scripts for the whole session.
+    pub session: Vars,
     /// Variables set by scripts for the rest of the run.
     pub local: Vars,
 }
@@ -103,6 +111,10 @@ pub struct ScriptBody {
     pub mode: String,
     /// The text, for text bodies.
     pub raw: Option<String>,
+    /// The fields of a URL-encoded form.
+    pub urlencoded: Option<Vec<KeyValue>>,
+    /// The fields of a multipart form.
+    pub formdata: Option<Vec<FormField>>,
 }
 
 /// The response as scripts see it.
@@ -173,6 +185,8 @@ pub enum ChangeScope {
     Collection,
     /// `gm.globals`.
     Global,
+    /// `gm.session`: while the UI server runs, or for a whole run.
+    Session,
     /// `gm.variables`: for the rest of the run only.
     Local,
 }
@@ -199,6 +213,12 @@ pub struct EditedRequest {
     pub headers: Vec<KeyValue>,
     /// The body text, for text bodies.
     pub body: Option<String>,
+    /// The fields of a URL-encoded form, if the body is one.
+    #[serde(default)]
+    pub urlencoded: Option<Vec<KeyValue>>,
+    /// The fields of a multipart form, if the body is one.
+    #[serde(default)]
+    pub formdata: Option<Vec<FormField>>,
 }
 
 /// A script that failed.
@@ -227,6 +247,8 @@ pub struct ScriptOutput {
     pub next_request: Option<NextRequest>,
     /// Whether a pre-request script skipped the request.
     pub skip_request: bool,
+    /// Whether a script asked for the run to stop after this request.
+    pub stop_run: bool,
     /// The first script that failed; later scripts did not run.
     #[serde(skip)]
     pub error: Option<ScriptError>,
@@ -262,6 +284,9 @@ pub struct ScriptHost {
     pub transport: Transport,
     /// How long one script may run.
     pub timeout: Duration,
+    /// The workspace's folder, where `require` finds modules. Without it,
+    /// scripts cannot require files.
+    pub root: Option<PathBuf>,
 }
 
 impl Default for ScriptHost {
@@ -270,6 +295,7 @@ impl Default for ScriptHost {
             http: None,
             transport: Transport::default(),
             timeout: DEFAULT_TIMEOUT,
+            root: None,
         }
     }
 }
@@ -314,7 +340,7 @@ fn run_engine(
         let globals = ctx.globals();
         globals.set("__gm_input", input_json).map_err(fail)?;
         globals
-            .set("__gm_native", natives(&ctx, host).map_err(fail)?)
+            .set("__gm_native", natives(&ctx, host, &deadline).map_err(fail)?)
             .map_err(fail)?;
         if let Err(caught) = ctx.eval::<(), _>(PRELUDE).catch(&ctx) {
             return Err(format!(
@@ -445,7 +471,11 @@ fn line_in(stack: &str, origin: &str) -> Option<u32> {
 }
 
 /// Functions the prelude calls into Rust for.
-fn natives<'js>(ctx: &Ctx<'js>, host: &ScriptHost) -> rquickjs::Result<Object<'js>> {
+fn natives<'js>(
+    ctx: &Ctx<'js>,
+    host: &ScriptHost,
+    deadline: &Rc<Cell<Instant>>,
+) -> rquickjs::Result<Object<'js>> {
     let native = Object::new(ctx.clone())?;
     native.set(
         "digest",
@@ -484,6 +514,33 @@ fn natives<'js>(ctx: &Ctx<'js>, host: &ScriptHost) -> rquickjs::Result<Object<'j
             crate::vars::read_process_env(&name)
         })?,
     )?;
+    let root = host.root.clone();
+    native.set(
+        "module",
+        Function::new(ctx.clone(), move |path: String| -> String {
+            match read_module(root.as_deref(), &path) {
+                Ok(source) => serde_json::json!({ "source": source }),
+                Err(error) => serde_json::json!({ "error": error }),
+            }
+            .to_string()
+        })?,
+    )?;
+    let deadline = Rc::clone(deadline);
+    native.set(
+        "sleep",
+        // Never sleeps past the script's time limit: the script is stopped
+        // as if it had been interrupted there.
+        Function::new(ctx.clone(), move |ctx: Ctx<'_>, ms: f64| {
+            let wanted = Duration::try_from_secs_f64(ms.clamp(0.0, 3_600_000.0) / 1000.0)
+                .unwrap_or_default();
+            let left = deadline.get().saturating_duration_since(Instant::now());
+            std::thread::sleep(wanted.min(left));
+            if wanted > left {
+                return Err(Exception::throw_message(&ctx, "interrupted"));
+            }
+            Ok(())
+        })?,
+    )?;
     let http = host.http.clone();
     let transport = host.transport.clone();
     native.set(
@@ -507,6 +564,25 @@ fn natives<'js>(ctx: &Ctx<'js>, host: &ScriptHost) -> rquickjs::Result<Object<'j
         })?,
     )?;
     Ok(native)
+}
+
+/// The source of a `.js` file inside the workspace.
+fn read_module(root: Option<&std::path::Path>, path: &str) -> Result<String, String> {
+    let Some(root) = root else {
+        return Err("files cannot be required here".into());
+    };
+    if std::path::Path::new(path).extension() != Some(std::ffi::OsStr::new("js")) {
+        return Err("only .js files can be required".into());
+    }
+    let file = crate::prepare::resolve_file(root, path).map_err(|e| e.to_string())?;
+    let size = std::fs::metadata(&file).map_err(|e| e.to_string())?.len();
+    if size > MODULE_LIMIT {
+        return Err(format!(
+            "{path} is larger than {} KiB, the most a module may be",
+            MODULE_LIMIT / 1024
+        ));
+    }
+    std::fs::read_to_string(&file).map_err(|e| format!("{path} cannot be read: {e}"))
 }
 
 fn digest(algorithm: &str, data: &[u8]) -> Option<String> {

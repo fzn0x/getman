@@ -2,7 +2,7 @@
 //! variables, sending with authentication, post-response scripts, checks
 //! and captures.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use indexmap::IndexMap;
@@ -32,6 +32,9 @@ pub struct Overlay {
     pub collection: IndexMap<String, Option<String>>,
     /// Environment variables.
     pub environment: IndexMap<String, Option<String>>,
+    /// Session variables, which last while the UI server runs or for a
+    /// whole run.
+    pub session: IndexMap<String, Option<String>>,
     /// Local variables, which last for the run.
     pub local: IndexMap<String, Option<String>>,
 }
@@ -43,6 +46,7 @@ impl Overlay {
             ChangeScope::Global => &mut self.globals,
             ChangeScope::Collection => &mut self.collection,
             ChangeScope::Environment => &mut self.environment,
+            ChangeScope::Session => &mut self.session,
             ChangeScope::Local => &mut self.local,
         };
         map.insert(change.name.clone(), change.value.clone());
@@ -85,6 +89,9 @@ pub struct Context {
     pub settings: Settings,
     /// Stops the request while it is being sent.
     pub cancel: Option<Cancel>,
+    /// Runs no scripts, as `--no-scripts` asks. The workspace's own
+    /// setting (`scripts_off` in `getman.local.yaml`) does the same.
+    pub no_scripts: bool,
 }
 
 impl Default for Context {
@@ -98,6 +105,7 @@ impl Default for Context {
             script_timeout: script::DEFAULT_TIMEOUT,
             settings: Settings::default(),
             cancel: None,
+            no_scripts: false,
         }
     }
 }
@@ -168,6 +176,9 @@ pub struct Execution {
     pub warnings: Vec<String>,
     /// Whether a pre-request script skipped the request.
     pub skipped: bool,
+    /// Whether a script asked for the run to stop after this request.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub stop_run: bool,
     /// Where a run goes next, if a script said.
     pub next_request: Option<NextRequest>,
     /// Whether the request was cancelled while it was being sent.
@@ -196,6 +207,10 @@ pub struct Executor {
     pub http: Arc<HttpClient>,
     /// Authentication state, such as cached OAuth 2.0 tokens.
     pub authenticator: Arc<Authenticator>,
+    /// Session variables: set by scripts, and kept for as long as the
+    /// executor lives. The UI server's executor lives until it stops, so
+    /// they last that long; `getman run` makes one for the run.
+    session: Arc<Mutex<Vars>>,
 }
 
 impl Executor {
@@ -207,6 +222,52 @@ impl Executor {
             workspace,
             http: Arc::new(HttpClient::new()),
             authenticator: Arc::new(Authenticator::with_store(tokens)),
+            session: Arc::default(),
+        }
+    }
+
+    /// The session variables set so far.
+    pub fn session(&self) -> Vars {
+        self.session.lock().expect("session lock").clone()
+    }
+
+    /// Forgets every session variable.
+    pub fn clear_session(&self) {
+        self.session.lock().expect("session lock").clear();
+    }
+
+    /// Gives `context` the session variables it does not have its own
+    /// value for.
+    fn load_session(&self, context: &mut Context) {
+        let session = self.session.lock().expect("session lock");
+        for (name, value) in session.iter() {
+            context
+                .overlay
+                .session
+                .entry(name.clone())
+                .or_insert_with(|| Some(value.clone()));
+        }
+    }
+
+    /// A copy of `context` that also holds the session variables.
+    fn with_session(&self, context: &Context) -> Context {
+        let mut context = context.clone();
+        self.load_session(&mut context);
+        context
+    }
+
+    /// Keeps the session variables a request changed.
+    fn keep_session(&self, changes: &[VarChange]) {
+        let mut session = self.session.lock().expect("session lock");
+        for change in changes.iter().filter(|c| c.scope == ChangeScope::Session) {
+            match &change.value {
+                Some(value) => {
+                    session.insert(change.name.clone(), value.clone());
+                }
+                None => {
+                    session.shift_remove(&change.name);
+                }
+            }
         }
     }
 
@@ -230,6 +291,7 @@ impl Executor {
         request: &Request,
         context: &Context,
     ) -> Result<Transport> {
+        let context = &self.with_session(context);
         let chain = match path {
             Some(path) => self.workspace.folder_chain(path)?,
             None => vec![self.workspace.read_folder("")?],
@@ -253,6 +315,7 @@ impl Executor {
         request: &Request,
         context: &Context,
     ) -> Result<Prepared> {
+        let context = &self.with_session(context);
         if !request.kind.is_http() {
             return Err(crate::Error::Invalid(format!(
                 "this is a {} request, not HTTP",
@@ -284,6 +347,7 @@ impl Executor {
         request: &Request,
         context: &Context,
     ) -> Result<(Effective, VarStack)> {
+        let context = &self.with_session(context);
         let chain = match path {
             Some(path) => self.workspace.folder_chain(path)?,
             None => vec![self.workspace.read_folder("")?],
@@ -338,12 +402,14 @@ impl Executor {
             name: request.name.clone(),
             ..Execution::default()
         };
+        self.load_session(context);
         if let Err(e) = self
             .execute_inner(path, request, context, &mut execution)
             .await
         {
             execution.error = Some(e.to_string());
         }
+        self.keep_session(&execution.changes);
         execution
     }
 
@@ -381,6 +447,7 @@ impl Executor {
         let effective = Effective::new(&chain, &request);
         let settings = context.settings.clone().or(effective.settings.clone());
         let mut headers = effective.headers.clone();
+        let skip_scripts = skip_scripts(&files, context, &effective, execution);
 
         let info = ScriptInfo {
             request_name: request.name.clone(),
@@ -399,10 +466,11 @@ impl Executor {
             http: Some((Arc::clone(&self.http), tokio::runtime::Handle::current())),
             transport: early.unwrap_or_default(),
             timeout: context.script_timeout,
+            root: Some(self.workspace.root().to_path_buf()),
         };
 
         // Pre-request scripts.
-        if !effective.pre_request.is_empty() {
+        if !skip_scripts && !effective.pre_request.is_empty() {
             let input = ScriptInput {
                 event: Event::PreRequest,
                 info: info.clone(),
@@ -419,6 +487,7 @@ impl Executor {
                 if let Some(text) = &edited.body {
                     apply_body_text(&mut request.body, text);
                 }
+                apply_form_fields(&mut request.body, edited);
             }
             let failed = absorb(output, context, execution);
             if failed {
@@ -481,7 +550,7 @@ impl Executor {
         };
 
         // Post-response scripts, then checks and captures.
-        if !effective.post_response.is_empty() {
+        if !skip_scripts && !effective.post_response.is_empty() {
             let input = ScriptInput {
                 event: Event::PostResponse,
                 info,
@@ -533,6 +602,7 @@ impl Executor {
             collection,
             environment: environment_vars,
             environment_name,
+            scripts_off: local.scripts_off,
         })
     }
 
@@ -576,6 +646,7 @@ pub(crate) fn absorb(
     execution.tests.extend(output.tests);
     execution.logs.extend(output.logs);
     execution.skipped |= output.skip_request;
+    execution.stop_run |= output.stop_run;
     if output.next_request.is_some() {
         execution.next_request = output.next_request;
     }
@@ -591,6 +662,33 @@ pub(crate) struct FileVars {
     collection: Vars,
     environment: Vars,
     environment_name: Option<String>,
+    /// The workspace's setting that turns scripts off.
+    scripts_off: bool,
+}
+
+/// Whether scripts are off for this request. If they are and the request
+/// has some, says so in the result.
+pub(crate) fn skip_scripts(
+    files: &FileVars,
+    context: &Context,
+    effective: &Effective,
+    execution: &mut Execution,
+) -> bool {
+    let place = if context.no_scripts {
+        "for this run"
+    } else if files.scripts_off {
+        "in this workspace's settings on this machine"
+    } else {
+        return false;
+    };
+    let count = effective.pre_request.len() + effective.post_response.len();
+    if count > 0 {
+        execution.warnings.push(format!(
+            "Scripts are turned off {place}, so {count} {} did not run.",
+            if count == 1 { "script" } else { "scripts" }
+        ));
+    }
+    true
 }
 
 fn data_vars(data: &serde_json::Map<String, Value>) -> Vars {
@@ -619,6 +717,7 @@ pub(crate) fn var_stack(
     }
     stack.push(Scope::Request, request.variables.clone());
     stack.push(Scope::Data, data_vars(&context.data));
+    stack.push(Scope::Session, overlaid(&Vars::new(), &overlay.session));
     stack.push(Scope::Local, overlaid(&Vars::new(), &overlay.local));
     stack
 }
@@ -644,6 +743,7 @@ pub(crate) fn script_scopes(
         folder,
         request: request.variables.clone(),
         data: context.data.clone(),
+        session: overlaid(&Vars::new(), &overlay.session),
         local: overlaid(&Vars::new(), &overlay.local),
     }
 }
@@ -655,23 +755,27 @@ fn script_request(request: &Request, headers: &[crate::model::KeyValue]) -> Scri
             Some(ScriptBody {
                 mode: "raw".into(),
                 raw: Some(content.clone()),
+                ..ScriptBody::default()
             })
         }
         Body::Graphql { query, .. } => Some(ScriptBody {
             mode: "graphql".into(),
             raw: Some(query.clone()),
+            ..ScriptBody::default()
         }),
-        Body::Form { .. } => Some(ScriptBody {
+        Body::Form { fields } => Some(ScriptBody {
             mode: "urlencoded".into(),
-            raw: None,
+            urlencoded: Some(fields.clone()),
+            ..ScriptBody::default()
         }),
-        Body::Multipart { .. } => Some(ScriptBody {
+        Body::Multipart { fields } => Some(ScriptBody {
             mode: "formdata".into(),
-            raw: None,
+            formdata: Some(fields.clone()),
+            ..ScriptBody::default()
         }),
         Body::Binary { .. } => Some(ScriptBody {
             mode: "file".into(),
-            raw: None,
+            ..ScriptBody::default()
         }),
     };
     ScriptRequest {
@@ -679,6 +783,23 @@ fn script_request(request: &Request, headers: &[crate::model::KeyValue]) -> Scri
         url: request.url.clone(),
         headers: headers.to_vec(),
         body,
+    }
+}
+
+/// Puts the form fields a script edited into the body.
+pub(crate) fn apply_form_fields(body: &mut Body, edited: &script::EditedRequest) {
+    match body {
+        Body::Form { fields } => {
+            if let Some(edited) = &edited.urlencoded {
+                fields.clone_from(edited);
+            }
+        }
+        Body::Multipart { fields } => {
+            if let Some(edited) = &edited.formdata {
+                fields.clone_from(edited);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -726,7 +847,7 @@ pub(crate) async fn run_scripts(
 /// Saves variable changes to the workspace's git-ignored local files, so
 /// values such as tokens survive a restart: environment changes go to
 /// `<environment>.local.yaml`, workspace and global ones to
-/// `getman.local.yaml`. Local variables are not saved.
+/// `getman.local.yaml`. Session and local variables are not saved.
 pub fn persist_changes(
     workspace: &Workspace,
     environment: Option<&str>,
@@ -755,7 +876,7 @@ pub fn persist_changes(
                 Some(files) => &mut files.local,
                 None => continue,
             },
-            ChangeScope::Local => continue,
+            ChangeScope::Session | ChangeScope::Local => continue,
         };
         match &change.value {
             Some(value) => {
@@ -783,6 +904,17 @@ pub fn resolved_variables(
     request: &Request,
     environment: Option<&str>,
 ) -> Result<Vec<crate::vars::ResolvedVar>> {
+    resolved_variables_with(workspace, path, request, environment, &Vars::new())
+}
+
+/// Like [`resolved_variables`], with the session variables too.
+pub fn resolved_variables_with(
+    workspace: &Workspace,
+    path: Option<&str>,
+    request: &Request,
+    environment: Option<&str>,
+    session: &Vars,
+) -> Result<Vec<crate::vars::ResolvedVar>> {
     let executor_files = {
         let local = workspace.read_local_state()?;
         let meta = workspace.read_folder("")?;
@@ -799,16 +931,23 @@ pub fn resolved_variables(
             collection,
             environment: environment_vars,
             environment_name: None,
+            scripts_off: local.scripts_off,
         }
     };
     let chain = match path {
         Some(path) => workspace.folder_chain(path)?,
         None => vec![workspace.read_folder("")?],
     };
-    let context = Context {
+    let mut context = Context {
         environment: environment.map(str::to_owned),
         ..Context::default()
     };
+    for (name, value) in session {
+        context
+            .overlay
+            .session
+            .insert(name.clone(), Some(value.clone()));
+    }
     Ok(var_stack(&executor_files, &chain, request, &context).resolved())
 }
 
@@ -1042,6 +1181,200 @@ mod tests {
         assert!(execution.skipped);
         assert!(execution.request.is_none());
         assert!(!execution.failed());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn scripts_edit_the_fields_of_form_bodies_before_sending() {
+        let server = test_server::spawn().await;
+        let (_dir, executor) = setup();
+        let request = Request {
+            method: "POST".into(),
+            url: server.url("/echo"),
+            body: Body::Form {
+                fields: vec![
+                    KeyValue::new("grant_type", "password"),
+                    KeyValue::new("drop", "me"),
+                ],
+            },
+            scripts: Scripts {
+                pre_request: "const f = pm.request.body.urlencoded; \
+                    f.upsert({ key: 'grant_type', value: 'client credentials' }); \
+                    f.add({ key: 'scope', value: 'a&b' }); f.remove('drop');"
+                    .into(),
+                post_response: String::new(),
+            },
+            ..Request::default()
+        };
+        let execution = executor
+            .execute(None, &request, &mut Context::default())
+            .await;
+        assert!(!execution.failed(), "{execution:#?}");
+        let echo = execution.response.unwrap().json().unwrap();
+        assert_eq!(echo["body"], "grant_type=client+credentials&scope=a%26b");
+
+        let multipart = Request {
+            method: "POST".into(),
+            url: server.url("/echo"),
+            body: Body::Multipart {
+                fields: vec![crate::model::FormField {
+                    name: "title".into(),
+                    value: "Cat".into(),
+                    file: None,
+                    content_type: None,
+                    enabled: true,
+                }],
+            },
+            scripts: Scripts {
+                pre_request: "pm.request.body.formdata.upsert({ key: 'title', value: 'Dog' });"
+                    .into(),
+                post_response: String::new(),
+            },
+            ..Request::default()
+        };
+        let execution = executor
+            .execute(None, &multipart, &mut Context::default())
+            .await;
+        assert!(!execution.failed(), "{execution:#?}");
+        let echo = execution.response.unwrap().json().unwrap();
+        let body = echo["body"].as_str().unwrap();
+        assert!(body.contains("Dog") && !body.contains("Cat"), "{body}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn session_variables_outlive_a_request_but_are_not_saved() {
+        let server = test_server::spawn().await;
+        let (_dir, executor) = setup();
+        let setter = Request {
+            url: server.url("/echo"),
+            scripts: Scripts {
+                pre_request: String::new(),
+                post_response: "gm.session.set('token', 'abc'); gm.variables.set('mine', 'local');"
+                    .into(),
+            },
+            ..Request::default()
+        };
+        let reader = Request {
+            url: server.url("/echo/{{token}}-{{mine}}"),
+            scripts: Scripts {
+                pre_request: "gm.session.set('mine', 'session');".into(),
+                post_response:
+                    "gm.test('sees it', () => gm.expect(gm.session.get('token')).to.equal('abc'));"
+                        .into(),
+            },
+            ..Request::default()
+        };
+        let mut context = Context::default();
+        let first = executor.execute(None, &setter, &mut context).await;
+        assert!(!first.failed(), "{first:#?}");
+        assert_eq!(
+            context.overlay.session.get("token"),
+            Some(&Some("abc".to_owned()))
+        );
+        assert!(
+            first
+                .changes
+                .iter()
+                .any(|c| c.scope == ChangeScope::Session)
+        );
+
+        // A new context sees the session through the executor, but not the
+        // local variable of the first request.
+        assert_eq!(
+            executor.session().get("token").map(String::as_str),
+            Some("abc")
+        );
+        let mut next = Context::default();
+        let second = executor.execute(None, &reader, &mut next).await;
+        assert!(!second.failed(), "{second:#?}");
+        assert_eq!(second.tests.len(), 1);
+        let echo = second.response.unwrap().json().unwrap();
+        assert_eq!(echo["path"], "/echo/abc-session");
+
+        persist_changes(&executor.workspace, None, &first.changes).unwrap();
+        let state = executor.workspace.read_local_state().unwrap();
+        assert!(state.variables.is_empty() && state.globals.is_empty());
+
+        executor.clear_session();
+        assert!(executor.session().is_empty());
+    }
+
+    #[test]
+    fn local_beats_session_beats_data() {
+        let mut context = Context::default();
+        context.data.insert("x".into(), Value::from("data"));
+        let files = FileVars::default();
+        let stack = var_stack(&files, &[], &Request::default(), &context);
+        assert_eq!(stack.lookup("x"), Some((Scope::Data, "data")));
+        context
+            .overlay
+            .session
+            .insert("x".into(), Some("session".into()));
+        let stack = var_stack(&files, &[], &Request::default(), &context);
+        assert_eq!(stack.lookup("x"), Some((Scope::Session, "session")));
+        context
+            .overlay
+            .local
+            .insert("x".into(), Some("local".into()));
+        let stack = var_stack(&files, &[], &Request::default(), &context);
+        assert_eq!(stack.lookup("x"), Some((Scope::Local, "local")));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn scripts_can_be_turned_off_and_the_result_says_so() {
+        let server = test_server::spawn().await;
+        let (_dir, executor) = setup();
+        let request = Request {
+            url: server.url("/echo"),
+            scripts: Scripts {
+                pre_request: "throw new Error('should not run');".into(),
+                post_response: "gm.test('nope', () => {});".into(),
+            },
+            ..Request::default()
+        };
+
+        let mut context = Context {
+            no_scripts: true,
+            ..Context::default()
+        };
+        let execution = executor.execute(None, &request, &mut context).await;
+        assert!(!execution.failed(), "{execution:#?}");
+        assert!(execution.response.is_some());
+        assert!(execution.tests.is_empty());
+        assert_eq!(
+            execution.warnings,
+            ["Scripts are turned off for this run, so 2 scripts did not run."]
+        );
+
+        // The setting in the workspace's local state does the same.
+        let state = crate::workspace::LocalState {
+            scripts_off: true,
+            ..crate::workspace::LocalState::default()
+        };
+        executor.workspace.write_local_state(&state).unwrap();
+        let execution = executor
+            .execute(None, &request, &mut Context::default())
+            .await;
+        assert!(!execution.failed(), "{execution:#?}");
+        assert!(execution.warnings[0].contains("in this workspace's settings"));
+
+        // A request without scripts has nothing to note.
+        let plain = Request {
+            url: server.url("/echo"),
+            ..Request::default()
+        };
+        let execution = executor
+            .execute(None, &plain, &mut Context::default())
+            .await;
+        assert!(execution.warnings.is_empty());
+
+        executor
+            .workspace
+            .write_local_state(&crate::workspace::LocalState::default())
+            .unwrap();
+        let execution = executor
+            .execute(None, &request, &mut Context::default())
+            .await;
+        assert!(execution.failed());
     }
 
     #[test]

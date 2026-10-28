@@ -34,6 +34,8 @@ pub struct RunOptions {
     pub bail: bool,
     /// Variables that override every scope at the start.
     pub vars: Vars,
+    /// Runs no scripts.
+    pub no_scripts: bool,
     /// How long one script may run.
     pub script_timeout: Duration,
     /// Transport settings that override every file's.
@@ -51,6 +53,7 @@ impl Default for RunOptions {
             delay: Duration::ZERO,
             bail: false,
             vars: Vars::new(),
+            no_scripts: false,
             script_timeout: crate::script::DEFAULT_TIMEOUT,
             settings: Settings::default(),
         }
@@ -258,6 +261,7 @@ pub async fn run(
             script_timeout: options.script_timeout,
             settings: options.settings.clone(),
             cancel: None,
+            no_scripts: options.no_scripts,
         };
         let mut index = 0;
         let mut steps = 0;
@@ -311,6 +315,7 @@ pub async fn run(
                 responses += 1;
             }
             let failed = execution.failed();
+            let stop = execution.stop_run;
             let next = execution.next_request.clone();
             on_event(RunEvent::Request {
                 iteration,
@@ -323,6 +328,11 @@ pub async fn run(
                     "{} failed and the run stops at the first failure",
                     item.name
                 ));
+                overlay = context.overlay;
+                break 'iterations;
+            }
+            if stop {
+                summary.stopped = Some(format!("{} stopped the run", item.name));
                 overlay = context.overlay;
                 break 'iterations;
             }
@@ -440,6 +450,92 @@ mod tests {
         assert!(paths[0].ends_with("/echo/ada"), "{paths:?}");
         assert!(paths[2].ends_with("/echo/grace"), "{paths:?}");
         assert!(matches!(events.last(), Some(RunEvent::Finish { .. })));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn session_variables_last_for_the_whole_run() {
+        let server = test_server::spawn().await;
+        let (_dir, executor) = setup(&server.url(""));
+        let ws = &executor.workspace;
+        // Each iteration adds to the session, so the third one sees what the
+        // first two set.
+        ws.create_request(
+            "",
+            "Count",
+            &request(
+                "{{base}}/echo/{{count}}",
+                &[],
+                "const n = Number(gm.session.get('count') || 0) + 1; gm.session.set('count', n); \
+                 gm.test('counted ' + n, () => gm.expect(gm.variables.get('count')).to.equal(n));",
+            ),
+        )
+        .unwrap();
+        let options = RunOptions {
+            iterations: Some(3),
+            ..RunOptions::default()
+        };
+        let mut names = Vec::new();
+        let report = run(&executor, &options, &AtomicBool::new(false), |event| {
+            if let RunEvent::Request { execution, .. } = event {
+                names.extend(execution.tests.iter().map(|t| (t.name.clone(), t.passed)));
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            names,
+            [
+                ("counted 1".to_owned(), true),
+                ("counted 2".to_owned(), true),
+                ("counted 3".to_owned(), true)
+            ]
+        );
+        assert_eq!(
+            report.overlay.session.get("count"),
+            Some(&Some("3".to_owned()))
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn stop_execution_finishes_the_request_and_ends_the_run() {
+        let server = test_server::spawn().await;
+        let (_dir, executor) = setup(&server.url(""));
+        let ws = &executor.workspace;
+        ws.create_request(
+            "",
+            "1 stops",
+            &request(
+                "{{base}}/echo",
+                &["status == 200"],
+                "gm.test('still runs', () => {}); bru.runner.stopExecution();",
+            ),
+        )
+        .unwrap();
+        ws.create_request("", "2 never runs", &request("{{base}}/echo", &[], ""))
+            .unwrap();
+        let options = RunOptions {
+            iterations: Some(3),
+            ..RunOptions::default()
+        };
+        let mut seen = Vec::new();
+        let report = run(&executor, &options, &AtomicBool::new(false), |event| {
+            if let RunEvent::Request { execution, .. } = event {
+                seen.push((
+                    execution.name.clone(),
+                    execution.stop_run,
+                    execution.checks.len(),
+                ));
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(seen, [("1 stops".to_owned(), true, 1)]);
+        assert_eq!(report.summary.iterations, 1);
+        assert_eq!(report.summary.tests_passed, 1);
+        assert_eq!(
+            report.summary.stopped.as_deref(),
+            Some("1 stops stopped the run")
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

@@ -12,7 +12,7 @@ use axum::extract::{DefaultBodyLimit, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
-use getman_core::execute::{Cancel, Context, persist_changes, resolved_variables};
+use getman_core::execute::{Cancel, Context, persist_changes, resolved_variables_with};
 use getman_core::export::{codegen, openapi, postman};
 use getman_core::http::{CookieInfo, Payload};
 use getman_core::import::{self, SourceFile, curl};
@@ -65,6 +65,7 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/export", post(export))
         .route("/variables", post(variables))
         .route("/variables/set", post(set_variable))
+        .route("/session/clear", post(clear_session))
         .route("/dynamic", get(dynamic))
         .route("/run", post(run))
         .route("/run/cancel", post(cancel_run))
@@ -565,11 +566,12 @@ async fn languages() -> Json<Value> {
 /// secret come with `"secret": true`, so the UI can mask them.
 async fn variables(State(state): Shared, Json(arg): Json<PrepareArg>) -> ApiResult {
     let environment = arg.environment.as_deref().filter(|e| !e.is_empty());
-    let resolved = resolved_variables(
+    let resolved = resolved_variables_with(
         state.workspace(),
         arg.path.as_deref().filter(|p| !p.is_empty()),
         &arg.request,
         environment,
+        &state.executor.session(),
     )?;
     let secrets = match environment {
         Some(id) => state.workspace().read_environment(id)?.shared.secrets,
@@ -634,6 +636,12 @@ async fn set_variable(State(state): Shared, Json(arg): Json<SetVariable>) -> Api
     Ok(done())
 }
 
+/// Forgets the session variables scripts set.
+async fn clear_session(State(state): Shared) -> ApiResult {
+    state.executor.clear_session();
+    Ok(done())
+}
+
 async fn dynamic() -> Json<Value> {
     Json(json!(
         getman_core::dynamic::NAMES
@@ -668,11 +676,12 @@ fn oauth_settings(
         ..Request::default()
     };
     let path = arg.path.as_deref().filter(|p| !p.is_empty());
-    let resolved = resolved_variables(
+    let resolved = resolved_variables_with(
         state.workspace(),
         path,
         &request,
         arg.environment.as_deref().filter(|e| !e.is_empty()),
+        &state.executor.session(),
     )?;
     let mut vars = getman_core::VarStack::new();
     vars.push(

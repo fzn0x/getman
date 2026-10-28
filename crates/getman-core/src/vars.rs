@@ -10,7 +10,9 @@
 //! 4. folders, outermost first
 //! 5. the request
 //! 6. the current row of a data file, in a run
-//! 7. local variables set by scripts with `gm.variables.set`
+//! 7. session variables set by scripts with `gm.session.set`, which last
+//!    while the UI server runs or for a whole `getman run`
+//! 8. local variables set by scripts with `gm.variables.set`
 //!
 //! Besides variables, `{{$name}}` produces a dynamic value such as a UUID
 //! or a timestamp (see [`crate::dynamic`]), and `{{$env.GETMAN_NAME}}`
@@ -47,6 +49,8 @@ pub enum Scope {
     Request,
     /// The current row of a data file.
     Data,
+    /// Set by a script; lasts while the UI server runs, or for a run.
+    Session,
     /// Set by a script for the rest of the run.
     Local,
 }

@@ -88,20 +88,44 @@ use them.
 
 ## Secrets
 
-Every result is scrubbed before it reaches the agent. These values are
-replaced by `[secret]` wherever they appear, in URLs, headers, bodies,
-messages and logs:
+Every result is scrubbed before it reaches the agent. A value is
+**secret** if it is:
 
-- everything in `getman.local.yaml` and `environments/*.local.yaml`;
-- variables an environment lists under `secrets`;
-- the values of `GETMAN_*` environment variables of the process.
+- any value in `getman.local.yaml` (variables and globals) or in an
+  environment's `.local.yaml` file;
+- the value of a variable an environment lists under `secrets`;
+- the value of an environment variable of the process named `GETMAN_*`.
 
-Values shorter than 4 characters are left alone, since hiding every `1`
-or `true` would hide nothing. Only exact values are replaced, so
-`send_request` does not return the headers it sent: a Basic
-`Authorization` header holds the password in Base64. A response that
-echoes a secret in another form, encoded or hashed, is not caught, so
-treat responses from APIs that do that with care.
+Nothing else is treated as secret. In particular, a value you typed
+straight into a request file, or a token a script keeps in memory with
+`gm.session`, is not known to be secret: keep such values in a
+`.local.yaml` file, or list the variable under `secrets`, if they should
+stay hidden.
+
+A secret is replaced by `[secret]` wherever it appears in the text of a
+result: URLs, headers, bodies, messages, logs and field names. It does
+not matter how long the secret is or what surrounds it: `Bearer abc123`,
+`key=abc123&x=1` and `xabc123y` are all masked. The same goes for its
+other forms:
+
+- JSON-escaped, as it looks inside a body that is itself a JSON string;
+- percent-encoded, in either case, with `%20` or `+` for a space;
+- hexadecimal, in either case;
+- Base64 and Base64URL, with or without padding, also when the secret
+  sits inside a longer text that was encoded as a whole, such as the
+  `user:secret` of a Basic `Authorization` header. The part of the
+  encoded text that belongs to the secret is masked and the rest stays.
+
+Because every length counts, a very short secret hides every occurrence
+of itself, and the results around it can look garbled. A one-character
+value in a local file is masked like any other. Give secrets a real
+length. Remember that every `GETMAN_*` variable of the process counts,
+also one that only sets an option, such as `GETMAN_ENVIRONMENT=dev`:
+the word `dev` is masked in results too.
+
+Hashes and encryption are not undone: a response that echoes a hash or a
+signature of a secret, or the secret in a form not listed here, is not
+caught, so treat responses from APIs that do that with care.
 
 An agent can still send requests with your credentials: that is what it
 is for. Keep your app's approval prompts on for `send_request`,
