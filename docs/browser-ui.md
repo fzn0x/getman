@@ -19,6 +19,7 @@ on another port, starts with none.
 | Keys | Does |
 | --- | --- |
 | <kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>T</kbd> | Reopen the tab closed last, with its unsaved changes |
+| <kbd>Alt</kbd> <kbd>A</kbd> | Search the open and recently closed tabs |
 | <kbd>Shift</kbd> <kbd>←</kbd> <kbd>→</kbd> | On a focused tab: move it |
 | <kbd>Del</kbd> | On a focused tab: close it |
 
@@ -27,6 +28,17 @@ tabs; Getman answers it too where the browser lets it through. Drag a tab
 to move it. Right-click one, or press the menu key on it, to close
 others, close those to the right, close all, duplicate a request, reveal
 the item in the sidebar or copy its path.
+
+### Searching tabs
+
+<kbd>Alt</kbd> <kbd>A</kbd>, the search button beside the tabs, or
+**Search open and recently closed tabs** in the palette lists the open
+tabs in order, then the last 20 you closed, newest first. Type to
+filter by name and path: the letters you type must appear in that
+order, so `usrlst` finds `users/list.yaml`. <kbd>↑</kbd> <kbd>↓</kbd>
+choose and <kbd>Enter</kbd> switches to an open tab, or reopens a closed
+one with the changes it had. A tab with changes that are not saved says
+so.
 
 ## Sidebar
 
@@ -40,6 +52,13 @@ the item in the sidebar or copy its path.
   clears them. The menu of a picked item then duplicates, moves or
   deletes them all; <kbd>Del</kbd> deletes them and dragging one moves
   them all.
+- <kbd>Ctrl</kbd> <kbd>Z</kbd> outside a text field undoes the latest
+  rename or move, drag moves included, and <kbd>Ctrl</kbd>
+  <kbd>Shift</kbd> <kbd>Z</kbd> (or <kbd>Ctrl</kbd> <kbd>Y</kbd>) does it
+  again. The notice that follows each one has an **Undo** button too.
+  Getman keeps the last 20 for as long as the page is open; reloading it
+  starts the list empty. A delete is undone from its own notice or the
+  trash, below.
 
 ## The trash
 
@@ -52,6 +71,28 @@ deletes everything in it for good, after asking.
 
 `.getman/` has its own `.gitignore`, so the trash is never committed. The
 [terminal UI](terminal.md) deletes into the same trash.
+
+## Console
+
+**Console** in the status bar, or <kbd>Ctrl</kbd> <kbd>J</kbd>
+(<kbd>Cmd</kbd> <kbd>J</kbd> on a Mac), opens a log of everything this
+window sent, newest at the bottom: HTTP and GraphQL requests, gRPC calls,
+GraphQL schema reads, and one line for each WebSocket, event stream or
+Socket.IO connection once it closes, with how long it lasted and how many
+messages it carried. Each line shows the method, URL, status, time and
+size. Choose one for its request and response headers and bodies, the
+script's `console` output, warnings, failed checks and the error that
+stopped it, and **Copy** to take it all as text.
+
+- The box filters by URL, method, status or any word of the line, and
+  every word must match. **Errors only** keeps what failed: an error, a
+  status of 400 or more, a failed script or check. The kind buttons hide
+  HTTP, GraphQL, gRPC or realtime lines.
+- **Clear** empties it. Drag the top edge, or use <kbd>↑</kbd> and
+  <kbd>↓</kbd> on it, to change its height.
+- The log lives in the page's memory and nowhere else: it is not written
+  to disk, and reloading the page clears it. It keeps the last 2000
+  lines, and the first 16 KB of each body.
 
 ## History
 
