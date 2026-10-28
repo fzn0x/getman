@@ -1,6 +1,10 @@
 //! The terminal UI: the same workspace, keyboard first, over SSH too.
 
 mod app;
+mod oauth;
+mod stream;
+#[cfg(test)]
+mod tests;
 mod text;
 mod view;
 
@@ -33,7 +37,15 @@ pub(crate) async fn run(workspace: Workspace) -> Result<(), String> {
                 Some(Err(e)) => break Err(e.to_string()),
                 None => break Ok(()),
             },
-            Some(message) = rx.recv() => app.on_message(message),
+            Some(message) = rx.recv() => {
+                app.on_message(message);
+                // A busy connection sends faster than the screen needs
+                // drawing: take what is waiting before the next draw.
+                for _ in 0..500 {
+                    let Ok(message) = rx.try_recv() else { break };
+                    app.on_message(message);
+                }
+            }
             _ = tick.tick() => app.spinner = app.spinner.wrapping_add(1),
         }
         if let Some(edit) = app.edit.take() {
