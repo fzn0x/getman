@@ -19,12 +19,23 @@ You do not run it yourself: you tell your agent's app how to start it.
 From your project:
 
 ```sh
-claude mcp add getman -- getman mcp
+claude mcp add --transport stdio getman -- getman mcp
 ```
 
-If the workspace is not at the top of the project, name it, as in
-`getman mcp api`. To share the setup with everyone working on the
-project, add `--scope project`, which writes it to `.mcp.json`:
+Everything after the `--` is the command that starts the server, so
+Claude Code's own options, such as `--transport` and `--scope`, go before
+it. If the workspace is not at the top of the project, name it, as in
+`getman mcp api`.
+
+By default the server is yours alone, in this project: Claude Code keeps
+it in `~/.claude.json` (the `local` scope). With `--scope user` it is
+available in all your projects, and with `--scope project` it is written
+to `.mcp.json` at the top of the project, to commit and share with
+everyone working on it:
+
+```sh
+claude mcp add --transport stdio --scope project getman -- getman mcp api
+```
 
 ```json
 {
@@ -37,14 +48,31 @@ project, add `--scope project`, which writes it to `.mcp.json`:
 }
 ```
 
+Claude Code asks for your approval before it uses a server from a
+`.mcp.json` it did not write. `claude mcp list` shows the servers and
+whether they connect, and `/mcp` does the same inside a session.
+`getman` must be on the `PATH` that Claude Code starts with; if it is
+not, use its full path as the command.
+
 Then ask, for example, "send users/me.yaml with the staging environment
 and tell me why the check fails".
 
+These steps follow Claude Code's documentation,
+[Connect Claude Code to tools via MCP](https://code.claude.com/docs/en/mcp).
+
 ## Claude Desktop
 
-Open **Settings**, then **Developer**, then **Edit Config**, and add
-Getman to `claude_desktop_config.json`. Give full paths, because the app
-does not start in your project:
+Open the Claude menu, then **Settings**, then **Developer**, then
+**Edit Config**. That opens `claude_desktop_config.json`, creating it if
+it is not there yet:
+
+| System | File |
+| --- | --- |
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
+
+Add Getman to it. Give full paths, because the app does not start in your
+project:
 
 ```json
 {
@@ -60,7 +88,14 @@ does not start in your project:
 The install script puts Getman in `~/.local/bin` on Linux and macOS, and
 in `%LOCALAPPDATA%\Programs\getman` on Windows, where the command reads
 `C:\\Users\\Ada\\AppData\\Local\\Programs\\getman\\getman.exe`, with the
-backslashes doubled in JSON. Restart the app afterwards.
+backslashes doubled in JSON. Quit the app completely and start it again
+afterwards. If Getman does not appear, the app's logs say why:
+`mcp.log` has the connection attempts, and `mcp-server-getman.log` has
+what `getman mcp` wrote to standard error, in `~/Library/Logs/Claude` on
+macOS and `%APPDATA%\Claude\logs` on Windows.
+
+These steps follow the Model Context Protocol's guide,
+[Connect to local MCP servers](https://modelcontextprotocol.io/docs/develop/connect-local-servers).
 
 ## Other MCP clients
 
@@ -68,6 +103,16 @@ Any client that starts servers over standard input and output takes the
 same two things: the command `getman`, or its full path, and the
 arguments `mcp` and the workspace directory. Getman writes only protocol
 messages to standard output; notes go to standard error.
+
+To try the server without an agent, use the
+[MCP Inspector](https://github.com/modelcontextprotocol/inspector)'s
+command line from a workspace:
+
+```sh
+npx @modelcontextprotocol/inspector --cli getman mcp . --method tools/list
+npx @modelcontextprotocol/inspector --cli getman mcp . \
+  --method tools/call --tool-name send_request --tool-arg path=users/me.yaml
+```
 
 ## Tools
 
