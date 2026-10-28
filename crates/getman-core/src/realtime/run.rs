@@ -298,7 +298,7 @@ impl Executor {
         request: &Request,
         context: &mut Context,
         plan: Plan,
-        on_event: &mut dyn FnMut(&StreamEvent) -> bool,
+        on_event: &mut (dyn FnMut(&StreamEvent) -> bool + Send),
     ) -> Execution {
         let mut execution = Execution {
             path: path.map(str::to_owned),
@@ -538,7 +538,7 @@ pub(crate) async fn execute(
     context: &mut Context,
     execution: &mut Execution,
     plan: Plan,
-    on_event: &mut dyn FnMut(&StreamEvent) -> bool,
+    on_event: &mut (dyn FnMut(&StreamEvent) -> bool + Send),
 ) -> Result<()> {
     let Some(ready) = executor
         .before_connect(path, request, context, execution)
@@ -571,7 +571,7 @@ async fn drive(
     plan: Plan,
     cancel: Option<crate::execute::Cancel>,
     recorder: &mut Recorder,
-    on_event: &mut dyn FnMut(&StreamEvent) -> bool,
+    on_event: &mut (dyn FnMut(&StreamEvent) -> bool + Send),
 ) {
     let control = session.control();
     let mut outbound = plan.send;

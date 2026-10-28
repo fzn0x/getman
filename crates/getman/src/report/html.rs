@@ -197,13 +197,46 @@ fn request(
         } else {
             0
         };
+        if let Some(call) = &execution.realtime {
+            let _ = writeln!(
+                page,
+                "<p class=\"timing\"><span class=\"bar\"><span style=\"width:{width}%\"></span></span>{} to connect · open for {} · {} received</p>",
+                style::duration(response.time_ms),
+                style::duration(call.duration_ms),
+                style::size(response.size.body)
+            );
+        } else {
+            let _ = writeln!(
+                page,
+                "<p class=\"timing\"><span class=\"bar\"><span style=\"width:{width}%\"></span></span>{} total · {} to the first byte · {} body</p>",
+                style::duration(response.time_ms),
+                style::duration(response.headers_ms),
+                style::size(response.size.body)
+            );
+        }
+    }
+    if let Some(call) = &execution.realtime
+        && !call.messages.is_empty()
+    {
         let _ = writeln!(
             page,
-            "<p class=\"timing\"><span class=\"bar\"><span style=\"width:{width}%\"></span></span>{} total · {} to the first byte · {} body</p>",
-            style::duration(response.time_ms),
-            style::duration(response.headers_ms),
-            style::size(response.size.body)
+            "<h3>Messages <span class=\"count\">{}</span></h3>\n<ul class=\"results\">",
+            call.messages.len()
         );
+        for message in &call.messages {
+            let (arrow, class) = match message.direction {
+                getman_core::realtime::Direction::Sent => ("→", "skip"),
+                getman_core::realtime::Direction::Received => ("←", "pass"),
+            };
+            let shown: String = message.data.chars().take(300).collect();
+            let _ = writeln!(
+                page,
+                "<li class=\"{class}\"><span class=\"mark\">{arrow}</span><span class=\"check\">{}</span><span class=\"why\">{} ms</span></li>",
+                escape(&shown),
+                message.time.round()
+            );
+        }
+        page.push_str("</ul>\n");
     }
 
     let reasons = failures(execution);
@@ -379,5 +412,42 @@ mod tests {
         assert!(html.contains("Could not connect"), "{html}");
         assert!(html.contains("<strong>Failed.</strong>"), "{html}");
         assert!(html.contains("staging environment"), "{html}");
+    }
+
+    #[test]
+    fn a_connection_shows_its_messages() {
+        use getman_core::realtime::{Direction, Entry, RealtimeCall};
+
+        let mut recorded = super::super::sample();
+        let entry = |direction, data: &str, time| Entry {
+            direction,
+            data: data.into(),
+            time,
+            size: data.len() as u64,
+            binary: false,
+            name: None,
+            event: None,
+            id: None,
+            ack: None,
+        };
+        let mut execution = recorded.requests[0].1.clone();
+        execution.checks.clear();
+        execution.realtime = Some(RealtimeCall {
+            opened: true,
+            duration_ms: 1200.0,
+            messages: vec![
+                entry(Direction::Sent, "join <room>", 1.0),
+                entry(Direction::Received, "welcome", 14.0),
+            ],
+            ..RealtimeCall::default()
+        });
+        recorded.requests = vec![(0, execution)];
+        let html = render(&recorded);
+        assert!(
+            html.contains("<h3>Messages <span class=\"count\">2</span></h3>"),
+            "{html}"
+        );
+        assert!(html.contains("join &lt;room&gt;"), "{html}");
+        assert!(html.contains("to connect · open for"), "{html}");
     }
 }
