@@ -85,10 +85,11 @@ struct ReflectionError {
 }
 
 /// Reads the server's schema: every service it lists, the files that
-/// define them and the files those import.
+/// define them and the files those import. `metadata` gives the metadata
+/// to send to a reflection method, by its path.
 pub(crate) async fn reflect(
     connection: &mut Connection,
-    metadata: &[Header],
+    metadata: &(dyn Fn(&str) -> Result<Vec<Header>> + Sync),
     timeout: Duration,
 ) -> Result<DescriptorPool> {
     for path in [V1, V1ALPHA] {
@@ -112,11 +113,12 @@ pub(crate) async fn reflect(
 /// server does not implement that version.
 async fn reflect_with(
     connection: &mut Connection,
-    metadata: &[Header],
+    metadata: &(dyn Fn(&str) -> Result<Vec<Header>> + Sync),
     timeout: Duration,
     path: &str,
 ) -> Result<Option<DescriptorPool>> {
-    let mut call = connection.start(path, metadata, Some(timeout)).await?;
+    let metadata = metadata(path)?;
+    let mut call = connection.start(path, &metadata, Some(timeout)).await?;
     let services = match ask(&mut call, Ask::ListServices("*".into())).await? {
         Some(Answer::Services(list)) => {
             list.service.into_iter().map(|s| s.name).collect::<Vec<_>>()

@@ -69,7 +69,7 @@ pub(super) fn apply(s: &EdgeGrid, outgoing: &mut Outgoing, now: SystemTime) -> R
 }
 
 /// The header for a given timestamp and nonce.
-fn authorization(
+pub(super) fn authorization(
     s: &EdgeGrid,
     outgoing: &Outgoing,
     timestamp: &str,
