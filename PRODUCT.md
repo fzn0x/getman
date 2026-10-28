@@ -28,20 +28,24 @@ Getman is a local-first, open-source API client. Send HTTP requests, inspect res
 
 ## Operating Context
 
-- Launched from a terminal inside a repository (`getman`), which opens the browser UI on 127.0.0.1; often side by side with an editor and a terminal on one screen, or on a laptop screen alone.
+- Opened as a desktop app, or launched from a terminal inside a repository (`getman`), which opens the browser UI on 127.0.0.1; often side by side with an editor and a terminal on one screen, or on a laptop screen alone.
 - Workflows: compose and send a request; edit params, headers, body, auth, scripts and checks; read the response (pretty JSON, raw, headers, cookies, tests, console); switch environments; organise requests into folders; run a folder or the whole workspace; import from Postman or a pasted cURL command; copy a request as code; revisit history.
 - The same files are edited by hand in an editor and changed by `git checkout`; the UI must tolerate files changing underneath it.
 
 ## Capabilities and Constraints
 
 - Requests: any method; URL with `{{variables}}`, query and `:path` parameters; headers; bodies: JSON, XML, text, URL-encoded form, multipart with files, binary file, GraphQL.
-- Auth: inherit, none, Basic, Bearer, API key (header or query), Digest, OAuth 2.0 (client credentials, password).
+- Protocols: HTTP/1.1, HTTP/2 and HTTP/3; gRPC (unary and streaming, from `.proto` files or reflection); WebSocket, Server-Sent Events and Socket.IO.
+- Auth: inherit, none, Basic, Bearer, API key (header or query), Digest, OAuth 2.0 (authorization code with PKCE, implicit, client credentials, password, refresh), OAuth 1.0a, AWS Signature v4, JWT, ASAP, Hawk, Akamai EdgeGrid.
+- Connections: proxies, client certificates and extra CAs, a cookie jar kept between runs, a timing and TLS breakdown of each response, cancel.
 - Variables: globals < workspace < environment < folders < request < data row < script locals; dynamic values like `{{$uuid}}`.
 - Scripts: JavaScript pre-request and post-response scripts with the `gm` API; declarative checks (`status == 200`) and captures (`token: json.access_token`).
-- Runner: iterations, CSV/JSON data, delay, bail, cancel; streamed results.
-- Code export: cURL, HTTPie, PowerShell, fetch, Python, Go, Rust, Java.
+- Runner: iterations, CSV/JSON data, delay, bail, cancel; streamed results; CLI, JSON, JUnit, HTML, CSV and XLSX reports; the last 20 runs kept.
+- Examples and mocks: saved responses on requests, served by `getman mock`; `getman mcp` serves the workspace to AI agents.
+- Import: Postman, OpenAPI and Swagger, HAR, Insomnia, Hoppscotch, Bruno, cURL. Export: Postman collections and environments, OpenAPI 3.1.
+- Code export: cURL, HTTPie, Wget, PowerShell, raw HTTP, fetch, axios, Node.js, Python, Go, Rust, Java, Kotlin, C#, Swift, PHP, Ruby, Dart, and grpcurl for gRPC; optionally with `{{variables}}` kept.
 - The UI talks only to its own local server (`/api/*`); it may not load anything from the internet.
-- Not built: WebSocket, gRPC, mock servers, cloud sync, team accounts. Do not imply them.
+- Not built: MQTT, hosted mocks and monitors, cloud sync, team accounts. Do not imply them.
 
 ## Brand Commitments
 
