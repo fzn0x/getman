@@ -176,6 +176,10 @@ pub struct Execution {
     /// The call, for a gRPC request.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub grpc: Option<crate::grpc::GrpcCall>,
+    /// The connection, for a WebSocket, Server-Sent Events or Socket.IO
+    /// request.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub realtime: Option<crate::realtime::RealtimeCall>,
 }
 
 impl Execution {
@@ -363,13 +367,18 @@ impl Executor {
                 ))
                 .await;
             }
-            kind => {
-                execution.skipped = true;
-                execution.warnings.push(format!(
-                    "{} requests stay open, so they are skipped here; connect to them with `getman send` or in the browser UI",
-                    kind.label()
-                ));
-                return Ok(());
+            _ => {
+                // Boxed, like a gRPC call's future.
+                return Box::pin(crate::realtime::execute(
+                    self,
+                    path,
+                    request,
+                    context,
+                    execution,
+                    crate::realtime::Plan::of(request),
+                    &mut |_| true,
+                ))
+                .await;
             }
         }
         let chain = match path {
@@ -409,6 +418,7 @@ impl Executor {
                 scopes: script_scopes(&files, &chain, &request, context),
                 request: script_request(&request, &headers),
                 response: None,
+                messages: None,
                 cookies: self.cookies_for(&request.url, &files, &chain, context),
             };
             let output = run_scripts(host.clone(), effective.pre_request.clone(), input).await;
@@ -488,6 +498,7 @@ impl Executor {
                 scopes: script_scopes(&files, &chain, &request, context),
                 request: script_request(&request, &headers),
                 response: Some(ScriptResponse::from(&response)),
+                messages: None,
                 cookies: self.cookies_for(&request.url, &files, &chain, context),
             };
             let output = run_scripts(host, effective.post_response.clone(), input).await;
@@ -536,7 +547,7 @@ impl Executor {
         })
     }
 
-    fn cookies_for(
+    pub(crate) fn cookies_for(
         &self,
         raw_url: &str,
         files: &FileVars,
@@ -648,7 +659,10 @@ pub(crate) fn script_scopes(
     }
 }
 
-fn script_request(request: &Request, headers: &[crate::model::KeyValue]) -> ScriptRequest {
+pub(crate) fn script_request(
+    request: &Request,
+    headers: &[crate::model::KeyValue],
+) -> ScriptRequest {
     let body = match &request.body {
         Body::None => None,
         Body::Json { content } | Body::Xml { content } | Body::Text { content, .. } => {
@@ -1001,28 +1015,6 @@ mod tests {
         let error = execution.error.unwrap();
         assert!(error.contains("missing.pem"), "{error}");
         assert!(execution.request.is_some());
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn realtime_requests_are_skipped_with_a_reason() {
-        let (_dir, executor) = setup();
-        let request = Request {
-            kind: crate::model::RequestKind::Websocket,
-            url: "ws://127.0.0.1:9/".into(),
-            checks: vec!["status == 101".into()],
-            ..Request::default()
-        };
-        let execution = executor
-            .execute(None, &request, &mut Context::default())
-            .await;
-        assert!(execution.skipped);
-        assert!(execution.request.is_none());
-        assert!(!execution.failed());
-        assert!(
-            execution.warnings[0].starts_with("WebSocket requests stay open"),
-            "{:?}",
-            execution.warnings
-        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

@@ -8,7 +8,7 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::lenient;
-use crate::realtime::{SocketIoSettings, SseSettings, WebSocketSettings};
+use crate::realtime::{SocketIoSettings, SseSettings, Until, WebSocketSettings};
 
 /// Named string values, in the order they were written.
 pub type Vars = IndexMap<String, String>;
@@ -90,6 +90,10 @@ pub struct Request {
     /// Namespace, events and saved events of a Socket.IO request.
     #[serde(skip_serializing_if = "SocketIoSettings::is_empty")]
     pub socketio: SocketIoSettings,
+    /// When `getman run` ends a WebSocket, Server-Sent Events or Socket.IO
+    /// connection: after some received messages, some time, or either.
+    #[serde(skip_serializing_if = "Until::is_empty")]
+    pub until: Until,
 }
 
 impl Default for Request {
@@ -115,6 +119,7 @@ impl Default for Request {
             websocket: WebSocketSettings::default(),
             sse: SseSettings::default(),
             socketio: SocketIoSettings::default(),
+            until: Until::default(),
         }
     }
 }

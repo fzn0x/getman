@@ -135,6 +135,32 @@ impl From<&Response> for ScriptResponse {
     }
 }
 
+/// A message received on a connection that stays open, as scripts see it
+/// in `gm.messages`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+pub struct ScriptMessage {
+    /// `received`.
+    pub direction: String,
+    /// The text, or Base64 for a binary message.
+    pub data: String,
+    /// Milliseconds after the connection opened.
+    pub time: f64,
+    /// Size in bytes.
+    pub size: u64,
+    /// Whether `data` is Base64.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub binary: bool,
+    /// Event type of a Server-Sent Event, or name of a Socket.IO event.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event: Option<String>,
+    /// Id of a Server-Sent Event.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// Acknowledgement id of a Socket.IO event or acknowledgement.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ack: Option<u64>,
+}
+
 /// Everything scripts can see.
 #[derive(Debug, Clone, Serialize)]
 pub struct ScriptInput {
@@ -146,8 +172,13 @@ pub struct ScriptInput {
     pub scopes: ScriptScopes,
     /// The request.
     pub request: ScriptRequest,
-    /// The response, after it arrived.
+    /// The response, after it arrived. For a connection that stays open,
+    /// the handshake.
     pub response: Option<ScriptResponse>,
+    /// The messages received on a connection that stayed open, once it
+    /// ended; `None` for other requests.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub messages: Option<Vec<ScriptMessage>>,
     /// Cookies the client holds for the request's host.
     pub cookies: Vec<CookieInfo>,
 }

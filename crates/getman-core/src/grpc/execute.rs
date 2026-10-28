@@ -244,6 +244,7 @@ async fn run(
             scopes: script_scopes(&files, &chain, &request, context),
             request: script_request(&request, &headers),
             response: None,
+            messages: None,
             cookies: Vec::new(),
         };
         let output = run_scripts(host.clone(), effective.pre_request.clone(), input).await;
@@ -357,6 +358,7 @@ async fn run(
             scopes: script_scopes(&files, &chain, &request, context),
             request: script_request(&request, &headers),
             response: Some(ScriptResponse::from(&response)),
+            messages: None,
             cookies: Vec::new(),
         };
         let output = run_scripts(host, effective.post_response.clone(), input).await;

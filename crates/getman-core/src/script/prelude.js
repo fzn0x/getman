@@ -967,6 +967,29 @@
       });
   }
 
+  // The messages received on a connection that stays open: an array of
+  // { direction, data, time, ... }, whose `json(index)` parses one.
+  function makeMessages(items) {
+    const messages = items.map((m) => Object.assign({}, m));
+    const parsed = [];
+    Object.defineProperty(messages, "json", {
+      enumerable: false,
+      value(index) {
+        const message = messages[index];
+        if (!message) throw new Error(`there is no message ${index}; ${messages.length} arrived`);
+        if (!(index in parsed)) {
+          try {
+            parsed[index] = JSON.parse(message.data);
+          } catch (error) {
+            throw new Error(`message ${index} is not JSON (${error.message}): ${shorten(JSON.stringify(message.data), 80)}`);
+          }
+        }
+        return parsed[index];
+      },
+    });
+    return messages;
+  }
+
   function makeResponse(r) {
     const headers = new PropertyList((r.headers || []).map((h) => ({ key: h.name, value: h.value })), false);
     const text = r.body || "";
@@ -1241,6 +1264,7 @@
     },
     request: makeRequest(input.request || {}),
     response: input.response ? makeResponse(input.response) : undefined,
+    messages: input.messages ? makeMessages(input.messages) : undefined,
     cookies: new PropertyList((input.cookies || []).map((c) => ({ key: c.name, value: c.value, domain: c.domain, path: c.path }))),
     test,
     expect,

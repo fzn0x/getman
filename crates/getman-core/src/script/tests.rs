@@ -51,6 +51,7 @@ fn input(event: Event) -> ScriptInput {
             response_time: 42.0,
             response_size: 70,
         }),
+        messages: None,
         cookies: vec![],
     }
 }

@@ -158,19 +158,30 @@ fn split_token(text: &str) -> (&str, &str) {
 
 /// Runs every check against a response.
 pub fn run_checks(checks: &[String], response: &Response) -> Vec<TestResult> {
+    run_checks_on(checks, response, None)
+}
+
+/// Runs every check against a response and, for a connection that stays
+/// open, the messages it received: the `messages` target reads them (see
+/// [`messages_value`]).
+pub fn run_checks_on(
+    checks: &[String],
+    response: &Response,
+    messages: Option<&Value>,
+) -> Vec<TestResult> {
     checks
         .iter()
         .filter(|line| !line.trim().is_empty() && !line.trim_start().starts_with('#'))
-        .map(|line| run_check(line.trim(), response))
+        .map(|line| run_check(line.trim(), response, messages))
         .collect()
 }
 
-fn run_check(line: &str, response: &Response) -> TestResult {
+fn run_check(line: &str, response: &Response, messages: Option<&Value>) -> TestResult {
     let check = match Check::parse(line) {
         Ok(check) => check,
         Err(message) => return TestResult::fail(line, message),
     };
-    let actual = match target_value(&check.target, response) {
+    let actual = match target_value_in(&check.target, response, messages) {
         Ok(actual) => actual,
         Err(message) => return TestResult::fail(line, message),
     };
@@ -265,9 +276,19 @@ pub struct Captured {
 
 /// Evaluates captures such as `token: json.access_token`.
 pub fn run_captures(captures: &crate::model::Vars, response: &Response) -> Captured {
+    run_captures_on(captures, response, None)
+}
+
+/// Evaluates captures against a response and the messages of a connection
+/// that stays open, as [`run_checks_on`] does for checks.
+pub fn run_captures_on(
+    captures: &crate::model::Vars,
+    response: &Response,
+    messages: Option<&Value>,
+) -> Captured {
     let mut out = Captured::default();
     for (name, target) in captures {
-        match target_value(target.trim(), response) {
+        match target_value_in(target.trim(), response, messages) {
             Ok(Some(value)) => out.values.push((name.clone(), as_text(&value))),
             Ok(None) => out.failures.push(format!(
                 "{name}: {} does not exist in the response",
@@ -281,6 +302,43 @@ pub fn run_captures(captures: &crate::model::Vars, response: &Response) -> Captu
 
 /// What a target points at in a response; `None` if it is absent.
 pub fn target_value(target: &str, response: &Response) -> Result<Option<Value>, String> {
+    target_value_in(target, response, None)
+}
+
+/// The messages a connection received, as the `messages` target sees
+/// them: an array with, for each message, its `direction`, `data`,
+/// `time` (milliseconds after the connection opened), `size`, any `event`,
+/// `id` and `ack`, and `json` when the data is JSON.
+pub fn messages_value(messages: &[crate::script::ScriptMessage]) -> Value {
+    Value::Array(
+        messages
+            .iter()
+            .map(|message| {
+                let mut object = serde_json::to_value(message)
+                    .ok()
+                    .and_then(|value| match value {
+                        Value::Object(map) => Some(map),
+                        _ => None,
+                    })
+                    .unwrap_or_default();
+                if !message.binary
+                    && let Ok(json) = serde_json::from_str::<Value>(&message.data)
+                {
+                    object.insert("json".into(), json);
+                }
+                Value::Object(object)
+            })
+            .collect(),
+    )
+}
+
+/// What a target points at in a response, or in the messages of a
+/// connection that stays open; `None` if it is absent.
+pub fn target_value_in(
+    target: &str,
+    response: &Response,
+    messages: Option<&Value>,
+) -> Result<Option<Value>, String> {
     let (head, rest) = match target.find(['.', '[']) {
         Some(at) => (&target[..at], &target[at..]),
         None => (target, ""),
@@ -324,8 +382,17 @@ pub fn target_value(target: &str, response: &Response) -> Result<Option<Value>, 
             let path = parse_path(rest)?;
             Ok(walk(&json, &path))
         }
+        "messages" => {
+            let Some(messages) = messages else {
+                return Err(
+                    "messages are only there for WebSocket, Server-Sent Events and Socket.IO requests"
+                        .into(),
+                );
+            };
+            Ok(walk(messages, &parse_path(rest)?))
+        }
         other => Err(format!(
-            "{other:?} is not a target; use status, time, size, url, body, header.<name>, cookie.<name> or json.<path>"
+            "{other:?} is not a target; use status, time, size, url, body, header.<name>, cookie.<name>, json.<path> or messages.<path>"
         )),
     }
 }

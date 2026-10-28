@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 
 use super::test_socketio::{self, Transports};
 use super::*;
-use crate::model::{KeyValue, Proxy, Settings};
+use crate::model::{KeyValue, Proxy, Scripts, Settings};
 use crate::test_server;
 use crate::workspace::Workspace;
 
@@ -1002,6 +1002,351 @@ async fn websocket_sends_and_stores_cookies_unless_told_not_to() {
     executor.http.set_cookie(&theme_cookie()).unwrap();
     let mut session = open(&executor, &request, Options::default());
     assert_eq!(greeting(&mut session).await["cookie"], "");
+}
+
+fn passed(results: &[crate::checks::TestResult]) -> bool {
+    results.iter().all(|r| r.passed)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_websocket_request_runs_with_scripts_checks_and_captures() {
+    let addr = test_servers::websocket().await;
+    let (_dir, executor) = setup();
+    let request = Request {
+        kind: RequestKind::Websocket,
+        url: format!("ws://{addr}/{{{{room}}}}"),
+        scripts: Scripts {
+            pre_request: "gm.variables.set('room', 'lobby');\n\
+                gm.request.headers.add({ key: 'X-Test', value: 'from script' });"
+                .into(),
+            post_response: r"
+                gm.test('the handshake is the response', () => {
+                  gm.expect(gm.response.code).to.equal(101);
+                  gm.expect(gm.response.headers.get('upgrade').toLowerCase()).to.equal('websocket');
+                });
+                gm.test('the messages arrived', () => {
+                  gm.expect(gm.messages.length).to.equal(3);
+                  gm.expect(gm.messages.json(0).x_test).to.equal('from script');
+                  gm.expect(gm.messages[1]).to.include({ direction: 'received', data: 'one' });
+                  gm.expect(gm.messages[1].time).to.be.a('number');
+                });
+                gm.test('data that is not JSON says so', () => {
+                  gm.expect(() => gm.messages.json(1)).to.throw('message 1 is not JSON');
+                });
+                gm.collectionVariables.set('last', gm.messages[2].data);
+            "
+            .into(),
+        },
+        checks: vec![
+            "status == 101".into(),
+            "messages.length == 3".into(),
+            "messages[0].json.path == /lobby".into(),
+            "messages[0].json.x_test == from script".into(),
+            "messages[1].data == one".into(),
+            "messages[-1].data == two".into(),
+            "messages[1].direction == received".into(),
+            "messages[5] !exists".into(),
+        ],
+        captures: [("echoed".to_owned(), "messages[2].data".to_owned())]
+            .into_iter()
+            .collect(),
+        websocket: WebSocketSettings {
+            subprotocols: Vec::new(),
+            messages: vec![
+                SavedMessage {
+                    content: "one".into(),
+                    ..SavedMessage::default()
+                },
+                SavedMessage {
+                    content: "two".into(),
+                    ..SavedMessage::default()
+                },
+            ],
+        },
+        until: Until {
+            messages: Some(3),
+            time_ms: None,
+        },
+        ..Request::default()
+    };
+    let mut context = Context::default();
+    let execution = executor.execute(None, &request, &mut context).await;
+    assert_eq!(execution.error, None, "{execution:#?}");
+    assert!(!execution.skipped);
+    assert_eq!(execution.script_errors, []);
+    assert!(
+        passed(&execution.checks) && execution.checks.len() == 8,
+        "{:#?}",
+        execution.checks
+    );
+    assert!(
+        passed(&execution.tests) && execution.tests.len() == 3,
+        "{:#?}",
+        execution.tests
+    );
+    let response = execution.response.as_ref().unwrap();
+    assert_eq!(
+        (response.status, response.status_text.as_str()),
+        (101, "Switching Protocols")
+    );
+    assert_eq!(
+        execution.request.as_ref().unwrap().url,
+        format!("ws://{addr}/lobby")
+    );
+    assert_eq!(
+        context.overlay.collection.get("last"),
+        Some(&Some("two".to_owned()))
+    );
+    assert_eq!(
+        context.overlay.collection.get("echoed"),
+        Some(&Some("two".to_owned()))
+    );
+
+    // The whole conversation is kept for the report, sent messages too.
+    let call = execution.realtime.as_ref().unwrap();
+    let sent = call
+        .messages
+        .iter()
+        .filter(|m| m.direction == Direction::Sent)
+        .count();
+    assert_eq!(sent, 2);
+    assert_eq!(call.messages.len(), 5);
+    assert!(call.closed.as_ref().is_some_and(|c| c.by_client));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failing_check_or_script_on_a_connection_fails_the_request() {
+    let addr = test_servers::websocket().await;
+    let (_dir, executor) = setup();
+    let mut request = Request {
+        kind: RequestKind::Websocket,
+        url: format!("ws://{addr}/"),
+        checks: vec!["messages.length > 5".into()],
+        until: Until {
+            messages: Some(1),
+            time_ms: None,
+        },
+        ..Request::default()
+    };
+    let execution = executor
+        .execute(None, &request, &mut Context::default())
+        .await;
+    assert!(execution.failed());
+    let message = execution.checks[0].message.as_deref().unwrap();
+    assert!(message.contains("messages.length is 1"), "{message}");
+
+    // A script that throws before connecting stops it.
+    request.scripts.pre_request = "throw new Error('no');".into();
+    let execution = executor
+        .execute(None, &request, &mut Context::default())
+        .await;
+    assert!(execution.failed());
+    assert_eq!(execution.response, None);
+    assert_eq!(execution.realtime, None);
+
+    // And one that skips the request.
+    request.scripts.pre_request = "gm.execution.skipRequest();".into();
+    let execution = executor
+        .execute(None, &request, &mut Context::default())
+        .await;
+    assert!(execution.skipped && !execution.failed());
+
+    // A server that cannot be reached is an error, without scripts or checks.
+    request.scripts.pre_request.clear();
+    request.url = "ws://127.0.0.1:1/".into();
+    let execution = executor
+        .execute(None, &request, &mut Context::default())
+        .await;
+    assert!(execution.error.is_some());
+    assert_eq!(execution.checks, []);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn event_streams_and_socket_io_run_too() {
+    let server = test_server::spawn().await;
+    let (_dir, executor) = setup();
+    let events = Request {
+        kind: RequestKind::Sse,
+        url: server.url("/sse"),
+        auth: Auth::Bearer {
+            token: "abc".into(),
+            prefix: String::new(),
+        },
+        checks: vec![
+            "status == 200".into(),
+            "messages.length == 3".into(),
+            "messages[0].event == hello".into(),
+            "messages[0].data == Bearer abc".into(),
+            "messages[1].json.price == 42".into(),
+            "messages[1].id == 1".into(),
+        ],
+        ..Request::default()
+    };
+    let execution = executor
+        .execute(None, &events, &mut Context::default())
+        .await;
+    assert!(
+        !execution.failed() && execution.checks.len() == 6,
+        "{execution:#?}"
+    );
+
+    // Without a limit of its own, a stream that never ends is left after
+    // five seconds or ten messages, whichever comes first: ten here.
+    let forever = Request {
+        url: server.url("/sse/forever"),
+        checks: vec!["messages.length == 10".into()],
+        ..Request::default()
+    };
+    let forever = Request {
+        kind: RequestKind::Sse,
+        ..forever
+    };
+    let execution = executor
+        .execute(None, &forever, &mut Context::default())
+        .await;
+    assert!(!execution.failed(), "{execution:#?}");
+
+    // A time limit ends it, however many messages came.
+    let timed = Request {
+        until: Until {
+            messages: None,
+            time_ms: Some(300),
+        },
+        checks: vec!["messages.length > 3".into()],
+        ..forever
+    };
+    let started = std::time::Instant::now();
+    let execution = executor
+        .execute(None, &timed, &mut Context::default())
+        .await;
+    assert!(!execution.failed(), "{execution:#?}");
+    assert!(started.elapsed() < Duration::from_secs(3));
+
+    let socket = test_socketio::server(Transports::Upgrading).await;
+    let request = Request {
+        kind: RequestKind::Socketio,
+        url: format!("http://{}", socket.addr),
+        socketio: SocketIoSettings {
+            auth: r#"{"token": "secret"}"#.into(),
+            events: vec!["welcome".into(), "echo".into()],
+            messages: vec![SavedEmit {
+                event: "echo".into(),
+                args: r#"["hi", 2]"#.into(),
+                ..SavedEmit::default()
+            }],
+            ..SocketIoSettings::default()
+        },
+        until: Until {
+            messages: Some(2),
+            time_ms: None,
+        },
+        checks: vec![
+            "status == 200".into(),
+            "messages[0].event == welcome".into(),
+            "messages[0].json[0].hi == true".into(),
+            "messages[1].event == echo".into(),
+            "messages[1].json == [\"hi\",2]".into(),
+        ],
+        scripts: Scripts {
+            pre_request: String::new(),
+            post_response:
+                "gm.test('events', () => gm.expect(gm.messages.json(1)[1]).to.equal(2));".into(),
+        },
+        ..Request::default()
+    };
+    let execution = executor
+        .execute(None, &request, &mut Context::default())
+        .await;
+    assert!(!execution.failed(), "{execution:#?}");
+    assert_eq!(execution.tests.len(), 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_runner_connects_to_realtime_requests_instead_of_skipping_them() {
+    let addr = test_servers::websocket().await;
+    let dir = tempfile::tempdir().unwrap();
+    let workspace = Workspace::init(dir.path(), "Run").unwrap();
+    let executor = Executor::new(workspace);
+    executor
+        .workspace
+        .create_request(
+            "",
+            "Chat",
+            &Request {
+                kind: RequestKind::Websocket,
+                url: format!("ws://{addr}/"),
+                checks: vec!["status == 101".into(), "messages.length == 2".into()],
+                websocket: WebSocketSettings {
+                    subprotocols: Vec::new(),
+                    messages: vec![SavedMessage {
+                        content: "hi".into(),
+                        ..SavedMessage::default()
+                    }],
+                },
+                until: Until {
+                    messages: Some(2),
+                    time_ms: None,
+                },
+                ..Request::default()
+            },
+        )
+        .unwrap();
+    let report = crate::runner::run(
+        &executor,
+        &crate::runner::RunOptions::default(),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_| {},
+    )
+    .await
+    .unwrap();
+    let summary = report.summary;
+    assert_eq!((summary.requests, summary.skipped_requests), (1, 0));
+    assert_eq!(
+        (summary.checks_passed, summary.checks_failed),
+        (2, 0),
+        "{summary:?}"
+    );
+    assert!(summary.passed());
+}
+
+#[test]
+fn until_has_defaults_that_never_wait_for_ever() {
+    let none = Until::default().limits();
+    assert_eq!(
+        (none.messages, none.time),
+        (Some(10), Some(Duration::from_secs(5)))
+    );
+    let count = Until {
+        messages: Some(3),
+        time_ms: None,
+    }
+    .limits();
+    assert_eq!(
+        (count.messages, count.time),
+        (Some(3), Some(Duration::from_secs(60)))
+    );
+    let time = Until {
+        messages: None,
+        time_ms: Some(1500),
+    }
+    .limits();
+    assert_eq!(
+        (time.messages, time.time),
+        (None, Some(Duration::from_millis(1500)))
+    );
+    let request: Request =
+        serde_yaml_ng::from_str("kind: sse\nurl: x\nuntil:\n  messages: 4\n").unwrap();
+    assert_eq!(request.until.messages, Some(4));
+    let written = serde_yaml_ng::to_string(&request).unwrap();
+    assert!(
+        written.contains("until:") && !written.contains("time_ms"),
+        "{written}"
+    );
+    assert!(
+        !serde_yaml_ng::to_string(&Request::default())
+            .unwrap()
+            .contains("until")
+    );
 }
 
 #[test]

@@ -3,6 +3,8 @@
 //! requests. Like the rest of a request file, fields at their defaults are
 //! not written.
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 
 use crate::lenient;
@@ -116,6 +118,64 @@ impl SocketIoSettings {
     pub fn is_empty(&self) -> bool {
         *self == Self::default()
     }
+}
+
+/// When `getman run` and scripted sends end a connection, under `until:` in
+/// a request file. The first limit reached ends it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Until {
+    /// End after this many messages have been received.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub messages: Option<u32>,
+    /// End this many milliseconds after the connection opened.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_ms: Option<u64>,
+}
+
+impl Until {
+    /// Without `until`, a connection ends after this many messages.
+    pub const DEFAULT_MESSAGES: u32 = 10;
+    /// Without `until`, a connection ends after this long.
+    pub const DEFAULT_TIME: Duration = Duration::from_secs(5);
+    /// With a message count and no time, a connection ends after this long
+    /// all the same: a run never waits for ever.
+    pub const LONGEST: Duration = Duration::from_secs(60);
+
+    /// Whether nothing is set.
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// The limits that apply, with the defaults filled in: nothing set
+    /// means [`Self::DEFAULT_MESSAGES`] messages or [`Self::DEFAULT_TIME`];
+    /// otherwise what is set, and [`Self::LONGEST`] when no time is.
+    pub fn limits(&self) -> Limits {
+        if self.is_empty() {
+            return Limits {
+                messages: Some(u64::from(Self::DEFAULT_MESSAGES)),
+                time: Some(Self::DEFAULT_TIME),
+            };
+        }
+        Limits {
+            messages: self.messages.map(u64::from),
+            time: Some(
+                self.time_ms
+                    .filter(|ms| *ms > 0)
+                    .map_or(Self::LONGEST, Duration::from_millis),
+            ),
+        }
+    }
+}
+
+/// When to end a connection: a number of received messages, a time after
+/// it opened, or whichever comes first. `None` is no limit.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Limits {
+    /// Received messages.
+    pub messages: Option<u64>,
+    /// Time since the connection opened.
+    pub time: Option<Duration>,
 }
 
 /// The transports a Socket.IO connection may use.
