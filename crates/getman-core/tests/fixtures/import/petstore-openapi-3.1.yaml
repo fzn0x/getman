@@ -1,0 +1,154 @@
+openapi: 3.1.0
+info:
+  title: Pet Store
+  description: Pets and the orders for them.
+  version: 1.0.0
+servers:
+  - url: https://{region}.example.com/v1
+    variables:
+      region:
+        default: pets
+  - url: http://localhost:8080/v1
+tags:
+  - name: pets
+    description: Everything about pets
+  - name: store
+security:
+  - bearerAuth: []
+paths:
+  /pets:
+    get:
+      tags: [pets]
+      summary: List pets
+      description: Lists every pet, a page at a time.
+      parameters:
+        - name: limit
+          in: query
+          required: true
+          schema:
+            type: integer
+            default: 20
+        - name: tag
+          in: query
+          schema:
+            type: string
+          example: dog
+        - name: X-Request-Id
+          in: header
+          schema:
+            type: string
+        - name: Accept
+          in: header
+          schema:
+            type: string
+      responses:
+        200:
+          description: A page of pets
+    post:
+      tags: [pets]
+      summary: Add a pet
+      requestBody:
+        required: true
+        content:
+          application/xml:
+            schema:
+              $ref: '#/components/schemas/Pet'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Pet'
+  /pets/{petId}:
+    parameters:
+      - name: petId
+        in: path
+        required: true
+        schema:
+          type: integer
+        example: 42
+    get:
+      tags: [pets]
+      summary: Find a pet
+      security: []
+  /pets/{petId}/photo:
+    post:
+      tags: [pets]
+      summary: Upload a photo
+      parameters:
+        - $ref: '#/components/parameters/PetId'
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                caption:
+                  type: string
+                  example: a good dog
+  /store/orders:
+    post:
+      tags: [store]
+      summary: Place an order
+      security:
+        - apiKey: []
+      requestBody:
+        content:
+          application/json:
+            examples:
+              two:
+                $ref: '#/components/examples/TwoBooks'
+  /health:
+    get:
+      responses:
+        '200':
+          description: ok
+components:
+  parameters:
+    PetId:
+      name: petId
+      in: path
+      required: true
+      schema:
+        type: integer
+  examples:
+    TwoBooks:
+      value:
+        sku: BOOK-42
+        quantity: 2
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+  schemas:
+    Pet:
+      type: object
+      required: [name]
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          example: Rex
+        status:
+          type: string
+          enum: [available, sold]
+        owner:
+          $ref: '#/components/schemas/Owner'
+        tags:
+          type: array
+          items:
+            type: string
+        parent:
+          $ref: '#/components/schemas/Pet'
+    Owner:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email

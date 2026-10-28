@@ -347,6 +347,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn dropped_folders_are_imported() {
+        let (dir, app) = app();
+        let body = serde_json::json!({
+            "files": [
+                { "path": "shop/bruno.json", "text": "{\"name\": \"Shop\"}" },
+                { "path": "shop/ping.bru", "text": "meta {\n  name: Ping\n}\n\nget {\n  url: https://x.test/ping\n}\n" },
+            ],
+        });
+        let request = HttpRequest::post("/api/import/files")
+            .header("host", "127.0.0.1:7878")
+            .header("x-getman-token", "secret-token")
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(dir.path().join("shop/ping.yaml").is_file());
+    }
+
+    #[tokio::test]
     async fn the_page_is_served_without_the_token() {
         let (_dir, app) = app();
         let response = app.oneshot(get("/", "127.0.0.1:7878")).await.unwrap();

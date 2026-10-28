@@ -17,6 +17,7 @@ import {
 } from "./session";
 import { isLive } from "./realtime";
 import { primary, type LiveState } from "./realtime.svelte";
+import type { ImportFile } from "./importing";
 import type {
   Draft,
   DynamicVar,
@@ -1163,7 +1164,8 @@ export async function stopRun(tab: RunnerTab): Promise<void> {
 
 export type Dialog =
   | { kind: "palette" }
-  | { kind: "import"; folder: string }
+  | { kind: "import"; folder: string; files?: ImportFile[] }
+  | { kind: "export"; target: "folder" | "environment" | "globals"; path: string; name: string }
   | { kind: "code"; tab: RequestTab }
   | { kind: "shortcuts" }
   | { kind: "cookies" }

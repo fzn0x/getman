@@ -13,6 +13,7 @@ import type {
   HeaderPreset,
   HistoryDetail,
   HistoryEntry,
+  Exported,
   ImportReport,
   Language,
   LocalState,
@@ -31,6 +32,7 @@ import type {
   Authorization,
   WorkspaceInfo,
 } from "./types";
+import type { ImportFile } from "./importing";
 import type { Outbound } from "./realtime";
 
 const TOKEN_KEY = "getman.token";
@@ -186,8 +188,14 @@ export const api = {
   send: (args: SendArgs, signal?: AbortSignal) => call<Execution>("POST", "/send", args, signal),
   cancelSend: (id: string) => post("/send/cancel", { id }),
   prepare: (args: SendArgs) => post<{ request: Outgoing; missing: string[] }>("/prepare", args),
-  codegen: (args: SendArgs & { language: string }) =>
+  codegen: (args: SendArgs & { language: string; keep_vars?: boolean }) =>
     post<{ code: string; missing: string[] }>("/codegen", args),
+  exportItem: (args: {
+    kind: "folder" | "environment" | "globals";
+    path?: string;
+    format?: "postman" | "openapi" | "openapi-yaml";
+    secrets?: boolean;
+  }) => post<Exported>("/export", args),
   languages: () => call<Language[]>("GET", "/languages"),
   variables: (args: SendArgs) => post<ResolvedVar[]>("/variables", args),
   /** Saves a variable where the matching script call would. */
@@ -205,8 +213,10 @@ export const api = {
   oauthStatus: (args: OAuthArgs) => post<{ token: Token | null }>("/oauth2/status", args),
   oauthClear: (args: OAuthArgs) => post<{ cleared: boolean }>("/oauth2/clear", args),
 
-  importText: (text: string, folder = "", root = false) =>
-    post<ImportReport>("/import", { text, folder, root }),
+  importText: (text: string, folder = "", root = false, name = "") =>
+    post<ImportReport>("/import", { text, folder, root, name }),
+  importFiles: (files: ImportFile[], folder = "", root = false) =>
+    post<ImportReport[]>("/import/files", { files, folder, root }),
   parseCurl: (text: string) => post<Request>("/parse-curl", { text }),
 
   cookies: () => call<Cookie[]>("GET", "/cookies"),

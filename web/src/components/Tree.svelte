@@ -110,6 +110,12 @@
       "separator",
       { label: "Run folder", icon: "play", action: () => openRunner(node.path) },
       { label: "Folder settings", icon: "gear", action: () => void openFolder(node.path) },
+      {
+        label: "Export…",
+        icon: "export",
+        action: () =>
+          openDialog({ kind: "export", target: "folder", path: node.path, name: node.name }),
+      },
       "separator",
       {
         label: "Rename…",

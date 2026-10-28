@@ -1,0 +1,19 @@
+headers {
+  X-Client: getman
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+vars:pre-request {
+  apiVersion: v2
+}
+
+docs {
+  The shop's API.
+}

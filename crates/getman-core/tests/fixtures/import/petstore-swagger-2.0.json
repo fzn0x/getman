@@ -1,0 +1,66 @@
+{
+  "swagger": "2.0",
+  "info": { "title": "Swagger Petstore", "version": "1.0.0" },
+  "host": "petstore.example.com",
+  "basePath": "/api/",
+  "schemes": ["http", "https"],
+  "consumes": ["application/json"],
+  "security": [{ "basic": [] }],
+  "securityDefinitions": {
+    "basic": { "type": "basic" },
+    "petstore_auth": {
+      "type": "oauth2",
+      "flow": "application",
+      "tokenUrl": "https://petstore.example.com/oauth/token",
+      "scopes": { "write:pets": "modify pets", "read:pets": "read pets" }
+    }
+  },
+  "paths": {
+    "/pet": {
+      "post": {
+        "tags": ["pet"],
+        "operationId": "addPet",
+        "parameters": [
+          { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/Pet" } }
+        ],
+        "security": [{ "petstore_auth": ["write:pets"] }],
+        "responses": { "405": { "description": "Invalid input" } }
+      }
+    },
+    "/pet/{petId}": {
+      "post": {
+        "tags": ["pet"],
+        "operationId": "updatePetWithForm",
+        "consumes": ["application/x-www-form-urlencoded"],
+        "parameters": [
+          { "name": "petId", "in": "path", "required": true, "type": "integer" },
+          { "name": "name", "in": "formData", "type": "string" },
+          { "name": "status", "in": "formData", "type": "string" }
+        ]
+      }
+    },
+    "/pet/{petId}/uploadImage": {
+      "post": {
+        "tags": ["pet"],
+        "operationId": "uploadFile",
+        "consumes": ["multipart/form-data"],
+        "parameters": [
+          { "name": "petId", "in": "path", "required": true, "type": "integer" },
+          { "name": "additionalMetadata", "in": "formData", "type": "string" },
+          { "name": "file", "in": "formData", "type": "file" }
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "Pet": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "id": { "type": "integer", "format": "int64" },
+        "name": { "type": "string", "example": "doggie" },
+        "photoUrls": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

@@ -39,11 +39,13 @@ pub(crate) enum Command {
     Send(SendArgs),
     /// Create a workspace.
     Init(InitArgs),
-    /// Import a Postman collection, environment or globals file, or a cURL
-    /// command.
+    /// Import collections, environments, API specs, browser recordings or
+    /// a cURL command: Postman, Insomnia, Hoppscotch and Bruno exports,
+    /// OpenAPI and Swagger documents and HAR files, told apart by content.
     Import(ImportArgs),
-    /// Print a request as code: cURL, HTTPie, PowerShell, fetch, Python,
-    /// Go, Rust or Java.
+    /// Print a request as code in one of 18 languages and tools, or export
+    /// a folder, the workspace or an environment for Postman, or as an
+    /// OpenAPI document.
     Export(ExportArgs),
     /// Serve the saved examples of the workspace or a folder as a mock API
     /// on 127.0.0.1.
@@ -273,8 +275,9 @@ pub(crate) struct InitArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct ImportArgs {
-    /// File to import, or `-` to read standard input. A cURL command can
-    /// be given directly with --curl instead.
+    /// File or folder to import, or `-` to read standard input. A folder
+    /// of `.bru` files is a Bruno collection. A cURL command can be given
+    /// directly with --curl instead.
     #[arg(required_unless_present = "curl")]
     pub(crate) file: Option<PathBuf>,
 
@@ -296,14 +299,36 @@ pub(crate) struct ImportArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct ExportArgs {
-    /// The request: a path in the workspace or a path on disk.
-    pub(crate) request: String,
+    /// What to export, as a path in the workspace or on disk: a request
+    /// for code, or a folder for `postman` and `openapi`. Those export
+    /// the whole workspace when it is left out.
+    pub(crate) request: Option<String>,
 
-    /// Language or tool to write.
+    /// Language or tool to write a request in, or `postman` or `openapi`
+    /// for a folder, the workspace or an environment.
     #[arg(long = "to", short = 't', default_value = "curl", value_parser = clap::builder::PossibleValuesParser::new(
-        getman_core::export::codegen::LANGUAGES.iter().map(|l| l.id)
+        getman_core::export::codegen::LANGUAGES.iter().map(|l| l.id).chain(["postman", "openapi"])
     ))]
     pub(crate) language: String,
+
+    /// Write to this file instead of standard output. OpenAPI documents
+    /// are YAML when it ends in .yaml or .yml.
+    #[arg(long, short = 'o', value_name = "FILE")]
+    pub(crate) output: Option<PathBuf>,
+
+    /// Keep `{{variables}}` as written in code, so that tokens and other
+    /// values stay out of it.
+    #[arg(long)]
+    pub(crate) keep_vars: bool,
+
+    /// With `--to postman`, export the globals.
+    #[arg(long, conflicts_with = "request")]
+    pub(crate) globals: bool,
+
+    /// With `--to postman`, include the values kept in git-ignored local
+    /// files: secrets and globals.
+    #[arg(long)]
+    pub(crate) with_secrets: bool,
 
     #[command(flatten)]
     pub(crate) workspace: WorkspaceArgs,
@@ -483,6 +508,41 @@ mod tests {
         };
         assert_eq!(args.path.as_deref(), Some("users"));
         assert_eq!((args.port, args.delay), (Some(9001), 250));
+    }
+
+    #[test]
+    fn export_takes_folders_environments_and_options() {
+        let cli = Cli::try_parse_from([
+            "getman", "export", "orders", "--to", "postman", "-o", "o.json",
+        ])
+        .unwrap();
+        let Some(Command::Export(args)) = cli.command else {
+            panic!()
+        };
+        assert_eq!(args.request.as_deref(), Some("orders"));
+        assert_eq!(args.language, "postman");
+        let cli = Cli::try_parse_from([
+            "getman",
+            "export",
+            "--env",
+            "staging",
+            "--to",
+            "postman",
+            "--with-secrets",
+        ])
+        .unwrap();
+        let Some(Command::Export(args)) = cli.command else {
+            panic!()
+        };
+        assert!(args.request.is_none() && args.with_secrets);
+        let cli =
+            Cli::try_parse_from(["getman", "export", "a.yaml", "--to", "dart", "--keep-vars"])
+                .unwrap();
+        let Some(Command::Export(args)) = cli.command else {
+            panic!()
+        };
+        assert!(args.keep_vars);
+        assert!(Cli::try_parse_from(["getman", "export", "--to", "cobol"]).is_err());
     }
 
     #[test]

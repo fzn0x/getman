@@ -7,8 +7,8 @@ getman run [TARGET]...         run folders, requests or the workspace, for CI
 getman send REQUEST            send one request, print the body, or
                                connect to a WebSocket, SSE or Socket.IO one
 getman init [DIR]              create a workspace
-getman import FILE | --curl    import from Postman or cURL
-getman export REQUEST --to X   print a request as code
+getman import FILE|DIR         import collections, specs, HAR files or cURL
+getman export [ITEM] --to X    a request as code, a folder as Postman or OpenAPI
 getman mock [FOLDER]           serve saved examples as a mock API
 getman mcp [DIR]               let AI agents use the workspace
 ```
@@ -92,25 +92,34 @@ Creates `getman.yaml` and a `.gitignore` for local files.
 
 ## getman import
 
-Imports a Postman collection, environment or globals file, or a cURL
-command. See [Import and export](import-export.md).
+Imports Postman, Insomnia, Hoppscotch and Bruno collections and
+environments, OpenAPI and Swagger documents, HAR files and cURL
+commands. The format is told from the content. See
+[Import and export](import-export.md).
 
 | Option | |
 | --- | --- |
-| `FILE` | The file, or `-` for standard input |
+| `FILE` | The file, a folder (such as a Bruno collection), or `-` for standard input |
 | `--curl COMMAND` | A cURL command, instead of a file |
 | `--folder FOLDER` | Folder of the workspace to import into |
 | `--root` | Make a collection the workspace itself |
 
 ## getman export
 
-Prints a request as code, with variables replaced.
+Prints a request as code, with variables replaced. With `--to postman`
+or `--to openapi`, exports a folder, the workspace, an environment or
+the globals instead.
 
 | Option | |
 | --- | --- |
-| `REQUEST` | The request |
-| `-t`, `--to LANGUAGE` | `curl` (default), `httpie`, `powershell`, `fetch`, `python`, `go`, `rust` or `java` |
-| `-e`, `--env NAME`, `--var NAME=VALUE` | As for `send` |
+| `ITEM` | The request, or for `postman` and `openapi` the folder; the whole workspace when left out |
+| `-t`, `--to FORMAT` | A language (see [Export as code](import-export.md#export-as-code)), `postman` or `openapi` |
+| `-o`, `--output FILE` | Write to a file instead of standard output; `.yaml` gives YAML for `openapi` |
+| `--keep-vars` | Leave `{{variables}}` as written in code, so tokens stay out of it |
+| `-e`, `--env NAME` | Environment to fill in variables from; with `--to postman` and no `ITEM`, the environment to export |
+| `--globals` | With `--to postman`, export the globals |
+| `--with-secrets` | With `--to postman`, include values from git-ignored local files |
+| `--var NAME=VALUE` | As for `send` |
 
 ## getman mock
 

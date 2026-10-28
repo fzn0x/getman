@@ -8,14 +8,14 @@ use std::time::Duration;
 use axum::Json;
 use axum::Router;
 use axum::body::{Body, Bytes};
-use axum::extract::State;
+use axum::extract::{DefaultBodyLimit, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use getman_core::execute::{Cancel, Context, persist_changes, resolved_variables};
-use getman_core::export::codegen;
+use getman_core::export::{codegen, openapi, postman};
 use getman_core::http::{CookieInfo, Payload};
-use getman_core::import::{curl, postman};
+use getman_core::import::{self, SourceFile, curl};
 use getman_core::model::{Auth, Example, Folder, OAuth2, Request};
 use getman_core::runner::{self, RunEvent, RunOptions};
 use getman_core::script::{ChangeScope, VarChange};
@@ -62,6 +62,7 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/prepare", post(prepare))
         .route("/codegen", post(code))
         .route("/languages", get(languages))
+        .route("/export", post(export))
         .route("/variables", post(variables))
         .route("/variables/set", post(set_variable))
         .route("/dynamic", get(dynamic))
@@ -71,7 +72,14 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/runs/read", post(read_run))
         .route("/runs/report", post(run_report))
         .route("/runs/delete", post(delete_run))
-        .route("/import", post(import))
+        .route(
+            "/import",
+            post(import).layer(DefaultBodyLimit::max(IMPORT_LIMIT)),
+        )
+        .route(
+            "/import/files",
+            post(import_files).layer(DefaultBodyLimit::max(IMPORT_LIMIT)),
+        )
         .route("/parse-curl", post(parse_curl))
         .route("/cookies", get(cookies))
         .route("/cookies/set", post(set_cookie))
@@ -474,6 +482,9 @@ struct PrepareArg {
     environment: Option<String>,
     #[serde(default)]
     language: Option<String>,
+    /// Keep `{{variables}}` as written in code.
+    #[serde(default)]
+    keep_vars: bool,
 }
 
 async fn prepare(State(state): Shared, Json(arg): Json<PrepareArg>) -> ApiResult {
@@ -490,17 +501,47 @@ async fn prepare(State(state): Shared, Json(arg): Json<PrepareArg>) -> ApiResult
 
 async fn code(State(state): Shared, Json(arg): Json<PrepareArg>) -> ApiResult {
     let language = arg.language.clone().unwrap_or_else(|| "curl".into());
-    let context = context(arg.environment.as_deref());
-    let prepared = state.executor.prepare(
-        arg.path.as_deref().filter(|p| !p.is_empty()),
-        &arg.request,
-        &context,
-    )?;
+    let path = arg.path.as_deref().filter(|p| !p.is_empty());
+    let prepared = if arg.keep_vars {
+        state.executor.prepare_unresolved(path, &arg.request)?
+    } else {
+        let context = context(arg.environment.as_deref());
+        state.executor.prepare(path, &arg.request, &context)?
+    };
     let mut outgoing = prepared.outgoing;
     codegen::relativize(&mut outgoing, state.workspace().root());
     let code = codegen::generate(&language, &outgoing)
         .ok_or_else(|| bad(format!("unknown language {language}")))?;
     Ok(Json(json!({ "code": code, "missing": prepared.missing })))
+}
+
+#[derive(Deserialize)]
+struct ExportArg {
+    /// `folder`, `environment` or `globals`.
+    kind: String,
+    /// The folder's path or the environment's id.
+    #[serde(default)]
+    path: String,
+    /// `postman`, `openapi` or `openapi-yaml`.
+    #[serde(default)]
+    format: String,
+    /// Include values from git-ignored local files.
+    #[serde(default)]
+    secrets: bool,
+}
+
+/// Writes a folder, environment or the globals as a file to download.
+async fn export(State(state): Shared, Json(arg): Json<ExportArg>) -> ApiResult {
+    let ws = state.workspace();
+    let exported = match (arg.kind.as_str(), arg.format.as_str()) {
+        ("folder", "postman") => postman::collection(ws, &arg.path)?,
+        ("folder", "openapi") => openapi::document(ws, &arg.path, false)?,
+        ("folder", "openapi-yaml") => openapi::document(ws, &arg.path, true)?,
+        ("environment", _) => postman::environment(ws, &arg.path, arg.secrets)?,
+        ("globals", _) => postman::globals(ws, arg.secrets)?,
+        (kind, format) => return Err(bad(format!("cannot export a {kind} as {format:?}"))),
+    };
+    Ok(Json(json!(exported)))
 }
 
 async fn languages() -> Json<Value> {
@@ -1042,31 +1083,46 @@ async fn stop_mock(State(state): Shared, Json(arg): Json<FolderArg>) -> ApiResul
 
 // ---- Import -------------------------------------------------------------------
 
+/// Largest import accepted: big API specs run to tens of megabytes.
+const IMPORT_LIMIT: usize = 64 * 1024 * 1024;
+
 #[derive(Deserialize)]
 struct ImportArg {
     text: String,
+    /// File name, which tells `.bru` files apart.
+    #[serde(default)]
+    name: String,
     #[serde(default)]
     folder: String,
     #[serde(default)]
     root: bool,
 }
 
+/// Imports one text in any format Getman reads.
 async fn import(State(state): Shared, Json(arg): Json<ImportArg>) -> ApiResult {
-    let ws = state.workspace();
-    if arg.text.trim_start().starts_with("curl") {
-        let request = curl::parse(&arg.text)?;
-        let path = ws.create_request(&arg.folder, &request.name, &request)?;
-        return Ok(Json(json!({
-            "kind": "request",
-            "name": request.name,
-            "path": path,
-            "requests": 1,
-            "folders": 0,
-            "warnings": [],
-        })));
-    }
-    let report = postman::import(ws, &arg.folder, &arg.text, arg.root)?;
+    let report = import::import_text(
+        state.workspace(),
+        &arg.folder,
+        &arg.name,
+        &arg.text,
+        arg.root,
+    )?;
     Ok(Json(json!(report)))
+}
+
+#[derive(Deserialize)]
+struct ImportFilesArg {
+    files: Vec<SourceFile>,
+    #[serde(default)]
+    folder: String,
+    #[serde(default)]
+    root: bool,
+}
+
+/// Imports dropped files, or a folder such as a Bruno collection.
+async fn import_files(State(state): Shared, Json(arg): Json<ImportFilesArg>) -> ApiResult {
+    let reports = import::import_files(state.workspace(), &arg.folder, &arg.files, arg.root)?;
+    Ok(Json(json!(reports)))
 }
 
 #[derive(Deserialize)]

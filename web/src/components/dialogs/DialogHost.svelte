@@ -3,6 +3,7 @@
   import CodeDialog from "./CodeDialog.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import CookiesDialog from "./CookiesDialog.svelte";
+  import ExportDialog from "./ExportDialog.svelte";
   import HeaderPresetsDialog from "./HeaderPresetsDialog.svelte";
   import ImportDialog from "./ImportDialog.svelte";
   import MoveDialog from "./MoveDialog.svelte";
@@ -20,7 +21,9 @@
     {#if current.kind === "palette"}
       <Palette />
     {:else if current.kind === "import"}
-      <ImportDialog folder={current.folder} />
+      <ImportDialog folder={current.folder} files={current.files} />
+    {:else if current.kind === "export"}
+      <ExportDialog target={current.target} path={current.path} name={current.name} />
     {:else if current.kind === "code"}
       <CodeDialog tab={current.tab} />
     {:else if current.kind === "shortcuts"}

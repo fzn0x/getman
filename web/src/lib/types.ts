@@ -529,6 +529,17 @@ export interface ImportReport {
   folders: number;
   examples?: number;
   warnings: string[];
+  /** The format read, such as "OpenAPI 3.1.0". */
+  format?: string;
+  /** Ids of environments created alongside a collection. */
+  environments?: string[];
+}
+
+/** A file written by an export, to download. */
+export interface Exported {
+  file_name: string;
+  content: string;
+  warnings: string[];
 }
 
 export interface RunItem {

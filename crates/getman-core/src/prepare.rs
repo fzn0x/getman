@@ -261,14 +261,37 @@ pub struct Prepared {
     pub missing: Vec<String>,
 }
 
+/// Characters escaped in a path parameter's value when `{{variables}}`
+/// are kept as written.
+const TEMPLATE_SEGMENT: &AsciiSet = &CONTROLS
+    .add(b' ')
+    .add(b'"')
+    .add(b'#')
+    .add(b'%')
+    .add(b'/')
+    .add(b'<')
+    .add(b'>')
+    .add(b'?')
+    .add(b'`');
+
+/// Characters escaped in a query or form name or value when
+/// `{{variables}}` are kept as written.
+const TEMPLATE_QUERY: &AsciiSet = &TEMPLATE_SEGMENT.add(b'&').add(b'+').add(b'=').add(b'\'');
+
 /// Collects interpolations and the variables they missed.
 struct Renderer<'a> {
     vars: &'a VarStack,
     missing: Vec<String>,
+    /// Leaves `{{variables}}` as written, for code that should not hold
+    /// their values.
+    keep: bool,
 }
 
 impl Renderer<'_> {
     fn render(&mut self, text: &str) -> String {
+        if self.keep {
+            return text.to_owned();
+        }
         let out = self.vars.interpolate(text);
         for name in out.missing {
             if !self.missing.contains(&name) {
@@ -288,11 +311,40 @@ pub fn prepare(
     vars: &VarStack,
     root: &Path,
 ) -> Result<Prepared> {
-    let mut r = Renderer {
+    let renderer = Renderer {
         vars,
         missing: Vec::new(),
+        keep: false,
     };
+    build(request, headers, auth, renderer, root)
+}
 
+/// Builds the request as [`prepare`] does, but leaves every `{{variable}}`
+/// as written, so code written from it holds no tokens or other values.
+/// Files are not looked up, and Basic credentials that use variables are
+/// shown as `base64(user:password)`, since they cannot be encoded.
+pub fn prepare_unresolved(
+    request: &Request,
+    headers: &[KeyValue],
+    auth: &Auth,
+    root: &Path,
+) -> Result<Prepared> {
+    let vars = VarStack::new();
+    let renderer = Renderer {
+        vars: &vars,
+        missing: Vec::new(),
+        keep: true,
+    };
+    build(request, headers, auth, renderer, root)
+}
+
+fn build(
+    request: &Request,
+    headers: &[KeyValue],
+    auth: &Auth,
+    mut r: Renderer<'_>,
+    root: &Path,
+) -> Result<Prepared> {
     let url = build_url(request, &mut r)?;
     let mut outgoing = Outgoing {
         method: request.method.trim().to_ascii_uppercase(),
@@ -337,6 +389,9 @@ fn build_url(request: &Request, r: &mut Renderer<'_>) -> Result<String> {
     if raw.is_empty() {
         return Err(Error::Invalid("the request has no URL".into()));
     }
+    if r.keep {
+        return Ok(template_url(&raw, request));
+    }
     let with_scheme = if raw.contains("://") {
         raw
     } else {
@@ -369,6 +424,43 @@ fn build_url(request: &Request, r: &mut Renderer<'_>) -> Result<String> {
     Ok(url.to_string())
 }
 
+/// The URL with path parameters filled in but `{{variables}}` kept, which
+/// a URL parser would mangle.
+fn template_url(raw: &str, request: &Request) -> String {
+    let with_scheme = if raw.contains("://") || raw.starts_with("{{") {
+        raw.to_owned()
+    } else {
+        format!("http://{raw}")
+    };
+    if request.path_params.is_empty() {
+        return with_scheme;
+    }
+    let end = with_scheme.find(['?', '#']).unwrap_or(with_scheme.len());
+    let (path, rest) = with_scheme.split_at(end);
+    let segments: Vec<String> = path
+        .split('/')
+        .map(|segment| {
+            match segment
+                .strip_prefix(':')
+                .and_then(|name| request.path_params.get(name))
+            {
+                Some(value) => utf8_percent_encode(value, TEMPLATE_SEGMENT).to_string(),
+                None => segment.to_owned(),
+            }
+        })
+        .collect();
+    format!("{}{rest}", segments.join("/"))
+}
+
+/// Encodes a query or form pair, keeping `{{variables}}` readable.
+fn template_pair(name: &str, value: &str) -> String {
+    format!(
+        "{}={}",
+        utf8_percent_encode(name, TEMPLATE_QUERY),
+        utf8_percent_encode(value, TEMPLATE_QUERY)
+    )
+}
+
 fn build_body(
     body: &Body,
     r: &mut Renderer<'_>,
@@ -392,6 +484,17 @@ fn build_body(
                     .map_or_else(|| "text/plain".to_owned(), |t| r.render(t)),
             ),
         ),
+        Body::Form { fields } if r.keep => {
+            let pairs: Vec<String> = fields
+                .iter()
+                .filter(|f| f.enabled)
+                .map(|f| template_pair(&f.name, &f.value))
+                .collect();
+            (
+                bytes(pairs.join("&")),
+                Some("application/x-www-form-urlencoded".into()),
+            )
+        }
         Body::Form { fields } => {
             let mut form = url::form_urlencoded::Serializer::new(String::new());
             for field in fields.iter().filter(|f| f.enabled) {
@@ -406,6 +509,7 @@ fn build_body(
             let mut parts = Vec::new();
             for field in fields.iter().filter(|f| f.enabled) {
                 let file = match &field.file {
+                    Some(file) if r.keep => Some(PathBuf::from(file.trim())),
                     Some(file) => Some(resolve_file(root, &r.render(file))?),
                     None => None,
                 };
@@ -424,7 +528,11 @@ fn build_body(
             (OutgoingBody::Multipart { parts }, None)
         }
         Body::Binary { file, content_type } => {
-            let path = resolve_file(root, &r.render(file))?;
+            let path = if r.keep {
+                PathBuf::from(file.trim())
+            } else {
+                resolve_file(root, &r.render(file))?
+            };
             let content_type = content_type.as_deref().map_or_else(
                 || {
                     mime_guess::from_path(&path)
@@ -440,6 +548,17 @@ fn build_body(
             let mut payload = serde_json::Map::new();
             payload.insert("query".into(), r.render(query).into());
             let variables = r.render(variables);
+            if r.keep && serde_json::from_str::<serde_json::Value>(&variables).is_err() {
+                // Variables such as `{"id": {{id}}}` are JSON only once
+                // filled in; write them into the payload as they are.
+                let query = serde_json::Value::from(r.render(query));
+                let payload = if variables.trim().is_empty() {
+                    format!("{{\"query\":{query}}}")
+                } else {
+                    format!("{{\"query\":{query},\"variables\":{}}}", variables.trim())
+                };
+                return Ok((bytes(payload), Some("application/json".into())));
+            }
             if !variables.trim().is_empty() {
                 let parsed: serde_json::Value = serde_json::from_str(&variables).map_err(|e| {
                     Error::Invalid(format!("the GraphQL variables are not valid JSON: {e}"))
@@ -461,11 +580,12 @@ fn apply_auth(auth: &Auth, r: &mut Renderer<'_>, outgoing: &mut Outgoing) -> Res
     match auth {
         Auth::Basic { username, password } => {
             let credentials = format!("{}:{}", r.render(username), r.render(password));
-            set_header(
-                &mut outgoing.headers,
-                "Authorization",
-                format!("Basic {}", BASE64.encode(credentials)),
-            );
+            let value = if r.keep && credentials.contains("{{") {
+                format!("Basic base64({credentials})")
+            } else {
+                format!("Basic {}", BASE64.encode(credentials))
+            };
+            set_header(&mut outgoing.headers, "Authorization", value);
         }
         Auth::Bearer { token, prefix } => {
             let prefix = if prefix.trim().is_empty() {
@@ -490,6 +610,19 @@ fn apply_auth(auth: &Auth, r: &mut Renderer<'_>, outgoing: &mut Outgoing) -> Res
             }
             match location {
                 ApiKeyLocation::Header => set_header(&mut outgoing.headers, &key, value),
+                ApiKeyLocation::Query if r.keep => {
+                    let (base, fragment) = outgoing
+                        .url
+                        .split_once('#')
+                        .map_or((outgoing.url.as_str(), ""), |(b, f)| (b, f));
+                    let separator = if base.contains('?') { '&' } else { '?' };
+                    let mut url = format!("{base}{separator}{}", template_pair(&key, &value));
+                    if !fragment.is_empty() {
+                        url.push('#');
+                        url.push_str(fragment);
+                    }
+                    outgoing.url = url;
+                }
                 ApiKeyLocation::Query => {
                     let mut url = url::Url::parse(&outgoing.url)
                         .map_err(|e| Error::Invalid(e.to_string()))?;
@@ -564,6 +697,82 @@ mod tests {
             Path::new("."),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn unresolved_requests_keep_their_variables() {
+        let request = Request {
+            method: "post".into(),
+            url: "{{baseUrl}}/users/:id?q={{term}}".into(),
+            path_params: [("id".to_owned(), "{{userId}}".to_owned())]
+                .into_iter()
+                .collect(),
+            headers: vec![KeyValue::new("X-Trace", "{{$uuid}}")],
+            body: Body::Form {
+                fields: vec![
+                    KeyValue::new("token", "{{token}}"),
+                    KeyValue::new("a b", "c&d"),
+                ],
+            },
+            auth: Auth::Basic {
+                username: "{{user}}".into(),
+                password: "{{$env.GETMAN_PASSWORD}}".into(),
+            },
+            ..Request::default()
+        };
+        let effective = Effective::new(&[Folder::default()], &request);
+        let out = prepare_unresolved(
+            &request,
+            &effective.headers,
+            &effective.auth,
+            Path::new("."),
+        )
+        .unwrap()
+        .outgoing;
+        assert_eq!(out.method, "POST");
+        assert_eq!(out.url, "{{baseUrl}}/users/{{userId}}?q={{term}}");
+        assert_eq!(find_header(&out.headers, "x-trace"), Some("{{$uuid}}"));
+        assert_eq!(
+            find_header(&out.headers, "authorization"),
+            Some("Basic base64({{user}}:{{$env.GETMAN_PASSWORD}})")
+        );
+        let OutgoingBody::Bytes { data } = &out.body else {
+            panic!("{:?}", out.body)
+        };
+        assert_eq!(data.text(), "token={{token}}&a%20b=c%26d");
+
+        let request = Request {
+            url: "{{baseUrl}}/files#top".into(),
+            auth: Auth::ApiKey {
+                key: "key".into(),
+                value: "{{apiKey}}".into(),
+                location: ApiKeyLocation::Query,
+            },
+            body: Body::Multipart {
+                fields: vec![FormField {
+                    name: "file".into(),
+                    value: String::new(),
+                    file: Some("{{dir}}/cat.png".into()),
+                    content_type: None,
+                    enabled: true,
+                }],
+            },
+            ..Request::default()
+        };
+        let effective = Effective::new(&[Folder::default()], &request);
+        let out = prepare_unresolved(
+            &request,
+            &effective.headers,
+            &effective.auth,
+            Path::new("."),
+        )
+        .unwrap()
+        .outgoing;
+        assert_eq!(out.url, "{{baseUrl}}/files?key={{apiKey}}#top");
+        let OutgoingBody::Multipart { parts } = &out.body else {
+            panic!()
+        };
+        assert_eq!(parts[0].file.as_deref(), Some(Path::new("{{dir}}/cat.png")));
     }
 
     #[test]
