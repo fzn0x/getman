@@ -68,6 +68,30 @@ pub(crate) fn sign(
     }
 }
 
+/// The Hawk header for a given time and nonce, so tests can check what a
+/// request carried against what the core computes for it.
+#[cfg(test)]
+pub(crate) fn hawk_authorization(
+    settings: &crate::model::Hawk,
+    outgoing: &Outgoing,
+    ts: u64,
+    nonce: &str,
+) -> Result<String> {
+    hawk::authorization(settings, outgoing, ts, nonce)
+}
+
+/// The EdgeGrid header for a given timestamp and nonce, as
+/// [`hawk_authorization`] does for Hawk.
+#[cfg(test)]
+pub(crate) fn edgegrid_authorization(
+    settings: &crate::model::EdgeGrid,
+    outgoing: &Outgoing,
+    timestamp: &str,
+    nonce: &str,
+) -> Result<String> {
+    edgegrid::authorization(settings, outgoing, timestamp, nonce)
+}
+
 /// The body's bytes, for hashing: `None` for a multipart body, whose bytes
 /// are only known once it is sent.
 fn body_bytes(body: &OutgoingBody) -> Result<Option<Cow<'_, [u8]>>> {

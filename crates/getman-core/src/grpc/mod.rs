@@ -26,6 +26,8 @@ mod status;
 mod transport;
 
 #[cfg(test)]
+mod network_tests;
+#[cfg(test)]
 mod test_server;
 #[cfg(test)]
 mod tests;
