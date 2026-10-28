@@ -9,6 +9,7 @@
 //! captures do not run for these requests.
 
 mod dial;
+mod engine;
 mod settings;
 mod socketio;
 mod sse;
@@ -16,6 +17,8 @@ mod sse;
 mod test_proxies;
 #[cfg(test)]
 mod test_servers;
+#[cfg(test)]
+mod test_socketio;
 #[cfg(test)]
 mod tests;
 mod tls;
@@ -37,7 +40,8 @@ use crate::prepare::prepare;
 use crate::vars::VarStack;
 
 pub use settings::{
-    MessageFormat, SavedEmit, SavedMessage, SocketIoSettings, SseSettings, WebSocketSettings,
+    MessageFormat, SavedEmit, SavedMessage, SocketIoSettings, SocketIoTransport, SseSettings,
+    WebSocketSettings,
 };
 
 /// Messages longer than this are reported cut short; their `size` still
@@ -336,6 +340,7 @@ pub fn connect(
     )?;
     let mut outgoing = prepared.outgoing;
     let mut namespace = String::new();
+    let mut endpoint = String::new();
     match request.kind {
         RequestKind::Websocket => {
             outgoing.method = "GET".into();
@@ -343,8 +348,8 @@ pub fn connect(
         }
         RequestKind::Socketio => {
             outgoing.method = "GET".into();
-            (outgoing.url, namespace) =
-                socketio::endpoint(&outgoing.url, &request.socketio, &vars)?;
+            (endpoint, namespace) = socketio::endpoint(&outgoing.url, &request.socketio, &vars)?;
+            outgoing.url = socketio::first_url(&endpoint, request.socketio.transport);
         }
         RequestKind::Sse => sse::check_url(&outgoing.url)?,
         RequestKind::Http | RequestKind::Grpc => {}
@@ -367,6 +372,7 @@ pub fn connect(
         transport,
         request: request.clone(),
         namespace,
+        endpoint,
         http: Arc::clone(&executor.http),
         authenticator: Arc::clone(&executor.authenticator),
         commands: command_receiver,
@@ -395,6 +401,8 @@ struct Job {
     request: Request,
     /// The Socket.IO namespace.
     namespace: String,
+    /// The Socket.IO endpoint, before the Engine.IO transport is added.
+    endpoint: String,
     http: Arc<HttpClient>,
     authenticator: Arc<Authenticator>,
     commands: mpsc::Receiver<Outbound>,

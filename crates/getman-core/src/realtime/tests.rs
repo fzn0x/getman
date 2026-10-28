@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
+use super::test_socketio::{self, Transports};
 use super::*;
 use crate::model::{KeyValue, Proxy, Settings};
 use crate::test_server;
@@ -436,9 +437,14 @@ async fn event_streams_answer_digest_challenges() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn socket_io_joins_emits_and_listens() {
-    let addr = test_servers::socketio().await;
+/// Joins a namespace of the Socket.IO test server over `transport`, and
+/// goes through events, acknowledgements, binary attachments and the
+/// server's disconnect. Returns the events up to the first one received,
+/// for the test to see how the connection was made.
+async fn exercise_socket_io(
+    addr: std::net::SocketAddr,
+    transport: SocketIoTransport,
+) -> Vec<StreamEvent> {
     let (_dir, executor) = setup();
     let request = Request {
         kind: RequestKind::Socketio,
@@ -450,22 +456,14 @@ async fn socket_io_joins_emits_and_listens() {
             namespace: "/chat".into(),
             auth: r#"{"token": "{{token}}"}"#.into(),
             events: vec!["welcome".into(), "echo".into(), "file".into()],
+            transport,
             ..SocketIoSettings::default()
         },
         ..Request::default()
     };
     let mut session = open(&executor, &request, Options::default());
     let events = until(&mut session, |e| received(e).is_some()).await;
-    assert!(matches!(
-        events[1].kind,
-        EventKind::Open { status: 101, .. }
-    ));
-    assert_eq!(
-        events[2].kind,
-        EventKind::Note {
-            message: "Joined namespace /chat as socket socket-1".into()
-        }
-    );
+    let joined = events.clone();
     let welcome = received(events.last().unwrap()).unwrap();
     assert_eq!(welcome.event.as_deref(), Some("welcome"));
     assert_eq!(welcome.data, r#"[{"hi":true}]"#);
@@ -547,11 +545,209 @@ async fn socket_io_joins_emits_and_listens() {
             by_client: false
         }
     );
+    joined
+}
+
+fn notes(events: &[StreamEvent]) -> Vec<&str> {
+    events
+        .iter()
+        .filter_map(|e| match &e.kind {
+            EventKind::Note { message } => Some(message.as_str()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn opened_with(events: &[StreamEvent]) -> u16 {
+    events
+        .iter()
+        .find_map(|e| match &e.kind {
+            EventKind::Open { status, .. } => Some(*status),
+            _ => None,
+        })
+        .expect("the connection never opened")
+}
+
+fn upgraded(event: &StreamEvent) -> bool {
+    matches!(&event.kind, EventKind::Note { message } if message.starts_with("Upgraded"))
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn socket_io_over_websocket_only() {
+    let server = test_socketio::server(Transports::Websocket).await;
+    let events = exercise_socket_io(server.addr, SocketIoTransport::Websocket).await;
+    assert_eq!(opened_with(&events), 101);
+    assert_eq!(
+        notes(&events),
+        ["Joined namespace /chat as socket socket-1"]
+    );
+    // Long polling was never tried.
+    assert_eq!(server.count("GET", "polling"), 0);
+    assert_eq!(server.count("GET", "websocket"), 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn socket_io_falls_back_to_websocket_when_polling_is_refused() {
+    let server = test_socketio::server(Transports::Websocket).await;
+    let events = exercise_socket_io(server.addr, SocketIoTransport::Auto).await;
+    assert_eq!(opened_with(&events), 101);
+    assert_eq!(
+        notes(&events),
+        [
+            "Joined namespace /chat as socket socket-1",
+            "The server does not accept long polling, so Getman connected over WebSocket"
+        ]
+    );
+    assert_eq!(server.count("GET", "polling"), 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn socket_io_works_over_long_polling_alone() {
+    let server = test_socketio::server(Transports::Polling).await;
+    let events = exercise_socket_io(server.addr, SocketIoTransport::Auto).await;
+    assert_eq!(opened_with(&events), 200);
+    assert_eq!(
+        notes(&events),
+        ["Joined namespace /chat as socket socket-1 over long polling"]
+    );
+    let seen = server.seen.lock().unwrap().clone();
+    assert_eq!(server.count("GET", "websocket"), 0, "{seen:?}");
+    assert!(server.count("POST", "polling") >= 1, "{seen:?}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn socket_io_upgrades_from_long_polling_to_websocket() {
+    let server = test_socketio::server(Transports::Upgrading).await;
+    let addr = server.addr;
+    let (_dir, executor) = setup();
+    let request = Request {
+        kind: RequestKind::Socketio,
+        url: format!("http://{addr}"),
+        socketio: SocketIoSettings {
+            auth: r#"{"token": "secret"}"#.into(),
+            events: vec!["welcome".into(), "echo".into()],
+            ..SocketIoSettings::default()
+        },
+        ..Request::default()
+    };
+    let mut session = open(&executor, &request, Options::default());
+    let events = until(&mut session, upgraded).await;
+    assert_eq!(opened_with(&events), 200);
+    assert_eq!(
+        notes(&events),
+        [
+            "Joined namespace / as socket socket-1 over long polling",
+            "Upgraded from long polling to WebSocket"
+        ]
+    );
+    assert_eq!(server.count("GET", "websocket"), 1);
+
+    // Events go both ways on the WebSocket now, and the pings go on.
+    session
+        .control()
+        .send(Outbound::Emit(SavedEmit {
+            event: "echo".into(),
+            args: r#"["after"]"#.into(),
+            ..SavedEmit::default()
+        }))
+        .unwrap();
+    until(&mut session, |e| {
+        received(e).is_some_and(|m| m.event.as_deref() == Some("echo") && m.data == r#"["after"]"#)
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(1200)).await;
+    session.control().close();
+    let events = until(&mut session, is_closed).await;
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e.kind, EventKind::Error { .. })),
+        "{events:#?}"
+    );
+    // The poll that was open when the upgrade began has ended: nothing is
+    // asked of the long-polling endpoint any more.
+    let polls = server.count("GET", "polling");
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    assert_eq!(server.count("GET", "polling"), polls);
+
+    // The same server, asked to stay on long polling.
+    let events = exercise_socket_io(addr, SocketIoTransport::Polling).await;
+    assert_eq!(
+        notes(&events),
+        ["Joined namespace /chat as socket socket-1 over long polling"]
+    );
+    // And asked for WebSocket only.
+    let events = exercise_socket_io(addr, SocketIoTransport::Websocket).await;
+    assert_eq!(opened_with(&events), 101);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn socket_io_stays_on_long_polling_when_the_upgrade_fails() {
+    let server = test_socketio::server(Transports::BrokenUpgrade).await;
+    let events = exercise_socket_io(server.addr, SocketIoTransport::Auto).await;
+    assert_eq!(opened_with(&events), 200);
+    let warned = events.iter().any(|e| {
+        matches!(&e.kind,
+            EventKind::Warning { message } if message.starts_with("Could not upgrade to WebSocket") && message.ends_with("staying on long polling"))
+    });
+    assert!(warned, "{events:#?}");
+    assert_eq!(server.count("GET", "websocket"), 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn socket_io_sends_and_stores_cookies_unless_told_not_to() {
+    let server = test_socketio::server(Transports::Upgrading).await;
+    let (_dir, executor) = setup();
+    let request = Request {
+        kind: RequestKind::Socketio,
+        url: format!("http://{}", server.addr),
+        socketio: SocketIoSettings {
+            auth: r#"{"token": "secret"}"#.into(),
+            ..SocketIoSettings::default()
+        },
+        ..Request::default()
+    };
+    let mut session = open(&executor, &request, Options::default());
+    until(&mut session, upgraded).await;
+    session.control().close();
+    until(&mut session, is_closed).await;
+
+    // The cookie the handshake set came back on every later request, the
+    // WebSocket upgrade's included, and is in the jar.
+    let seen = server.seen.lock().unwrap().clone();
+    assert_eq!(seen[0], "GET polling cookie=", "{seen:?}");
+    assert!(
+        seen[1..]
+            .iter()
+            .all(|line| line.ends_with("cookie=io=engine-1")),
+        "{seen:?}"
+    );
+    assert!(
+        seen.iter().any(|l| l.starts_with("GET websocket")),
+        "{seen:?}"
+    );
+    assert_eq!(executor.http.cookies()[0].name, "io");
+
+    // With `cookies: false` it is neither sent nor kept.
+    executor.http.clear_cookies();
+    server.seen.lock().unwrap().clear();
+    let mut request = request;
+    request.settings.cookies = Some(false);
+    let mut session = open(&executor, &request, Options::default());
+    until(&mut session, upgraded).await;
+    session.control().close();
+    until(&mut session, is_closed).await;
+    let seen = server.seen.lock().unwrap().clone();
+    assert!(
+        seen.iter().all(|line| line.ends_with("cookie=")),
+        "{seen:?}"
+    );
+    assert_eq!(executor.http.cookies(), []);
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn socket_io_reports_a_refused_join() {
-    let addr = test_servers::socketio().await;
+    let addr = test_socketio::websocket_only().await;
     let (_dir, executor) = setup();
     let request = Request {
         kind: RequestKind::Socketio,

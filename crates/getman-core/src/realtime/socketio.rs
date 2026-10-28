@@ -12,14 +12,12 @@ use std::time::{Duration, Instant};
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
-use futures_util::{SinkExt as _, StreamExt as _};
 use serde_json::Value;
-use tokio_tungstenite::tungstenite::Message as Frame;
 
-use super::websocket::{self, Socket};
+use super::engine::{self, Incoming, Link, Wire, wire_url};
 use super::{
-    Direction, EventKind, Job, Message, Outbound, SavedEmit, Sink, SocketIoSettings, header_list,
-    within,
+    Direction, EventKind, Job, Message, Outbound, SavedEmit, Sink, SocketIoSettings,
+    SocketIoTransport, within,
 };
 use crate::error::{Error, Result};
 use crate::vars::VarStack;
@@ -43,8 +41,9 @@ const CONNECT_ERROR: u8 = 4;
 const BINARY_EVENT: u8 = 5;
 const BINARY_ACK: u8 = 6;
 
-/// The WebSocket URL of the Engine.IO endpoint for a request's URL, and
-/// the namespace to join.
+/// The Engine.IO endpoint for a request's URL, with a `ws` or `wss` scheme
+/// and the transport left to [`engine::wire_url`], and the namespace to
+/// join.
 pub(super) fn endpoint(
     raw: &str,
     settings: &SocketIoSettings,
@@ -75,10 +74,17 @@ pub(super) fn endpoint(
         format!("/{}/", path.trim_matches('/'))
     };
     url.set_path(&path);
-    url.query_pairs_mut()
-        .append_pair("EIO", "4")
-        .append_pair("transport", "websocket");
     Ok((url.to_string(), namespace))
+}
+
+/// The URL of the first request a connection makes, for showing it.
+pub(super) fn first_url(endpoint: &str, transport: SocketIoTransport) -> String {
+    let wire = if transport == SocketIoTransport::Websocket {
+        Wire::Websocket
+    } else {
+        Wire::Polling
+    };
+    wire_url(endpoint, wire, None)
 }
 
 /// A namespace as Socket.IO writes it: a leading slash, no trailing one.
@@ -225,17 +231,11 @@ pub(super) async fn run(job: &mut Job, sink: &mut Sink) {
             }
         }
     };
+    let mode = job.request.socketio.transport;
     let opening = within(job.connect_timeout(), async {
-        let (mut socket, handshake) = websocket::open(
-            &job.http,
-            &job.transport,
-            &job.outgoing.url,
-            &job.outgoing.headers,
-            &[],
-        )
-        .await?;
-        let joined = join(&mut socket, &namespace, auth.as_ref()).await?;
-        Ok((socket, handshake, joined))
+        let mut opened = engine::open(job, mode).await?;
+        let joined = join(&mut opened.link, &namespace, auth.as_ref()).await?;
+        Ok((opened, joined))
     });
     let opened = tokio::select! {
         opened = opening => opened,
@@ -245,7 +245,7 @@ pub(super) async fn run(job: &mut Job, sink: &mut Sink) {
         }
         () = gone.closed() => return,
     };
-    let (socket, handshake, joined) = match opened {
+    let (opened, joined) = match opened {
         Ok(opened) => opened,
         Err(message) => {
             sink.fail(message).await;
@@ -262,9 +262,16 @@ pub(super) async fn run(job: &mut Job, sink: &mut Sink) {
             return;
         }
     };
+    let engine::Opened {
+        mut link,
+        status,
+        headers,
+        fell_back,
+        can_upgrade,
+    } = opened;
     let open = EventKind::Open {
-        status: handshake.status().as_u16(),
-        headers: header_list(handshake.headers()),
+        status,
+        headers,
         protocol: None,
         time_ms: (started.elapsed().as_secs_f64() * 100_000.0).round() / 100.0,
     };
@@ -275,6 +282,9 @@ pub(super) async fn run(job: &mut Job, sink: &mut Sink) {
     if !sid.is_empty() {
         joined_note.push_str(&format!(" as socket {sid}"));
     }
+    if link.is_polling() {
+        joined_note.push_str(" over long polling");
+    }
     if !sink
         .emit(EventKind::Note {
             message: joined_note,
@@ -283,24 +293,71 @@ pub(super) async fn run(job: &mut Job, sink: &mut Sink) {
     {
         return;
     }
+    if fell_back
+        && !sink
+            .emit(EventKind::Note {
+                message:
+                    "The server does not accept long polling, so Getman connected over WebSocket"
+                        .into(),
+            })
+            .await
+    {
+        return;
+    }
+    let mut last_ping = Instant::now();
+    if can_upgrade {
+        let upgraded = tokio::select! {
+            upgraded = engine::upgrade(&mut link, job) => upgraded,
+            () = job.close.notified() => {
+                let _ = link.send(encode(DISCONNECT, &namespace, None, None)).await;
+                let (code, reason) = link.close().await;
+                sink.closed(code, reason, true).await;
+                return;
+            }
+            () = gone.closed() => return,
+        };
+        let shown = match upgraded {
+            Ok(()) => {
+                // The upgrade took time the server's pings waited in.
+                last_ping = Instant::now();
+                sink.emit(EventKind::Note {
+                    message: "Upgraded from long polling to WebSocket".into(),
+                })
+                .await
+            }
+            Err(engine::UpgradeFailure::Kept(message)) => {
+                sink.emit(EventKind::Warning {
+                    message: format!(
+                        "Could not upgrade to WebSocket ({message}); staying on long polling"
+                    ),
+                })
+                .await
+            }
+            Err(engine::UpgradeFailure::Lost(message)) => {
+                sink.fail(message).await;
+                return;
+            }
+        };
+        if !shown {
+            return;
+        }
+    }
 
     let events = job.request.socketio.events.clone();
-    let (mut writer, mut reader) = socket.split();
     let mut next_ack = 0_u64;
-    let mut last_ping = Instant::now();
     let mut pending: Option<(Packet, Vec<Vec<u8>>)> = None;
     loop {
         let deadline = last_ping + heartbeat.interval + heartbeat.timeout;
         tokio::select! {
             () = job.close.notified() => {
-                let _ = writer.send(Frame::text(encode(DISCONNECT, &namespace, None, None))).await;
-                let (code, reason) = websocket::close(&mut writer, &mut reader).await;
+                let _ = link.send(encode(DISCONNECT, &namespace, None, None)).await;
+                let (code, reason) = link.close().await;
                 sink.closed(code, reason, true).await;
                 return;
             }
             command = job.commands.recv() => {
                 let Some(command) = command else {
-                    let _ = writer.send(Frame::Close(None)).await;
+                    link.abandon().await;
                     return;
                 };
                 let saved = match command {
@@ -315,8 +372,8 @@ pub(super) async fn run(job: &mut Job, sink: &mut Sink) {
                 };
                 match emit(job, sink, &saved, &namespace, &mut next_ack).await {
                     Ok(Some((packet, message))) => {
-                        if let Err(e) = writer.send(Frame::text(packet)).await {
-                            sink.fail(websocket::describe(&e, &[])).await;
+                        if let Err(message) = link.send(packet).await {
+                            sink.fail(message).await;
                             return;
                         }
                         if !sink.emit(EventKind::Message(message)).await {
@@ -329,26 +386,14 @@ pub(super) async fn run(job: &mut Job, sink: &mut Sink) {
                     }
                 }
             }
-            frame = reader.next() => {
-                let frame = match frame {
-                    Some(Ok(frame)) => frame,
-                    Some(Err(e)) => {
-                        sink.fail(websocket::describe(&e, &[])).await;
-                        return;
-                    }
-                    None => {
-                        sink.closed(None, String::new(), false).await;
-                        return;
-                    }
-                };
-                let packet = match frame {
-                    Frame::Text(text) => {
-                        let text = text.as_str();
+            incoming = link.next() => {
+                let packet = match incoming {
+                    Incoming::Text(text) => {
                         match text.as_bytes().first() {
                             Some(b'2') => {
                                 last_ping = Instant::now();
                                 let pong = format!("3{}", &text[1..]);
-                                if writer.send(Frame::text(pong)).await.is_err() {
+                                if link.send(pong).await.is_err() {
                                     sink.fail("The connection broke while answering a ping".into()).await;
                                     return;
                                 }
@@ -368,11 +413,11 @@ pub(super) async fn run(job: &mut Job, sink: &mut Sink) {
                             _ => continue,
                         }
                     }
-                    Frame::Binary(bytes) => {
+                    Incoming::Binary(bytes) => {
                         let Some((packet, mut attachments)) = pending.take() else {
                             continue;
                         };
-                        attachments.push(bytes.to_vec());
+                        attachments.push(bytes);
                         if attachments.len() < packet.attachments {
                             pending = Some((packet, attachments));
                             continue;
@@ -384,13 +429,14 @@ pub(super) async fn run(job: &mut Job, sink: &mut Sink) {
                         packet.kind = if packet.kind == BINARY_EVENT { EVENT } else { ACK };
                         packet
                     }
-                    Frame::Close(frame) => {
-                        let (code, reason) = frame
-                            .map_or((None, String::new()), |f| (Some(u16::from(f.code)), f.reason.to_string()));
+                    Incoming::Closed { code, reason } => {
                         sink.closed(code, reason, false).await;
                         return;
                     }
-                    _ => continue,
+                    Incoming::Failed(message) => {
+                        sink.fail(message).await;
+                        return;
+                    }
                 };
                 if packet.namespace != namespace {
                     continue;
@@ -418,7 +464,7 @@ pub(super) async fn run(job: &mut Job, sink: &mut Sink) {
                         message.event = Some(name);
                         message.ack = packet.id;
                         if !sink.received(message).await {
-                            let _ = writer.send(Frame::Close(None)).await;
+                            link.abandon().await;
                             return;
                         }
                     }
@@ -427,13 +473,13 @@ pub(super) async fn run(job: &mut Job, sink: &mut Sink) {
                         let mut message = Message::text(Direction::Received, data.to_string());
                         message.ack = packet.id;
                         if !sink.received(message).await {
-                            let _ = writer.send(Frame::Close(None)).await;
+                            link.abandon().await;
                             return;
                         }
                     }
                     DISCONNECT => {
                         sink.closed(None, format!("The server disconnected the socket from {namespace}"), false).await;
-                        let _ = writer.send(Frame::Close(None)).await;
+                        link.abandon().await;
                         return;
                     }
                     CONNECT_ERROR => {
@@ -449,11 +495,11 @@ pub(super) async fn run(job: &mut Job, sink: &mut Sink) {
                     (heartbeat.interval + heartbeat.timeout).as_millis()
                 ))
                 .await;
-                let _ = writer.send(Frame::Close(None)).await;
+                link.abandon().await;
                 return;
             }
             () = gone.closed() => {
-                let _ = writer.send(Frame::Close(None)).await;
+                link.abandon().await;
                 return;
             }
         }
@@ -461,21 +507,15 @@ pub(super) async fn run(job: &mut Job, sink: &mut Sink) {
 }
 
 /// Waits for Engine.IO to open, then joins the namespace.
-async fn join(
-    socket: &mut Socket,
-    namespace: &str,
-    auth: Option<&Value>,
-) -> Result<Joined, String> {
+async fn join(link: &mut Link, namespace: &str, auth: Option<&Value>) -> Result<Joined, String> {
     let mut heartbeat = None;
-    while let Some(frame) = socket.next().await {
-        let frame = frame.map_err(|e| websocket::describe(&e, &[]))?;
-        let Frame::Text(text) = frame else {
-            if let Frame::Close(_) = frame {
-                break;
-            }
-            continue;
+    loop {
+        let text = match link.next().await {
+            Incoming::Text(text) => text,
+            Incoming::Binary(_) => continue,
+            Incoming::Closed { .. } => break,
+            Incoming::Failed(message) => return Err(message),
         };
-        let text = text.as_str();
         match text.as_bytes().first() {
             Some(b'0') => {
                 let open: Value = serde_json::from_str(&text[1..]).unwrap_or_default();
@@ -486,16 +526,10 @@ async fn join(
                     interval: ms("pingInterval", 25_000),
                     timeout: ms("pingTimeout", 20_000),
                 });
-                socket
-                    .send(Frame::text(encode(CONNECT, namespace, None, auth)))
-                    .await
-                    .map_err(|e| websocket::describe(&e, &[]))?;
+                link.send(encode(CONNECT, namespace, None, auth)).await?;
             }
             Some(b'2') => {
-                socket
-                    .send(Frame::text(format!("3{}", &text[1..])))
-                    .await
-                    .map_err(|e| websocket::describe(&e, &[]))?;
+                link.send(format!("3{}", &text[1..])).await?;
             }
             Some(b'4') => {
                 let packet = decode(&text[1..])?;
@@ -637,11 +671,16 @@ mod tests {
         let settings = SocketIoSettings::default();
         let (url, namespace) =
             endpoint("http://localhost:3000/admin?token=x", &settings, &vars).unwrap();
+        assert_eq!(url, "ws://localhost:3000/socket.io/?token=x");
+        assert_eq!(namespace, "/admin");
         assert_eq!(
-            url,
+            first_url(&url, SocketIoTransport::Auto),
+            "http://localhost:3000/socket.io/?token=x&EIO=4&transport=polling"
+        );
+        assert_eq!(
+            first_url(&url, SocketIoTransport::Websocket),
             "ws://localhost:3000/socket.io/?token=x&EIO=4&transport=websocket"
         );
-        assert_eq!(namespace, "/admin");
 
         let settings = SocketIoSettings {
             namespace: "orders/".into(),
@@ -649,7 +688,7 @@ mod tests {
             ..SocketIoSettings::default()
         };
         let (url, namespace) = endpoint("https://example.com", &settings, &vars).unwrap();
-        assert_eq!(url, "wss://example.com/rt/?EIO=4&transport=websocket");
+        assert_eq!(url, "wss://example.com/rt/");
         assert_eq!(namespace, "/orders");
         assert!(endpoint("ftp://example.com", &settings, &vars).is_err());
     }

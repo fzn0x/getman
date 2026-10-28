@@ -98,6 +98,11 @@ pub struct SocketIoSettings {
     /// as `socket.handshake.auth`. May contain `{{variables}}`.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub auth: String,
+    /// How to reach the server: long polling first and an upgrade to
+    /// WebSocket if the server offers it (the default, as in the Socket.IO
+    /// client), or only one of them.
+    #[serde(skip_serializing_if = "SocketIoTransport::is_auto")]
+    pub transport: SocketIoTransport,
     /// Events to show. Every event when empty.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub events: Vec<String>,
@@ -110,6 +115,29 @@ impl SocketIoSettings {
     /// Whether nothing is set.
     pub fn is_empty(&self) -> bool {
         *self == Self::default()
+    }
+}
+
+/// The transports a Socket.IO connection may use.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SocketIoTransport {
+    /// Start with HTTP long polling and upgrade to WebSocket if the
+    /// server offers it. If the server turns long polling down, connect
+    /// over WebSocket.
+    #[default]
+    Auto,
+    /// WebSocket only, for servers that allow nothing else.
+    Websocket,
+    /// HTTP long polling only, never upgrading.
+    Polling,
+}
+
+impl SocketIoTransport {
+    /// Whether this is [`SocketIoTransport::Auto`].
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn is_auto(&self) -> bool {
+        *self == Self::Auto
     }
 }
 
@@ -179,6 +207,7 @@ kind: socketio
 url: http://localhost:3000
 socketio:
   namespace: /orders
+  transport: websocket
   auth: '{\"token\": \"{{token}}\"}'
   events: [order:created]
   messages:
@@ -190,12 +219,17 @@ sse:
 ";
         let request: Request = serde_yaml_ng::from_str(yaml).unwrap();
         assert_eq!(request.socketio.namespace, "/orders");
+        assert_eq!(
+            request.socketio.transport,
+            super::SocketIoTransport::Websocket
+        );
         assert!(request.socketio.messages[0].ack);
         assert!(request.sse.reconnect);
         let written = serde_yaml_ng::to_string(&request).unwrap();
         assert!(!written.contains("name:"), "{written}");
         assert!(!written.contains("path:"), "{written}");
-        assert!(!written.contains("websocket"), "{written}");
+        assert!(written.contains("transport: websocket"), "{written}");
+        assert!(!written.contains("kind: websocket"), "{written}");
         assert_eq!(
             serde_yaml_ng::from_str::<Request>(&written).unwrap(),
             request
