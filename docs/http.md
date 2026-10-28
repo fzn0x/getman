@@ -23,7 +23,9 @@ settings:
 | --- | --- | --- |
 | `timeout_ms` | 30000 | Give up after this long; 0 waits forever |
 | `follow_redirects` | true | |
-| `max_redirects` | 10 | |
+| `max_redirects` | 10 | More redirects than this stop the request with an error |
+| `follow_original_method` | false | true keeps a POST and its body across a 301 or 302 |
+| `follow_authorization` | false | true keeps `Authorization` across a redirect to another host |
 | `verify_tls` | true | false accepts self-signed and expired certificates |
 | `http_version` | `auto` | `auto`, `http1`, `http2` or `http3` |
 | `title_case_headers` | true | Send HTTP/1.1 header names as `Content-Type` rather than `content-type` |
@@ -210,11 +212,31 @@ their effects.
 
 ## Redirects
 
-Getman follows up to `max_redirects` redirects. Like browsers, it turns a
-POST into a GET after a 301, 302 or 303 and drops the body, and it drops
-the `Authorization` and `Cookie` headers when a redirect leads to another
-host, port or scheme. 307 and 308 keep the method and body. The HTTP
-library Getman uses decides this, and it cannot keep a POST on a 301 or
-302, or send `Authorization` to another host. If you need either, turn
-`follow_redirects` off and send the next request yourself, for example
-from a post-response script with `gm.sendRequest`.
+Getman follows up to `max_redirects` redirects (301, 302, 303, 307 and
+308) itself, one request after the other, and the response lists them:
+the browser UI shows the count beside the protocol and the steps in the
+panel that opens from the Time, and `getman send -i` prints them with how
+long each took. The time of the response covers the whole chain, and the
+timing parts still add up to it.
+
+What the next request looks like follows the browsers:
+
+| Status | The next request |
+| --- | --- |
+| 301, 302 | A POST becomes a GET without the body. Other methods stay as they are. With `follow_original_method: true` a POST stays a POST with its body |
+| 303 | Always a GET without the body (a HEAD stays a HEAD) |
+| 307, 308 | The same method and body |
+
+When a redirect leads to another host, port or scheme, the `Cookie` and
+`Authorization` headers you set, and `Proxy-Authorization`, stay behind, so
+a token is not sent to a site you did not choose. With
+`follow_authorization: true` `Authorization` and `Proxy-Authorization`
+go along. The cookie jar is unaffected by either: every response's
+`Set-Cookie` is stored, including those of the redirects, and each request
+sends the cookies that belong to its own host.
+
+A redirect that cannot be followed stops the request with an error that
+says why: more redirects than `max_redirects`, a `Location` that is not an
+http or https URL, or a request repeated (the same method and URL a second
+time), which means the redirects go in a circle. `follow_redirects: false`
+returns the redirect itself, so you can read its `Location`.

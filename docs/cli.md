@@ -84,7 +84,7 @@ it receives on a line; see [WebSocket, SSE and Socket.IO](realtime.md).
 | `REQUEST` | A path in the workspace, such as `orders/create.yaml`, or a path on disk |
 | `-e`, `--env NAME` | Environment to use. `GETMAN_ENVIRONMENT` sets it too |
 | `--var NAME=VALUE` | Set a variable. Repeat for more |
-| `-i`, `--include` | Print the status line and headers first, and the timing and TLS details after; for a connection, the handshake's answer |
+| `-i`, `--include` | Print the status line and headers first, and the redirects followed, the timing and TLS details after; for a connection, the handshake's answer |
 | `--http-version VERSION` | `auto`, `http1`, `http2` or `http3`, over the files' settings |
 | `--proxy URL` | A proxy URL, `system` or `off`, over the files' settings |
 | `--json` | Print everything as JSON: request, response, tests, checks, logs. For a connection, every event as one line of JSON |

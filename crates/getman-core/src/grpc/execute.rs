@@ -895,6 +895,7 @@ fn response_view(call: &GrpcCall, target: &Target) -> Response {
         remote_addr: None,
         timings: None,
         tls: None,
+        hops: Vec::new(),
         http3_available: false,
         stream_open: false,
     }

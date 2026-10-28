@@ -11,7 +11,7 @@ use crate::http::{Header, Part, find_header, set_header};
 
 /// Most bytes a multipart body may hold. Bodies are built in memory, as
 /// are the files of a binary body.
-pub const MAX_BYTES: u64 = 256 * 1024 * 1024;
+pub(crate) const MAX_BYTES: u64 = 256 * 1024 * 1024;
 
 /// A boundary no part is likely to contain: 128 random bits.
 fn new_boundary() -> Result<String> {

@@ -571,6 +571,8 @@ fn settings(behavior: &Value) -> Settings {
         max_redirects: behavior["maxRedirects"]
             .as_u64()
             .and_then(|n| u32::try_from(n).ok()),
+        follow_original_method: behavior["followOriginalHttpMethod"].as_bool(),
+        follow_authorization: behavior["followAuthorizationHeader"].as_bool(),
         verify_tls: behavior["strictSSL"].as_bool(),
         ..Settings::default()
     }
@@ -757,7 +759,7 @@ mod tests {
                 "url": { "raw": "{{baseUrl}}/pets/:id", "variable": [{ "key": "id", "value": "7" }] },
                 "auth": { "type": "noauth" }
               },
-              "protocolProfileBehavior": { "followRedirects": false, "strictSSL": false }
+              "protocolProfileBehavior": { "followRedirects": false, "strictSSL": false, "followOriginalHttpMethod": true, "followAuthorizationHeader": true }
             }
           ]
         },
@@ -834,6 +836,8 @@ mod tests {
         assert!(matches!(create.body, Body::Json { .. }));
         assert_eq!(create.auth, Auth::None);
         assert_eq!(create.settings.follow_redirects, Some(false));
+        assert_eq!(create.settings.follow_original_method, Some(true));
+        assert_eq!(create.settings.follow_authorization, Some(true));
         assert_eq!(create.settings.verify_tls, Some(false));
 
         let upload = ws.read_request("pet-store/upload.yaml").unwrap();

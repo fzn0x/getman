@@ -149,6 +149,15 @@ fn print_response(response: &Response, include: bool) -> std::io::Result<()> {
 /// offer, one line each.
 fn details(response: &Response) -> Vec<String> {
     let mut lines = Vec::new();
+    if !response.hops.is_empty() {
+        let mut route: Vec<String> = response
+            .hops
+            .iter()
+            .map(|hop| format!("{} {} ({})", hop.status, hop.url, fine(hop.time_ms)))
+            .collect();
+        route.push(format!("{} {}", response.status, response.url));
+        lines.push(format!("Redirects: {}", route.join(" → ")));
+    }
     if let Some(timings) = &response.timings {
         let setup = if timings.reused {
             "reused connection".to_owned()

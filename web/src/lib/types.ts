@@ -182,6 +182,8 @@ export interface Settings {
   timeout_ms?: number | null;
   follow_redirects?: boolean | null;
   max_redirects?: number | null;
+  follow_original_method?: boolean | null;
+  follow_authorization?: boolean | null;
   verify_tls?: boolean | null;
   http_version?: HttpVersion | null;
   title_case_headers?: boolean | null;
@@ -387,6 +389,8 @@ export interface Response {
   time_ms: number;
   headers_ms: number;
   size: { headers: number; body: number };
+  /** The redirects followed on the way, in order. */
+  hops?: Hop[];
   remote_addr?: string;
   timings?: Timings;
   tls?: TlsDetails;
@@ -394,6 +398,14 @@ export interface Response {
   http3_available?: boolean;
   /** The body is an event stream that was still open when the request timed out. */
   stream_open?: boolean;
+}
+
+/** A redirect followed on the way to a response. */
+export interface Hop {
+  status: number;
+  /** The URL that was requested and answered with the redirect. */
+  url: string;
+  time_ms: number;
 }
 
 /** Where a response's time went, in milliseconds. */

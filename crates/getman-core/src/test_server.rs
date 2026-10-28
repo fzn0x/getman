@@ -38,6 +38,9 @@ fn app() -> Router {
         .route("/echo", any(echo))
         .route("/echo/{*rest}", any(echo))
         .route("/redirect", get(redirect))
+        .route("/go/{code}", any(go))
+        .route("/count/{n}", get(count))
+        .route("/loop/{which}", get(circle))
         .route("/cookies/set", get(set_cookies))
         .route("/bytes", get(bytes))
         .route("/bytes/{count}", get(many_bytes))
@@ -345,6 +348,40 @@ async fn alt_svc() -> impl IntoResponse {
 
 async fn redirect() -> impl IntoResponse {
     (StatusCode::FOUND, [(header::LOCATION, "/echo")])
+}
+
+/// Answers with this status, sending the client to `to` and setting the
+/// cookie `cookie` (`name=value`) when they are given.
+async fn go(Path(code): Path<u16>, Query(query): Query<BTreeMap<String, String>>) -> Response {
+    let mut response = Response::builder().status(code);
+    if let Some(to) = query.get("to") {
+        response = response.header(header::LOCATION, to);
+    }
+    if let Some(cookie) = query.get("cookie") {
+        response = response.header(header::SET_COOKIE, format!("{cookie}; Path=/"));
+    }
+    response.body(axum::body::Body::empty()).unwrap()
+}
+
+/// Redirects `n` times, counting down, then answers `done`.
+async fn count(Path(n): Path<u32>) -> Response {
+    match n.checked_sub(1) {
+        Some(next) => (
+            StatusCode::FOUND,
+            [(header::LOCATION, format!("/count/{next}"))],
+        )
+            .into_response(),
+        None => "done".into_response(),
+    }
+}
+
+/// `/loop/a` leads to `/loop/b`, which leads back.
+async fn circle(Path(which): Path<String>) -> impl IntoResponse {
+    let other = if which == "a" { "b" } else { "a" };
+    (
+        StatusCode::FOUND,
+        [(header::LOCATION, format!("/loop/{other}"))],
+    )
 }
 
 async fn set_cookies(Query(cookies): Query<BTreeMap<String, String>>) -> Response {

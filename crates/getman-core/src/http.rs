@@ -170,6 +170,12 @@ pub struct Transport {
     pub follow_redirects: bool,
     /// Most redirects to follow.
     pub max_redirects: u32,
+    /// Keep the method and body across a 301 or 302, rather than turning
+    /// a POST into a GET.
+    pub follow_original_method: bool,
+    /// Keep `Authorization` across a redirect to another host, port or
+    /// scheme.
+    pub follow_authorization: bool,
     /// Check TLS certificates.
     pub verify_tls: bool,
     /// HTTP version to speak.
@@ -194,6 +200,8 @@ impl Default for Transport {
             timeout_ms: 30_000,
             follow_redirects: true,
             max_redirects: 10,
+            follow_original_method: false,
+            follow_authorization: false,
             verify_tls: true,
             http_version: HttpVersion::Auto,
             title_case_headers: true,
@@ -270,6 +278,10 @@ pub struct Response {
     pub time_ms: f64,
     /// Milliseconds from sending until the headers arrived.
     pub headers_ms: f64,
+    /// The redirects followed on the way, in order. Empty when the first
+    /// request got this response.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hops: Vec<Hop>,
     /// Size of the headers and the body.
     pub size: Size,
     /// Address of the server that answered.
@@ -289,6 +301,17 @@ pub struct Response {
     /// request timed out. The body holds what arrived until then.
     #[serde(default)]
     pub stream_open: bool,
+}
+
+/// A redirect Getman followed on the way to a response.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Hop {
+    /// Status the redirect came with, such as 302.
+    pub status: u16,
+    /// URL that was requested and answered with the redirect.
+    pub url: String,
+    /// Milliseconds from sending that request until its headers arrived.
+    pub time_ms: f64,
 }
 
 /// Where a response's time went, in milliseconds. The parts add up to
@@ -382,8 +405,6 @@ pub struct HttpClient {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[allow(clippy::struct_excessive_bools)]
 struct ClientKey {
-    follow_redirects: bool,
-    max_redirects: u32,
     verify_tls: bool,
     http_version: HttpVersion,
     title_case_headers: bool,
@@ -396,8 +417,6 @@ struct ClientKey {
 impl ClientKey {
     fn new(transport: &Transport) -> Self {
         Self {
-            follow_redirects: transport.follow_redirects,
-            max_redirects: transport.max_redirects,
             verify_tls: transport.verify_tls,
             http_version: transport.http_version,
             title_case_headers: transport.title_case_headers,
@@ -459,13 +478,10 @@ impl HttpClient {
     }
 
     fn build_client(&self, key: &ClientKey) -> Result<reqwest::Client> {
-        let redirect = if key.follow_redirects {
-            reqwest::redirect::Policy::limited(key.max_redirects as usize)
-        } else {
-            reqwest::redirect::Policy::none()
-        };
+        // Redirects are followed in `follow`, which can keep the method and
+        // the credentials the way the settings ask.
         let mut builder = reqwest::Client::builder()
-            .redirect(redirect)
+            .redirect(reqwest::redirect::Policy::none())
             .tls_danger_accept_invalid_certs(!key.verify_tls)
             .tls_info(true)
             .connect_timeout(Duration::from_secs(30))
@@ -516,21 +532,21 @@ impl HttpClient {
     pub async fn send(&self, outgoing: &Outgoing, transport: Transport) -> Result<Response> {
         check_route(outgoing, &transport)?;
         let client = self.client(&transport)?;
-        let request = build(&client, outgoing, &transport).await?;
+        let wire = wire(outgoing).await?;
         let probe = Arc::new(Probe::default());
-        let exchange = timing::measure(Arc::clone(&probe), exchange(&client, request, &transport));
+        let exchange = timing::measure(Arc::clone(&probe), exchange(&client, wire, &transport));
         let result = exchange.await;
         if transport.cookies {
             self.save_cookies_quietly();
         }
-        let mut response = result.map_err(|e| {
-            let mut message = describe(&e);
-            if transport.http_version == HttpVersion::Http3 {
+        let mut response = result.map_err(|e| match e {
+            Error::Http(mut message) if transport.http_version == HttpVersion::Http3 => {
                 message.push_str(
                     ". The server did not answer over HTTP/3 (QUIC, on UDP); if it does not support HTTP/3, set the HTTP version to auto",
                 );
+                Error::Http(message)
             }
-            Error::Http(message)
+            other => other,
         })?;
 
         let connects = probe.connects();
@@ -563,24 +579,12 @@ impl HttpClient {
         &self,
         outgoing: &Outgoing,
         transport: Transport,
-    ) -> Result<(reqwest::Response, f64)> {
+    ) -> Result<(Incoming, f64)> {
         let client = self.client(&transport)?;
-        let timeout_ms = transport.timeout_ms;
-        let unlimited = Transport {
-            timeout_ms: 0,
-            ..transport
-        };
-        let request = build(&client, outgoing, &unlimited).await?;
+        let wire = wire(outgoing).await?;
         let started = Instant::now();
-        let pending = client.execute(request);
-        let response = if timeout_ms > 0 {
-            tokio::time::timeout(Duration::from_millis(timeout_ms), pending)
-                .await
-                .map_err(|_| Error::Http("The request timed out".into()))?
-        } else {
-            pending.await
-        }
-        .map_err(|e| Error::Http(describe(&e)))?;
+        let deadline = deadline(&transport);
+        let (response, _) = follow(&client, wire, &transport, deadline).await?;
         Ok((response, millis(started.elapsed())))
     }
 
@@ -773,32 +777,236 @@ fn check_route(outgoing: &Outgoing, transport: &Transport) -> Result<()> {
     Ok(())
 }
 
-/// Sends the request and reads the response, inside the timing scope.
-async fn exchange(
+/// The point in time a request must be answered by, if it has a timeout.
+fn deadline(transport: &Transport) -> Option<tokio::time::Instant> {
+    (transport.timeout_ms > 0)
+        .then(|| tokio::time::Instant::now() + Duration::from_millis(transport.timeout_ms))
+}
+
+fn timed_out() -> Error {
+    Error::Http("The request timed out".into())
+}
+
+/// Waits for `future`, at most until `deadline`.
+async fn until<F: std::future::Future>(
+    deadline: Option<tokio::time::Instant>,
+    future: F,
+) -> Result<F::Output> {
+    match deadline {
+        Some(deadline) => tokio::time::timeout_at(deadline, future)
+            .await
+            .map_err(|_| timed_out()),
+        None => Ok(future.await),
+    }
+}
+
+/// A request, parsed and ready to be sent as often as redirects need.
+struct Wire {
+    method: http::Method,
+    url: url::Url,
+    headers: http::HeaderMap,
+    body: Option<bytes::Bytes>,
+}
+
+impl Wire {
+    fn request(&self, client: &reqwest::Client, transport: &Transport) -> Result<reqwest::Request> {
+        let mut builder = client
+            .request(self.method.clone(), self.url.clone())
+            .headers(self.headers.clone());
+        #[cfg(reqwest_unstable)]
+        if transport.http_version == HttpVersion::Http3 {
+            builder = builder.version(reqwest::Version::HTTP_3);
+        }
+        #[cfg(not(reqwest_unstable))]
+        let _ = transport;
+        if let Some(body) = &self.body {
+            builder = builder.body(body.clone());
+        }
+        builder.build().map_err(|e| Error::Http(describe(&e)))
+    }
+}
+
+/// A response whose headers have arrived, and the rest of it still to
+/// read.
+pub(crate) struct Incoming {
+    status: http::StatusCode,
+    version: String,
+    url: url::Url,
+    headers: http::HeaderMap,
+    remote_addr: Option<String>,
+    tls: Option<TlsDetails>,
+    body: reqwest::Response,
+}
+
+impl Incoming {
+    fn from_reqwest(response: reqwest::Response) -> Self {
+        let tls = response
+            .extensions()
+            .get::<reqwest::tls::TlsInfo>()
+            .map(|info| TlsDetails {
+                version: info
+                    .version()
+                    .and_then(crate::tls::version_name)
+                    .map(str::to_owned),
+                certificate: info.peer_certificate().and_then(CertificateInfo::from_der),
+            });
+        Self {
+            status: response.status(),
+            version: version_text(response.version()),
+            url: response.url().clone(),
+            headers: response.headers().clone(),
+            remote_addr: response.remote_addr().map(|a| a.to_string()),
+            tls,
+            body: response,
+        }
+    }
+
+    pub(crate) fn status(&self) -> http::StatusCode {
+        self.status
+    }
+
+    pub(crate) fn headers(&self) -> &http::HeaderMap {
+        &self.headers
+    }
+
+    /// The next piece of the body, `None` at its end.
+    pub(crate) async fn chunk(&mut self) -> Result<Option<bytes::Bytes>> {
+        self.body
+            .chunk()
+            .await
+            .map_err(|e| Error::Http(describe(&e)))
+    }
+}
+
+/// Whether a status asks the client to go elsewhere, as these do.
+fn is_redirect(status: http::StatusCode) -> bool {
+    matches!(status.as_u16(), 301 | 302 | 303 | 307 | 308)
+}
+
+/// Whether two URLs name the same scheme, host and port.
+fn same_origin(a: &url::Url, b: &url::Url) -> bool {
+    a.scheme() == b.scheme()
+        && a.host_str() == b.host_str()
+        && a.port_or_known_default() == b.port_or_known_default()
+}
+
+/// Turns a request into the one a redirect asks for: `next` replaces the
+/// URL, the method and body change where the status says so, and
+/// credentials stay behind when the request leaves its origin.
+fn redirected(wire: &mut Wire, status: http::StatusCode, next: url::Url, transport: &Transport) {
+    // A 303 asks for the result with GET (or HEAD, if that is what was
+    // asked); 301 and 302 do the same for a POST, as browsers do.
+    let drop_body = match status.as_u16() {
+        303 => true,
+        301 | 302 => wire.method == http::Method::POST && !transport.follow_original_method,
+        _ => false,
+    };
+    if drop_body {
+        if wire.method != http::Method::HEAD {
+            wire.method = http::Method::GET;
+        }
+        wire.body = None;
+        for name in [
+            "content-type",
+            "content-length",
+            "content-encoding",
+            "content-language",
+            "content-location",
+            "transfer-encoding",
+        ] {
+            wire.headers.remove(name);
+        }
+    }
+    if !same_origin(&wire.url, &next) {
+        wire.headers.remove("cookie");
+        wire.headers.remove("cookie2");
+        wire.headers.remove("host");
+        if !transport.follow_authorization {
+            wire.headers.remove("authorization");
+            wire.headers.remove("proxy-authorization");
+        }
+    }
+    wire.url = next;
+}
+
+/// Sends the request and follows its redirects, as the transport says.
+/// The timeout, if any, covers the whole chain. Returns the response that
+/// ended it, and the redirects on the way.
+async fn follow(
     client: &reqwest::Client,
-    request: reqwest::Request,
+    mut wire: Wire,
     transport: &Transport,
-) -> std::result::Result<Response, reqwest::Error> {
+    deadline: Option<tokio::time::Instant>,
+) -> Result<(Incoming, Vec<Hop>)> {
+    let mut hops: Vec<Hop> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    seen.insert((wire.method.clone(), wire.url.clone()));
+    loop {
+        let started = Instant::now();
+        let request = wire.request(client, transport)?;
+        let response = until(deadline, client.execute(request))
+            .await?
+            .map_err(|e| Error::Http(describe(&e)))?;
+        let incoming = Incoming::from_reqwest(response);
+        if !transport.follow_redirects || !is_redirect(incoming.status) {
+            return Ok((incoming, hops));
+        }
+        let Some(location) = incoming
+            .headers
+            .get(http::header::LOCATION)
+            .map(|value| String::from_utf8_lossy(value.as_bytes()).trim().to_owned())
+        else {
+            return Ok((incoming, hops));
+        };
+        let next = wire.url.join(&location).map_err(|e| {
+            Error::Http(format!(
+                "Stopped following redirects: {} at {} led to {location:?}, which is not a valid URL ({e})",
+                incoming.status.as_u16(),
+                wire.url
+            ))
+        })?;
+        if !matches!(next.scheme(), "http" | "https") {
+            return Err(Error::Http(format!(
+                "Stopped following redirects: {} at {} led to {next}, and only http and https URLs can be sent",
+                incoming.status.as_u16(),
+                wire.url
+            )));
+        }
+        if hops.len() >= transport.max_redirects as usize {
+            return Err(Error::Http(format!(
+                "Stopped following redirects: there are more than {}, the most the max_redirects setting allows. The last one led to {next}",
+                transport.max_redirects
+            )));
+        }
+        hops.push(Hop {
+            status: incoming.status.as_u16(),
+            url: wire.url.to_string(),
+            time_ms: millis(started.elapsed()),
+        });
+        redirected(&mut wire, incoming.status, next, transport);
+        if !seen.insert((wire.method.clone(), wire.url.clone())) {
+            return Err(Error::Http(format!(
+                "Stopped following redirects: the server sent {} {} back to a request already made, so the redirects go in a circle",
+                wire.method, wire.url
+            )));
+        }
+    }
+}
+
+/// Sends the request and reads the response, inside the timing scope.
+async fn exchange(client: &reqwest::Client, wire: Wire, transport: &Transport) -> Result<Response> {
     let started = Instant::now();
-    let mut response = client.execute(request).await?;
+    let deadline = deadline(transport);
+    let (mut response, hops) = follow(client, wire, transport, deadline).await?;
     let headers_ms = millis(started.elapsed());
 
-    let status = response.status();
-    let http_version = version_text(response.version());
-    let url = response.url().to_string();
-    let remote_addr = response.remote_addr().map(|a| a.to_string());
-    let tls = response
-        .extensions()
-        .get::<reqwest::tls::TlsInfo>()
-        .map(|info| TlsDetails {
-            version: info
-                .version()
-                .and_then(crate::tls::version_name)
-                .map(str::to_owned),
-            certificate: info.peer_certificate().and_then(CertificateInfo::from_der),
-        });
+    let status = response.status;
+    let http_version = response.version.clone();
+    let url = response.url.to_string();
+    let remote_addr = response.remote_addr.take();
+    let tls = response.tls.take();
     let headers: Vec<Header> = response
-        .headers()
+        .headers
         .iter()
         .map(|(name, value)| {
             Header::new(
@@ -823,11 +1031,13 @@ async fn exchange(
     let mut truncated = false;
     let mut stream_open = false;
     loop {
-        let chunk = match response.chunk().await {
-            Ok(Some(chunk)) => chunk,
-            Ok(None) => break,
+        let chunk = match until(deadline, response.chunk()).await {
+            Ok(chunk) => match chunk? {
+                Some(chunk) => chunk,
+                None => break,
+            },
             // An event stream need not end; keep what arrived in time.
-            Err(e) if event_stream && e.is_timeout() => {
+            Err(_) if event_stream => {
                 stream_open = true;
                 break;
             }
@@ -867,6 +1077,7 @@ async fn exchange(
         truncated,
         time_ms,
         headers_ms,
+        hops,
         remote_addr,
         timings: None,
         tls,
@@ -913,14 +1124,12 @@ fn is_false(value: &bool) -> bool {
     !*value
 }
 
-async fn build(
-    client: &reqwest::Client,
-    outgoing: &Outgoing,
-    transport: &Transport,
-) -> Result<reqwest::Request> {
-    let method = reqwest::Method::from_bytes(outgoing.method.trim().as_bytes())
+/// Parses a request into what is sent. Multipart bodies and files are
+/// read here.
+async fn wire(outgoing: &Outgoing) -> Result<Wire> {
+    let method = http::Method::from_bytes(outgoing.method.trim().as_bytes())
         .map_err(|_| Error::Invalid(format!("{:?} is not a valid method", outgoing.method)))?;
-    let url = reqwest::Url::parse(&outgoing.url)
+    let url = url::Url::parse(&outgoing.url)
         .map_err(|e| Error::Invalid(format!("{:?} is not a valid URL: {e}", outgoing.url)))?;
     if !matches!(url.scheme(), "http" | "https") {
         return Err(Error::Invalid(format!(
@@ -928,12 +1137,20 @@ async fn build(
             url.scheme()
         )));
     }
-    let mut headers = outgoing.headers.clone();
+    let mut source = outgoing.headers.clone();
     // Multipart bodies are built here, with the boundary the request names,
     // so that whatever signed them hashed the same bytes.
-    let multipart = match &outgoing.body {
+    let body = match &outgoing.body {
+        OutgoingBody::None => None,
+        OutgoingBody::Bytes { data } => Some(bytes::Bytes::from(data.0.clone())),
+        OutgoingBody::File { path } => {
+            let data = tokio::fs::read(path)
+                .await
+                .map_err(|e| Error::io(path, e))?;
+            Some(bytes::Bytes::from(data))
+        }
         OutgoingBody::Multipart { parts } => {
-            let boundary = crate::multipart::ensure_boundary(&mut headers)?;
+            let boundary = crate::multipart::ensure_boundary(&mut source)?;
             let parts = parts.clone();
             let body =
                 tokio::task::spawn_blocking(move || crate::multipart::encode(&parts, &boundary))
@@ -941,41 +1158,27 @@ async fn build(
                     .map_err(|e| {
                         Error::Http(format!("Could not build the multipart body: {e}"))
                     })??;
-            Some(body)
+            Some(bytes::Bytes::from(body))
         }
-        _ => None,
     };
-    let mut builder = client.request(method, url);
-    for header in &headers {
-        let name = reqwest::header::HeaderName::from_bytes(header.name.trim().as_bytes())
+    let mut headers = http::HeaderMap::new();
+    for header in &source {
+        let name = http::HeaderName::from_bytes(header.name.trim().as_bytes())
             .map_err(|_| Error::Invalid(format!("{:?} is not a valid header name", header.name)))?;
-        let value = reqwest::header::HeaderValue::from_str(&header.value).map_err(|_| {
+        let value = http::HeaderValue::from_str(&header.value).map_err(|_| {
             Error::Invalid(format!(
                 "the value of header {} contains characters headers cannot carry",
                 header.name
             ))
         })?;
-        builder = builder.header(name, value);
+        headers.append(name, value);
     }
-    if transport.timeout_ms > 0 {
-        builder = builder.timeout(Duration::from_millis(transport.timeout_ms));
-    }
-    #[cfg(reqwest_unstable)]
-    if transport.http_version == HttpVersion::Http3 {
-        builder = builder.version(reqwest::Version::HTTP_3);
-    }
-    builder = match &outgoing.body {
-        OutgoingBody::None => builder,
-        OutgoingBody::Bytes { data } => builder.body(data.0.clone()),
-        OutgoingBody::File { path } => {
-            let data = tokio::fs::read(path)
-                .await
-                .map_err(|e| Error::io(path, e))?;
-            builder.body(data)
-        }
-        OutgoingBody::Multipart { .. } => builder.body(multipart.unwrap_or_default()),
-    };
-    builder.build().map_err(|e| Error::Http(describe(&e)))
+    Ok(Wire {
+        method,
+        url,
+        headers,
+        body,
+    })
 }
 
 /// Response headers as a list, in order.
@@ -1088,6 +1291,260 @@ mod tests {
             .unwrap();
         assert_eq!(stopped.status, 302);
         assert_eq!(stopped.header("location"), Some("/echo"));
+    }
+
+    fn post(url: String, body: &str) -> Outgoing {
+        Outgoing {
+            method: "POST".into(),
+            url,
+            headers: vec![Header::new("Content-Type", "text/plain")],
+            body: OutgoingBody::Bytes {
+                data: Payload(body.as_bytes().to_vec()),
+            },
+        }
+    }
+
+    #[tokio::test]
+    async fn a_post_becomes_a_get_after_301_302_and_303_unless_told_otherwise() {
+        let server = test_server::spawn().await;
+        let client = HttpClient::new();
+        for code in [301, 302, 303] {
+            let url = server.url(&format!("/go/{code}?to=/echo"));
+            let echo = client
+                .send(&post(url, "payload"), Transport::default())
+                .await
+                .unwrap()
+                .json()
+                .unwrap();
+            assert_eq!(echo["method"], "GET", "{code}");
+            assert_eq!(echo["body"], "", "{code}");
+            assert!(echo["headers"].get("content-type").is_none(), "{code}");
+        }
+        let keep = Transport {
+            follow_original_method: true,
+            ..Transport::default()
+        };
+        for (code, method, body) in [
+            (301, "POST", "payload"),
+            (302, "POST", "payload"),
+            // 303 always asks for the result with a GET.
+            (303, "GET", ""),
+            (307, "POST", "payload"),
+            (308, "POST", "payload"),
+        ] {
+            let url = server.url(&format!("/go/{code}?to=/echo"));
+            let echo = client
+                .send(&post(url, "payload"), keep.clone())
+                .await
+                .unwrap()
+                .json()
+                .unwrap();
+            assert_eq!(echo["method"], method, "{code}");
+            assert_eq!(echo["body"], body, "{code}");
+        }
+        // 307 and 308 keep the method and body without being asked.
+        let echo = client
+            .send(
+                &post(server.url("/go/307?to=/echo"), "payload"),
+                Transport::default(),
+            )
+            .await
+            .unwrap()
+            .json()
+            .unwrap();
+        assert_eq!(
+            (echo["method"].as_str(), echo["body"].as_str()),
+            (Some("POST"), Some("payload"))
+        );
+    }
+
+    #[test]
+    fn a_head_request_stays_a_head_request_and_other_methods_follow_the_status() {
+        let wire = |method: http::Method| Wire {
+            method,
+            url: url::Url::parse("http://a.test/start").unwrap(),
+            headers: http::HeaderMap::new(),
+            body: Some(bytes::Bytes::from_static(b"x")),
+        };
+        let next = || url::Url::parse("http://a.test/next").unwrap();
+        let transport = Transport::default();
+        let status = |code: u16| http::StatusCode::from_u16(code).unwrap();
+
+        let mut head = wire(http::Method::HEAD);
+        redirected(&mut head, status(303), next(), &transport);
+        assert_eq!(head.method, http::Method::HEAD);
+        assert!(head.body.is_none());
+
+        let mut put = wire(http::Method::PUT);
+        redirected(&mut put, status(302), next(), &transport);
+        assert_eq!(
+            put.method,
+            http::Method::PUT,
+            "only a POST turns into a GET"
+        );
+        assert!(put.body.is_some());
+        redirected(&mut put, status(303), next(), &transport);
+        assert_eq!(put.method, http::Method::GET);
+        assert!(put.body.is_none());
+    }
+
+    #[tokio::test]
+    async fn credentials_stay_behind_at_another_host_unless_told_otherwise() {
+        let server = test_server::spawn().await;
+        let client = HttpClient::new();
+        let mut outgoing = get(server.url(&format!(
+            "/go/302?to=http://localhost:{}/echo",
+            server.port()
+        )));
+        outgoing.headers = vec![
+            Header::new("Authorization", "Bearer secret"),
+            Header::new("Proxy-Authorization", "Basic c2VjcmV0"),
+            Header::new("Cookie", "mine=1"),
+            Header::new("X-Keep", "yes"),
+        ];
+        let echo = client
+            .send(&outgoing, Transport::default())
+            .await
+            .unwrap()
+            .json()
+            .unwrap();
+        for dropped in ["authorization", "proxy-authorization", "cookie"] {
+            assert!(echo["headers"].get(dropped).is_none(), "{dropped}: {echo}");
+        }
+        assert_eq!(echo["headers"]["x-keep"], "yes");
+
+        let echo = client
+            .send(
+                &outgoing,
+                Transport {
+                    follow_authorization: true,
+                    ..Transport::default()
+                },
+            )
+            .await
+            .unwrap()
+            .json()
+            .unwrap();
+        assert_eq!(echo["headers"]["authorization"], "Bearer secret");
+        assert_eq!(echo["headers"]["proxy-authorization"], "Basic c2VjcmV0");
+        assert!(echo["headers"].get("cookie").is_none(), "{echo}");
+
+        // The same host keeps everything.
+        outgoing.url = server.url("/go/302?to=/echo");
+        let echo = client
+            .send(&outgoing, Transport::default())
+            .await
+            .unwrap()
+            .json()
+            .unwrap();
+        assert_eq!(echo["headers"]["authorization"], "Bearer secret");
+        assert_eq!(echo["headers"]["cookie"], "mine=1");
+    }
+
+    #[tokio::test]
+    async fn the_hops_are_listed_and_the_timings_still_add_up() {
+        let server = test_server::spawn().await;
+        let client = HttpClient::new();
+        let response = client
+            .send(&get(server.url("/count/3")), Transport::default())
+            .await
+            .unwrap();
+        assert_eq!(response.text(), "done");
+        assert!(response.url.ends_with("/count/0"));
+        let hops: Vec<(u16, &str)> = response
+            .hops
+            .iter()
+            .map(|hop| (hop.status, hop.url.rsplit('/').next().unwrap()))
+            .collect();
+        assert_eq!(hops, [(302, "3"), (302, "2"), (302, "1")]);
+        assert!(response.hops.iter().all(|hop| hop.time_ms > 0.0));
+        assert!(response.hops.iter().map(|hop| hop.time_ms).sum::<f64>() <= response.headers_ms);
+
+        let timings = response.timings.unwrap();
+        let parts = timings.dns_ms
+            + timings.connect_ms.unwrap()
+            + timings.first_byte_ms
+            + timings.download_ms;
+        assert!((parts - response.time_ms).abs() < 0.1, "{timings:?}");
+
+        let plain = client
+            .send(&get(server.url("/echo")), Transport::default())
+            .await
+            .unwrap();
+        assert!(plain.hops.is_empty());
+        let json = serde_json::to_value(&plain).unwrap();
+        assert!(json.get("hops").is_none(), "an empty list is not written");
+    }
+
+    #[tokio::test]
+    async fn too_many_redirects_and_circles_are_named() {
+        let server = test_server::spawn().await;
+        let client = HttpClient::new();
+        let few = Transport {
+            max_redirects: 2,
+            ..Transport::default()
+        };
+        let error = client
+            .send(&get(server.url("/count/5")), few)
+            .await
+            .unwrap_err();
+        let message = error.to_string();
+        assert!(
+            message.starts_with("Stopped following redirects") && message.contains("max_redirects"),
+            "{message}"
+        );
+        let enough = Transport {
+            max_redirects: 5,
+            ..Transport::default()
+        };
+        let response = client
+            .send(&get(server.url("/count/5")), enough)
+            .await
+            .unwrap();
+        assert_eq!(response.hops.len(), 5);
+
+        let error = client
+            .send(&get(server.url("/loop/a")), Transport::default())
+            .await
+            .unwrap_err();
+        let message = error.to_string();
+        assert!(
+            message.starts_with("Stopped following redirects") && message.contains("circle"),
+            "{message}"
+        );
+
+        let error = client
+            .send(
+                &get(server.url("/go/302?to=ftp://example.com/file")),
+                Transport::default(),
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("only http and https"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn cookies_set_on_every_hop_are_stored() {
+        let server = test_server::spawn().await;
+        let client = HttpClient::new();
+        let url =
+            server.url("/go/302?cookie=first%3D1&to=/go/302%3Fcookie%3Dsecond%3D2%26to%3D/echo");
+        let echo = client
+            .send(&get(url), Transport::default())
+            .await
+            .unwrap()
+            .json()
+            .unwrap();
+        // The second hop already sent the first one's cookie back.
+        let mut sent: Vec<&str> = echo["headers"]["cookie"]
+            .as_str()
+            .unwrap()
+            .split("; ")
+            .collect();
+        sent.sort_unstable();
+        assert_eq!(sent, ["first=1", "second=2"]);
+        let names: Vec<String> = client.cookies().into_iter().map(|c| c.name).collect();
+        assert_eq!(names, ["first", "second"]);
     }
 
     #[tokio::test]

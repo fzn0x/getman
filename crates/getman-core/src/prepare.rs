@@ -162,6 +162,12 @@ pub fn transport(settings: &Settings, vars: &VarStack, root: &Path) -> Result<Tr
             .follow_redirects
             .unwrap_or(defaults.follow_redirects),
         max_redirects: settings.max_redirects.unwrap_or(defaults.max_redirects),
+        follow_original_method: settings
+            .follow_original_method
+            .unwrap_or(defaults.follow_original_method),
+        follow_authorization: settings
+            .follow_authorization
+            .unwrap_or(defaults.follow_authorization),
         verify_tls: settings.verify_tls.unwrap_or(defaults.verify_tls),
         http_version: settings.http_version.unwrap_or(defaults.http_version),
         title_case_headers: settings
