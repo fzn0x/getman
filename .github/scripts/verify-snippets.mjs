@@ -448,7 +448,7 @@ const LANGUAGES = {
     // Compiled, then run: top-level code needs the file to be main.swift.
     run: (f, ctx, c) => ({
       command: "bash",
-      args: ["-c", '"$1" -o "$2" "$3" && "$2"', "swift", "swiftc", join(ctx.work, "swift-out", c), f],
+      args: ["-c", 'mkdir -p "$(dirname "$2")" && "$1" -o "$2" "$3" && "$2"', "swift", "swiftc", join(ctx.work, "swift-out", c), f],
     }),
     timeout: 300_000,
   },
