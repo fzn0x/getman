@@ -241,3 +241,48 @@ says why: more redirects than `max_redirects`, a `Location` that is not an
 http or https URL, or a request repeated (the same method and URL a second
 time), which means the redirects go in a circle. `follow_redirects: false`
 returns the redirect itself, so you can read its `Location`.
+
+## GraphQL
+
+Choose **GraphQL** as a request's body type. The query and its variables
+are sent as one JSON object to the request's URL, with the method you
+set, as `application/json`:
+
+```yaml
+method: POST
+url: "{{baseUrl}}/graphql"
+body:
+  type: graphql
+  query: |
+    query Order($id: ID!) { order(id: $id) { id total } }
+  variables: '{"id": "{{orderId}}"}'
+  operation_name: Order
+```
+
+`operation_name` is sent as `operationName`. A query that holds more than
+one operation needs it to say which one to run; the **Operation** field
+above the query offers the names it finds. Leave it empty for a query
+with one operation. `{{variables}}` work in the query, the variables and
+the name.
+
+### The schema
+
+**Load schema** asks the server for its schema with an introspection
+query, so the editor can complete field, argument and type names, point
+out unknown fields and wrong arguments as you type, and show the types in
+a **Docs** browser. The request is sent with the request's own URL,
+headers, authentication and settings, so it reaches a server that wants a
+token, a proxy or a client certificate. Its body, scripts and checks are
+not used. Nothing is sent until you press the button.
+
+- The schema is kept in memory by URL, until `getman` stops. Opening
+  another GraphQL request for the same URL shows it at once, without
+  sending anything; **Refresh** asks the server again.
+- Search in **Docs** finds types and fields by name. Click a type to open
+  it, and <kbd>Ctrl</kbd> click (<kbd>Cmd</kbd> on a Mac) a field in the query to
+  see it there.
+- A server may turn introspection off. The error it answers with is shown
+  next to the button, and the editor still checks the query's syntax.
+- The read shows in the [console](browser-ui.md#console).
+- The editor's checks skip anything that touches a `{{variable}}`, since
+  its value is not known until the request is sent.

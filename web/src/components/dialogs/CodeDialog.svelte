@@ -19,6 +19,34 @@
       }
     })(),
   );
+  /** `""` keeps each language's own indent. */
+  type Indent = "" | "2" | "4" | "tab";
+  const indents: [Indent, string][] = [
+    ["", "Default"],
+    ["2", "2 spaces"],
+    ["4", "4 spaces"],
+    ["tab", "Tab"],
+  ];
+  let indent = $state<Indent>(
+    (() => {
+      try {
+        const saved = JSON.parse(localStorage.getItem("getman.codeIndent") ?? '""');
+        return saved === "2" || saved === "4" || saved === "tab" ? (saved as Indent) : "";
+      } catch {
+        return "";
+      }
+    })(),
+  );
+  /** Whether to write the imports and `main` function, where there are some. */
+  let boilerplate = $state(
+    (() => {
+      try {
+        return JSON.parse(localStorage.getItem("getman.codeBoilerplate") ?? "true") !== false;
+      } catch {
+        return true;
+      }
+    })(),
+  );
   let code = $state("");
   let error = $state("");
   let missing = $state<string[]>([]);
@@ -31,6 +59,8 @@
     grpc ? [{ id: "grpcurl", label: "grpcurl", syntax: "shell" }] : ws.languages,
   );
 
+  const current = $derived(ws.languages.find((l) => l.id === language));
+
   const syntax = $derived<EditorLanguage>(
     ws.languages.find((l) => l.id === language)?.syntax === "javascript" ? "javascript" : "text",
   );
@@ -38,7 +68,11 @@
   $effect(() => {
     const chosen = grpc ? "grpcurl" : language;
     const keep = keepVars;
+    const spaces = indent;
+    const bare = !boilerplate;
     if (!grpc) store("codeLanguage", chosen);
+    store("codeIndent", spaces);
+    store("codeBoilerplate", !bare);
     void (async () => {
       try {
         const args = {
@@ -48,7 +82,13 @@
         };
         const result = grpc
           ? await api.grpcCode(args)
-          : await api.codegen({ ...args, language: chosen, keep_vars: keep });
+          : await api.codegen({
+              ...args,
+              language: chosen,
+              keep_vars: keep,
+              indent: spaces || null,
+              no_boilerplate: bare,
+            });
         code = result.code;
         missing = result.missing;
         error = "";
@@ -86,6 +126,31 @@
             lineNumbers={false}
             label="Generated code"
           />
+        </div>
+      {/if}
+      {#if !grpc && (current?.indent || current?.boilerplate)}
+        <div class="options">
+          {#if current?.indent}
+            <div class="group" role="group" aria-label="Indent">
+              <span class="muted">Indent</span>
+              {#each indents as [value, label] (value)}
+                <button
+                  class="chip"
+                  class:on={indent === value}
+                  aria-pressed={indent === value}
+                  onclick={() => (indent = value)}
+                >
+                  {label}
+                </button>
+              {/each}
+            </div>
+          {/if}
+          {#if current?.boilerplate}
+            <label class="toggle">
+              <input type="checkbox" class="check" bind:checked={boilerplate} />
+              Imports and <code>main</code>
+            </label>
+          {/if}
         </div>
       {/if}
       <div class="note">
@@ -157,8 +222,47 @@
 
   .output {
     display: grid;
-    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr) auto auto;
     min-height: 0;
+  }
+
+  .options {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s2) var(--s4);
+    padding: var(--s2) var(--s4);
+    border-top: 1px solid var(--rule-3);
+    font-size: var(--fs-meta);
+  }
+
+  .group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s1);
+  }
+
+  .group .muted {
+    margin-right: var(--s1);
+  }
+
+  .chip {
+    padding: 2px var(--s2);
+    border: 1px solid var(--rule-2);
+    background: none;
+    color: var(--ink-2);
+  }
+
+  .chip:hover {
+    background: var(--sunken);
+    color: var(--ink);
+  }
+
+  .chip.on {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: var(--paper);
   }
 
   .editor {

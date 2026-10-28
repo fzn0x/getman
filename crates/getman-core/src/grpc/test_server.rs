@@ -151,17 +151,36 @@ pub(crate) async fn spawn_tls() -> TestServer {
         certified.cert.pem(),
         certified.signing_key.serialize_pem(),
     );
-    serve(Reflection::None, Some(identity)).await
+    serve(
+        Reflection::None,
+        Some(tonic::transport::ServerTlsConfig::new().identity(identity)),
+    )
+    .await
 }
 
-async fn serve(reflection: Reflection, tls: Option<tonic::transport::Identity>) -> TestServer {
+/// Starts a TLS server whose certificate the test CA signed for
+/// `localhost` and `127.0.0.1`, which refuses clients without a
+/// certificate from the CA when `require_client_cert` is set.
+pub(crate) async fn spawn_secure(require_client_cert: bool) -> TestServer {
+    let pki = crate::test_server::pki();
+    let mut config = tonic::transport::ServerTlsConfig::new().identity(
+        tonic::transport::Identity::from_pem(&pki.server_cert_pem, &pki.server_key_pem),
+    );
+    if require_client_cert {
+        config = config.client_ca_root(tonic::transport::Certificate::from_pem(&pki.ca_pem));
+    }
+    serve(Reflection::None, Some(config)).await
+}
+
+async fn serve(
+    reflection: Reflection,
+    tls: Option<tonic::transport::ServerTlsConfig>,
+) -> TestServer {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap().to_string();
     let mut builder = tonic::transport::Server::builder();
-    if let Some(identity) = tls {
-        builder = builder
-            .tls_config(tonic::transport::ServerTlsConfig::new().identity(identity))
-            .unwrap();
+    if let Some(config) = tls {
+        builder = builder.tls_config(config).unwrap();
     }
     let descriptors: &'static [u8] = Box::leak(descriptor_set().into_boxed_slice());
     let reflection_builder = tonic_reflection::server::Builder::configure()

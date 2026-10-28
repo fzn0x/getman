@@ -621,8 +621,15 @@ fn request_body(body: &Body) -> Option<Value> {
                 None,
             )
         }
-        Body::Graphql { query, variables } => {
+        Body::Graphql {
+            query,
+            variables,
+            operation_name,
+        } => {
             let mut example = json!({ "query": query });
+            if !operation_name.trim().is_empty() {
+                example["operationName"] = Value::from(operation_name.as_str());
+            }
             if !variables.trim().is_empty() {
                 example["variables"] = serde_json::from_str(variables)
                     .unwrap_or_else(|_| Value::from(variables.as_str()));

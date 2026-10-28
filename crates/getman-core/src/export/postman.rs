@@ -368,7 +368,9 @@ impl Writer<'_> {
                 }
                 json!({ "mode": "file", "file": { "src": file } })
             }
-            Body::Graphql { query, variables } => json!({
+            Body::Graphql {
+                query, variables, ..
+            } => json!({
                 "mode": "graphql",
                 "graphql": { "query": query, "variables": variables },
             }),

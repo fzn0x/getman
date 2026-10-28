@@ -29,5 +29,8 @@ export default defineConfig({
   },
   test: {
     include: ["src/**/*.test.ts"],
+    // Node loads the packages that use `graphql` with its CommonJS build;
+    // ours must use the same copy, or its checks refuse our schemas.
+    alias: { graphql: "graphql/index.js" },
   },
 });

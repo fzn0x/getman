@@ -8,6 +8,7 @@ import {
   completionKeymap,
   type CompletionContext,
   type CompletionResult,
+  type CompletionSource,
 } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { html } from "@codemirror/lang-html";
@@ -401,7 +402,21 @@ export function variableCompletion(source: VariableSource) {
   };
 }
 
+/** Completes with what the editor's language offers, such as a GraphQL schema's names. */
+const languageCompletion: CompletionSource = (context) => {
+  for (const source of context.state.languageDataAt<CompletionSource>(
+    "autocomplete",
+    context.pos,
+  )) {
+    const result = source(context);
+    if (result) return result;
+  }
+  return null;
+};
+
 export interface SetupOptions {
+  /** Also offer the completions of the editor's language. */
+  languageCompletion?: boolean;
   singleLine: boolean;
   lineNumbers: boolean;
   placeholder: string;
@@ -419,7 +434,9 @@ export function baseExtensions(options: SetupOptions): Extension[] {
     highlightSelectionMatches(),
     closeBrackets(),
     autocompletion({
-      override: [variableCompletion(options.completion)],
+      override: options.languageCompletion
+        ? [variableCompletion(options.completion), languageCompletion]
+        : [variableCompletion(options.completion)],
       icons: false,
       activateOnTyping: true,
     }),

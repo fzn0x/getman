@@ -342,6 +342,10 @@ pub enum Body {
         /// Variables as JSON text.
         #[serde(default, skip_serializing_if = "String::is_empty")]
         variables: String,
+        /// Which operation of the query to run, sent as `operationName`.
+        /// Needed when the query holds more than one.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        operation_name: String,
     },
 }
 

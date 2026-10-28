@@ -2,6 +2,7 @@
 // the live call, if one runs. The functions here talk to the server.
 
 import { api } from "./api";
+import { logExecution } from "./console.svelte";
 import { newGrpcDraft, toRequest } from "./draft";
 import { clientStreams } from "./grpc";
 import {
@@ -176,9 +177,11 @@ export async function invoke(tab: RequestTab): Promise<void> {
       },
     );
     if (!tab.execution) tab.execution = failed(tab, "The call ended without an answer.");
+    logExecution(tab.execution, false, { method: tab.draft.method, url: tab.draft.url });
     void refreshHistory();
   } catch (error) {
     tab.execution = failed(tab, message(error));
+    logExecution(tab.execution, false, { method: tab.draft.method, url: tab.draft.url });
   } finally {
     tab.sending = false;
     state.call = null;

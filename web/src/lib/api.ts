@@ -10,6 +10,7 @@ import type {
   Example,
   Execution,
   Folder,
+  GraphqlSchemaAnswer,
   HeaderPreset,
   HistoryDetail,
   GrpcEvent,
@@ -190,8 +191,14 @@ export const api = {
   send: (args: SendArgs, signal?: AbortSignal) => call<Execution>("POST", "/send", args, signal),
   cancelSend: (id: string) => post("/send/cancel", { id }),
   prepare: (args: SendArgs) => post<{ request: Outgoing; missing: string[] }>("/prepare", args),
-  codegen: (args: SendArgs & { language: string; keep_vars?: boolean }) =>
-    post<{ code: string; missing: string[] }>("/codegen", args),
+  codegen: (
+    args: SendArgs & {
+      language: string;
+      keep_vars?: boolean;
+      indent?: "2" | "4" | "tab" | null;
+      no_boilerplate?: boolean;
+    },
+  ) => post<{ code: string; missing: string[] }>("/codegen", args),
   exportItem: (args: {
     kind: "folder" | "environment" | "globals";
     path?: string;
@@ -282,6 +289,9 @@ export const api = {
   grpcSchema: (args: SendArgs & { refresh?: boolean }) =>
     post<{ services: GrpcService[] }>("/grpc/schema", args),
   grpcCode: (args: SendArgs) => post<{ code: string; missing: string[] }>("/grpc/code", args),
+  /** `cached` sends nothing; `fetch` reads the schema if none is kept; `refresh` always reads. */
+  graphqlSchema: (args: SendArgs & { mode: "cached" | "fetch" | "refresh" }) =>
+    post<GraphqlSchemaAnswer>("/graphql/schema", args),
   grpcSend: (id: string, text: string) => post<{ sent: number }>("/grpc/send", { id, text }),
   grpcEnd: (id: string) => post("/grpc/end", { id }),
   grpcCancel: (id: string) => post("/grpc/cancel", { id }),
