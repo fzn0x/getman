@@ -48,12 +48,7 @@ fn authorization(s: &Hawk, outgoing: &Outgoing, ts: u64, nonce: &str) -> Result<
     let port = url.port_or_known_default().unwrap_or_default();
 
     let hash = if s.payload_hash {
-        let Some(body) = body_bytes(&outgoing.body)? else {
-            return Err(Error::Invalid(
-                "Hawk cannot hash a multipart body before it is sent; turn off the payload hash"
-                    .into(),
-            ));
-        };
+        let body = body_bytes(outgoing)?;
         let content_type = find_header(&outgoing.headers, "content-type")
             .and_then(|t| t.split(';').next())
             .unwrap_or_default()

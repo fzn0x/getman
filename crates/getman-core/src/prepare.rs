@@ -366,6 +366,10 @@ fn build(
             .headers
             .push(Header::new("Content-Type", content_type));
     }
+    if !r.keep && matches!(outgoing.body, OutgoingBody::Multipart { .. }) {
+        // The boundary is chosen now, so signatures can cover the body.
+        crate::multipart::ensure_boundary(&mut outgoing.headers)?;
+    }
 
     apply_auth(auth, &mut r, &mut outgoing)?;
 
@@ -524,7 +528,8 @@ fn build_body(
                     content_type: field.content_type.as_deref().map(|t| r.render(t)),
                 });
             }
-            // reqwest writes the Content-Type with the boundary.
+            // The Content-Type, with the boundary, is set once the headers
+            // are known (see `build`).
             (OutgoingBody::Multipart { parts }, None)
         }
         Body::Binary { file, content_type } => {
@@ -1113,12 +1118,18 @@ mod tests {
             dir.path(),
         )
         .unwrap();
+        let content_type = find_header(&prepared.outgoing.headers, "content-type")
+            .unwrap()
+            .to_owned();
+        assert!(
+            content_type.starts_with("multipart/form-data; boundary=----getman"),
+            "{content_type}"
+        );
         let OutgoingBody::Multipart { parts } = prepared.outgoing.body else {
             panic!()
         };
         assert_eq!(parts.len(), 2);
         assert!(parts[0].file.is_some());
-        assert!(find_header(&prepared.outgoing.headers, "content-type").is_none());
     }
 
     #[test]

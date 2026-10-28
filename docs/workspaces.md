@@ -90,7 +90,9 @@ Examples are described in [Examples and mocks](examples-and-mocks.md).
 | `graphql` | `query`, `variables` (JSON text) | `application/json` |
 
 Paths in `file` are relative to the workspace root, and must stay inside
-it.
+it. Getman builds a multipart body in memory, at most 256 MiB, with a
+random boundary; names and file names with quotes or line breaks are
+percent-encoded, as browsers do.
 
 A request's own `Content-Type` header always wins over the one its body
 type implies.

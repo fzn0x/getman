@@ -18,6 +18,7 @@ pub mod import;
 mod lenient;
 pub mod mock;
 pub mod model;
+mod multipart;
 pub mod prepare;
 pub mod realtime;
 pub mod runner;

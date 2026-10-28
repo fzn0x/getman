@@ -51,6 +51,14 @@ pub(crate) fn sign(
     root: &Path,
 ) -> Result<()> {
     let now = SystemTime::now();
+    if matches!(
+        auth,
+        Auth::AwsSigV4(_) | Auth::Oauth1(_) | Auth::Hawk(_) | Auth::Edgegrid(_)
+    ) && matches!(outgoing.body, OutgoingBody::Multipart { .. })
+    {
+        // The boundary is part of the bytes that get hashed.
+        crate::multipart::ensure_boundary(&mut outgoing.headers)?;
+    }
     match auth {
         Auth::AwsSigV4(settings) => sigv4::sign(&sigv4::render(settings, render), outgoing, now),
         Auth::Jwt(settings) => jwt::apply(&jwt::render(settings, render), outgoing, root, now),
@@ -68,16 +76,22 @@ pub(crate) fn sign(
     }
 }
 
-/// The body's bytes, for hashing: `None` for a multipart body, whose bytes
-/// are only known once it is sent.
-fn body_bytes(body: &OutgoingBody) -> Result<Option<Cow<'_, [u8]>>> {
-    Ok(match body {
-        OutgoingBody::None => Some(Cow::Borrowed(&[])),
-        OutgoingBody::Bytes { data } => Some(Cow::Borrowed(&data.0)),
-        OutgoingBody::File { path } => Some(Cow::Owned(
-            std::fs::read(path).map_err(|e| Error::io(path, e))?,
-        )),
-        OutgoingBody::Multipart { .. } => None,
+/// The body's bytes, for hashing. A multipart body is built here, with the
+/// boundary its `Content-Type` header names, and goes out as the same
+/// bytes.
+fn body_bytes(outgoing: &Outgoing) -> Result<Cow<'_, [u8]>> {
+    Ok(match &outgoing.body {
+        OutgoingBody::None => Cow::Borrowed(&[]),
+        OutgoingBody::Bytes { data } => Cow::Borrowed(&data.0),
+        OutgoingBody::File { path } => {
+            Cow::Owned(std::fs::read(path).map_err(|e| Error::io(path, e))?)
+        }
+        OutgoingBody::Multipart { parts } => {
+            let boundary = crate::multipart::boundary(&outgoing.headers).ok_or_else(|| {
+                Error::Invalid("the multipart body has no boundary in its Content-Type".into())
+            })?;
+            Cow::Owned(crate::multipart::encode(parts, &boundary)?)
+        }
     })
 }
 

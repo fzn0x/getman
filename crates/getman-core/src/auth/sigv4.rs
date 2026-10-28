@@ -172,12 +172,7 @@ fn payload_hash(s: &AwsSigV4, outgoing: &Outgoing) -> Result<String> {
     if s.unsigned_payload {
         return Ok(UNSIGNED_PAYLOAD.into());
     }
-    match body_bytes(&outgoing.body)? {
-        Some(bytes) => Ok(hex::encode(Sha256::digest(&bytes))),
-        None => Err(Error::Invalid(
-            "AWS Signature cannot hash a multipart body before it is sent; turn on unsigned payload, or send another kind of body".into(),
-        )),
-    }
+    Ok(hex::encode(Sha256::digest(body_bytes(outgoing)?)))
 }
 
 /// The query's names and values, decoded, in order.
@@ -635,11 +630,37 @@ mod tests {
             find_header(&unsigned.headers, "x-amz-content-sha256"),
             Some("UNSIGNED-PAYLOAD")
         );
+    }
 
-        let mut multipart = get("https://example.amazonaws.com/");
-        multipart.body = OutgoingBody::Multipart { parts: vec![] };
-        let error = sign(&suite(ApiKeyLocation::Header), &mut multipart, at()).unwrap_err();
-        assert!(error.to_string().contains("unsigned payload"), "{error}");
+    #[test]
+    fn multipart_bodies_are_hashed_as_they_are_sent() {
+        let parts = vec![crate::http::Part {
+            name: "field".into(),
+            value: "value".into(),
+            file: None,
+            content_type: None,
+        }];
+        let mut multipart = Outgoing {
+            method: "POST".into(),
+            headers: vec![crate::http::Header::new(
+                "Content-Type",
+                "multipart/form-data; boundary=B",
+            )],
+            body: OutgoingBody::Multipart {
+                parts: parts.clone(),
+            },
+            ..get("https://bucket.s3.amazonaws.com/")
+        };
+        let settings = AwsSigV4 {
+            service: "s3".into(),
+            ..suite(ApiKeyLocation::Header)
+        };
+        sign(&settings, &mut multipart, at()).unwrap();
+        let body = crate::multipart::encode(&parts, "B").unwrap();
+        assert_eq!(
+            find_header(&multipart.headers, "x-amz-content-sha256"),
+            Some(hex::encode(Sha256::digest(&body)).as_str())
+        );
     }
 
     #[test]

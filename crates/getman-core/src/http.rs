@@ -928,8 +928,25 @@ async fn build(
             url.scheme()
         )));
     }
+    let mut headers = outgoing.headers.clone();
+    // Multipart bodies are built here, with the boundary the request names,
+    // so that whatever signed them hashed the same bytes.
+    let multipart = match &outgoing.body {
+        OutgoingBody::Multipart { parts } => {
+            let boundary = crate::multipart::ensure_boundary(&mut headers)?;
+            let parts = parts.clone();
+            let body =
+                tokio::task::spawn_blocking(move || crate::multipart::encode(&parts, &boundary))
+                    .await
+                    .map_err(|e| {
+                        Error::Http(format!("Could not build the multipart body: {e}"))
+                    })??;
+            Some(body)
+        }
+        _ => None,
+    };
     let mut builder = client.request(method, url);
-    for header in &outgoing.headers {
+    for header in &headers {
         let name = reqwest::header::HeaderName::from_bytes(header.name.trim().as_bytes())
             .map_err(|_| Error::Invalid(format!("{:?} is not a valid header name", header.name)))?;
         let value = reqwest::header::HeaderValue::from_str(&header.value).map_err(|_| {
@@ -956,35 +973,7 @@ async fn build(
                 .map_err(|e| Error::io(path, e))?;
             builder.body(data)
         }
-        OutgoingBody::Multipart { parts } => {
-            let mut form = reqwest::multipart::Form::new();
-            for part in parts {
-                let mut piece = match &part.file {
-                    Some(path) => {
-                        let data = tokio::fs::read(path)
-                            .await
-                            .map_err(|e| Error::io(path, e))?;
-                        let file_name = path
-                            .file_name()
-                            .map(|n| n.to_string_lossy().into_owned())
-                            .unwrap_or_default();
-                        let guessed = mime_guess::from_path(path).first_or_octet_stream();
-                        reqwest::multipart::Part::bytes(data)
-                            .file_name(file_name)
-                            .mime_str(guessed.essence_str())
-                            .map_err(|e| Error::Http(describe(&e)))?
-                    }
-                    None => reqwest::multipart::Part::text(part.value.clone()),
-                };
-                if let Some(content_type) = &part.content_type {
-                    piece = piece.mime_str(content_type).map_err(|_| {
-                        Error::Invalid(format!("{content_type:?} is not a valid content type"))
-                    })?;
-                }
-                form = form.part(part.name.clone(), piece);
-            }
-            builder.multipart(form)
-        }
+        OutgoingBody::Multipart { .. } => builder.body(multipart.unwrap_or_default()),
     };
     builder.build().map_err(|e| Error::Http(describe(&e)))
 }
@@ -1349,6 +1338,64 @@ mod tests {
                 "build with --cfg reqwest_unstable (see .cargo/config.toml)"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn multipart_bodies_go_out_as_the_bytes_that_were_signed() {
+        use crate::model::{Auth, AwsSigV4, Body, FormField, Request};
+        use sha2::{Digest as _, Sha256};
+
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("note.txt"), "from a file").unwrap();
+        let server = test_server::spawn().await;
+        let field = |name: &str, value: &str, file: Option<&str>| FormField {
+            name: name.into(),
+            value: value.into(),
+            file: file.map(Into::into),
+            content_type: None,
+            enabled: true,
+        };
+        let request = Request {
+            method: "POST".into(),
+            url: server.url("/echo"),
+            body: Body::Multipart {
+                fields: vec![
+                    field("title", "A \"quoted\" title", None),
+                    field("upload", "", Some("note.txt")),
+                ],
+            },
+            ..Request::default()
+        };
+        let auth = Auth::AwsSigV4(AwsSigV4 {
+            access_key: "AKID".into(),
+            secret_key: "secret".into(),
+            region: "us-east-1".into(),
+            service: "s3".into(),
+            ..AwsSigV4::default()
+        });
+        let prepared =
+            crate::prepare::prepare(&request, &[], &auth, &crate::VarStack::new(), dir.path())
+                .unwrap();
+        let response = HttpClient::new()
+            .send(&prepared.outgoing, Transport::default())
+            .await
+            .unwrap();
+        let echo = response.json().unwrap();
+        let content_type = echo["headers"]["content-type"].as_str().unwrap();
+        let boundary = content_type.split("boundary=").nth(1).unwrap();
+        let body = echo["body"].as_str().unwrap();
+        assert!(body.starts_with(&format!("--{boundary}\r\n")), "{body}");
+        assert!(body.contains("name=\"title\"\r\n\r\nA \"quoted\" title\r\n"));
+        assert!(
+            body.contains(
+                "filename=\"note.txt\"\r\nContent-Type: text/plain\r\n\r\nfrom a file\r\n"
+            )
+        );
+        assert!(body.ends_with(&format!("--{boundary}--\r\n")));
+        assert_eq!(
+            echo["headers"]["x-amz-content-sha256"],
+            hex::encode(Sha256::digest(body.as_bytes()))
+        );
     }
 
     #[tokio::test]

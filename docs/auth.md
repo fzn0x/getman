@@ -223,8 +223,12 @@ auth:
 Getman signs the host, `X-Amz-Date`, `X-Amz-Security-Token` and the
 request's headers, except those proxies may change, such as
 `User-Agent`. For S3 it also sends `X-Amz-Content-Sha256`. A presigned URL
-signs only the host. A multipart body cannot be hashed before it is
-sent, so it needs `unsigned_payload`.
+signs only the host.
+
+Signatures that hash the body (AWS Signature, the OAuth 1.0a
+`body_hash`, Hawk's `payload_hash` and EdgeGrid) cover multipart bodies
+too: Getman builds the whole body, boundary included, before it signs, and
+sends those same bytes.
 
 ## Hawk
 
