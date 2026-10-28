@@ -83,6 +83,7 @@ All notable changes to Getman are listed here. The format follows
   or reordered the parts of a form.
 - The raw HTTP snippet cut the last line breaks off a body, so its
   `Content-Length` was too long.
+- Ruby snippets lost the carriage return of a CRLF line break in a body.
 
 ## [0.2.0] - 2026-10-28
 
