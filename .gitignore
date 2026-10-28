@@ -28,3 +28,6 @@ Thumbs.db
 # the Windows installers (see crates/getman-desktop/windows/)
 /crates/getman-desktop/node_modules/
 /crates/getman-desktop/windows/bin/
+
+# Claude Code's local state, such as the worktrees its agents work in
+.claude/
