@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use getman_core::model::{HttpVersion, Proxy, Settings};
 
 /// A local-first API client. Requests are plain YAML files in your
 /// repository; no account, no cloud.
@@ -98,6 +99,33 @@ pub(crate) struct VarArgs {
 }
 
 #[derive(Debug, Args)]
+pub(crate) struct NetArgs {
+    /// HTTP version for every request, over the files' settings: auto,
+    /// http1, http2 or http3.
+    #[arg(long, value_name = "VERSION", value_parser = parse_http_version)]
+    pub(crate) http_version: Option<HttpVersion>,
+
+    /// Proxy for every request, over the files' settings: a URL such as
+    /// http://proxy:3128 or socks5h://127.0.0.1:1080, `system`, or `off`.
+    #[arg(long, value_name = "URL")]
+    pub(crate) proxy: Option<String>,
+}
+
+impl NetArgs {
+    /// The settings these flags override.
+    pub(crate) fn settings(&self) -> Settings {
+        Settings {
+            http_version: self.http_version,
+            proxy: self.proxy.as_ref().map(|url| Proxy {
+                url: url.clone(),
+                ..Proxy::default()
+            }),
+            ..Settings::default()
+        }
+    }
+}
+
+#[derive(Debug, Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct RunArgs {
     /// Folders or requests to run, as paths in the workspace or on disk.
@@ -111,6 +139,9 @@ pub(crate) struct RunArgs {
 
     #[command(flatten)]
     pub(crate) vars: VarArgs,
+
+    #[command(flatten)]
+    pub(crate) net: NetArgs,
 
     /// Number of iterations. Defaults to the number of data rows, or 1.
     #[arg(long, short = 'n')]
@@ -191,7 +222,11 @@ pub(crate) struct SendArgs {
     #[command(flatten)]
     pub(crate) vars: VarArgs,
 
-    /// Print the status line and headers before the body.
+    #[command(flatten)]
+    pub(crate) net: NetArgs,
+
+    /// Print the status line and headers before the body, and the timing
+    /// and TLS details after it.
     #[arg(long, short = 'i')]
     pub(crate) include: bool,
 
@@ -290,6 +325,18 @@ fn parse_var(text: &str) -> Result<(String, String), String> {
     Ok((name.trim().to_owned(), value.to_owned()))
 }
 
+fn parse_http_version(text: &str) -> Result<HttpVersion, String> {
+    match text.trim().to_ascii_lowercase().as_str() {
+        "auto" => Ok(HttpVersion::Auto),
+        "http1" | "1" | "1.1" => Ok(HttpVersion::Http1),
+        "http2" | "2" => Ok(HttpVersion::Http2),
+        "http3" | "3" => Ok(HttpVersion::Http3),
+        _ => Err(format!(
+            "{text:?} is not an HTTP version; use auto, http1, http2 or http3"
+        )),
+    }
+}
+
 fn parse_reporter(text: &str) -> Result<Reporter, String> {
     let (kind, path) = match text.split_once('=') {
         Some((kind, path)) => (kind, Some(PathBuf::from(path))),
@@ -381,5 +428,31 @@ mod tests {
         };
         assert_eq!(args.targets, ["login.yaml", "orders"]);
         assert!(args.save);
+    }
+
+    #[test]
+    fn transport_flags_become_settings() {
+        let cli = Cli::try_parse_from([
+            "getman",
+            "send",
+            "users/list",
+            "--http-version",
+            "http3",
+            "--proxy",
+            "off",
+        ])
+        .unwrap();
+        let Some(Command::Send(args)) = cli.command else {
+            panic!()
+        };
+        let settings = args.net.settings();
+        assert_eq!(settings.http_version, Some(HttpVersion::Http3));
+        assert!(settings.proxy.unwrap().is_off());
+        assert!(Cli::try_parse_from(["getman", "run", "--http-version", "spdy"]).is_err());
+        let cli = Cli::try_parse_from(["getman", "run"]).unwrap();
+        let Some(Command::Run(args)) = cli.command else {
+            panic!()
+        };
+        assert!(args.net.settings().is_empty());
     }
 }

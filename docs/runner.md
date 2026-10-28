@@ -50,6 +50,8 @@ a `status` check.
 | `-v`, `--verbose` | Print every response's status line, headers and body, and script console output |
 | `--script-timeout SECONDS` | How long a script may run. Default 10 |
 | `--persist` | Save variables the run set to the git-ignored local files, as the UI does |
+| `--http-version VERSION` | `auto`, `http1`, `http2` or `http3` for every request, over the files' settings. See [HTTP and connections](http.md) |
+| `--proxy URL` | A proxy URL, `system` or `off` for every request, over the files' settings |
 | `--save` | Keep the run in `.getman/runs`, where the UI's Runner lists it |
 | `-w`, `--workspace DIR` | The workspace, when it is not the current directory or a parent |
 
@@ -88,7 +90,7 @@ not strings are passed as JSON text.
 | Reporter | Writes |
 | --- | --- |
 | `cli` | The run in the terminal, as it happens. The default |
-| `json` | The whole run: a summary, and for each request its URL, status, time, size, tests, checks, script errors, missing variables and console output |
+| `json` | The whole run: a summary, and for each request its URL, status, time and where it went (DNS, connect, first byte, download), HTTP version, size, tests, checks, script errors, missing variables and console output |
 | `junit` | JUnit XML, with one test suite per request and one test case per test or check, which most CI systems can show |
 | `html` | One page for people: the totals, then every request with its status, timings and checks. Failed requests are open, the rest fold away |
 | `csv` | One row per request per iteration: name, path, method, URL, status, times, size, result, test and check counts and the reasons it failed |

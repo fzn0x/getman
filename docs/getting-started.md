@@ -132,6 +132,7 @@ anything.
 | Keys | Does |
 | --- | --- |
 | <kbd>Ctrl</kbd> <kbd>Enter</kbd> | Send the request |
+| <kbd>Esc</kbd> | Cancel the request being sent |
 | <kbd>Ctrl</kbd> <kbd>S</kbd> | Save |
 | <kbd>Ctrl</kbd> <kbd>K</kbd> | Find a request or command |
 | <kbd>Alt</kbd> <kbd>N</kbd> | New request |

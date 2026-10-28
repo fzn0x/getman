@@ -51,6 +51,7 @@ Runs requests and reports the results. See [Running in CI](runner.md).
 ```sh
 getman run [TARGET]... [-e ENV] [--var NAME=VALUE]... [-d DATA] [-n N]
            [--delay MS] [--bail] [-r REPORTER[=PATH]]... [-v] [--persist]
+           [--http-version VERSION] [--proxy URL]
            [--save]
 ```
 
@@ -68,7 +69,9 @@ Sends one request and prints the response body.
 | `REQUEST` | A path in the workspace, such as `orders/create.yaml`, or a path on disk |
 | `-e`, `--env NAME` | Environment to use. `GETMAN_ENVIRONMENT` sets it too |
 | `--var NAME=VALUE` | Set a variable. Repeat for more |
-| `-i`, `--include` | Print the status line and headers first |
+| `-i`, `--include` | Print the status line and headers first, and the timing and TLS details after |
+| `--http-version VERSION` | `auto`, `http1`, `http2` or `http3`, over the files' settings |
+| `--proxy URL` | A proxy URL, `system` or `off`, over the files' settings |
 | `--json` | Print everything as JSON: request, response, tests, checks, logs |
 | `--script-timeout SECONDS` | Default 10 |
 

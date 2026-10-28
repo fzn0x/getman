@@ -74,6 +74,10 @@
       return "Is the server running, and is the host and port right? Check the URL and the environment.";
     if (error.startsWith("The request timed out"))
       return "Raise the timeout in the request's Settings, or check that the server answers.";
+    if (error.includes("HTTP/3"))
+      return "Set the HTTP version back to auto in the request's Settings if the server does not speak HTTP/3.";
+    if (error.includes("UnknownIssuer"))
+      return "Add your CA's certificate under Trusted CA certificates in Settings, or turn off Check TLS certificates for a self-signed one.";
     if (error.includes("certificate"))
       return "For a self-signed certificate, turn off Check TLS certificates in Settings.";
     if (error.includes("not a valid URL"))
@@ -121,7 +125,12 @@
   <Specimen {execution} sending={tab.sending} />
 
   {#if execution && !tab.sending}
-    {#if execution.error}
+    {#if execution.cancelled}
+      <div class="warning" role="status">
+        <Icon name="stop" />
+        <p>You cancelled the request before the response arrived.</p>
+      </div>
+    {:else if execution.error}
       <div class="error" role="alert">
         <p class="message">{execution.error}</p>
         {#if errorHint(execution.error)}<p class="hint">{errorHint(execution.error)}</p>{/if}

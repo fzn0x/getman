@@ -23,7 +23,7 @@ use axum::http::{HeaderValue, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use getman_core::Workspace;
-use getman_core::execute::Executor;
+use getman_core::execute::{Cancel, Executor};
 
 use crate::style;
 
@@ -36,6 +36,8 @@ pub(crate) struct AppState {
     pub(crate) token: String,
     pub(crate) port: u16,
     pub(crate) runs: Mutex<HashMap<String, Arc<AtomicBool>>>,
+    /// Requests being sent from the UI, by the id it gave them.
+    pub(crate) sends: Mutex<HashMap<String, Cancel>>,
     pub(crate) history: history::History,
     /// Mock servers started from the UI, by folder.
     pub(crate) mocks: Mutex<HashMap<String, crate::mock::Mock>>,
@@ -58,11 +60,12 @@ pub(crate) async fn serve(
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
     let state = Arc::new(AppState {
         history: history::History::open(&workspace),
-        executor: Executor::new(workspace),
+        executor: Executor::with_saved_cookies(workspace),
         token,
         port,
         runs: Mutex::new(HashMap::new()),
         mocks: Mutex::new(HashMap::new()),
+        sends: Mutex::new(HashMap::new()),
     });
     let app = router(Arc::clone(&state));
 
@@ -210,6 +213,7 @@ mod tests {
             port: 7878,
             runs: Mutex::new(HashMap::new()),
             mocks: Mutex::new(HashMap::new()),
+            sends: Mutex::new(HashMap::new()),
         });
         (dir, router(state))
     }
@@ -530,5 +534,112 @@ mod tests {
         .await;
         let (_, list) = read(app.clone().oneshot(api("/api/mocks", None)).await.unwrap()).await;
         assert_eq!(list, json!([]));
+    }
+
+    async fn call(app: &Router, path: &str, body: serde_json::Value) -> serde_json::Value {
+        let request = HttpRequest::post(path)
+            .header("host", "127.0.0.1:7878")
+            .header("x-getman-token", "secret-token")
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_send_can_be_cancelled() {
+        let (_dir, app) = app();
+        // A server that accepts the connection and never answers.
+        let silent = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = silent.local_addr().unwrap();
+        tokio::spawn(async move {
+            let mut open = Vec::new();
+            while let Ok((stream, _)) = silent.accept().await {
+                open.push(stream);
+            }
+        });
+        let sending = {
+            let app = app.clone();
+            tokio::spawn(async move {
+                call(
+                    &app,
+                    "/api/send",
+                    serde_json::json!({
+                        "id": "send-1",
+                        "request": { "url": format!("http://{address}/") },
+                    }),
+                )
+                .await
+            })
+        };
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        call(
+            &app,
+            "/api/send/cancel",
+            serde_json::json!({ "id": "send-1" }),
+        )
+        .await;
+        let execution = tokio::time::timeout(std::time::Duration::from_secs(5), sending)
+            .await
+            .expect("the send stopped")
+            .unwrap();
+        assert_eq!(execution["cancelled"], true, "{execution}");
+        assert_eq!(execution["error"], "The request was cancelled.");
+    }
+
+    #[tokio::test]
+    async fn cookies_can_be_added_and_renamed() {
+        let (_dir, app) = app();
+        let cookie = |name: &str, value: &str| {
+            serde_json::json!({
+                "domain": "api.example.com",
+                "path": "/",
+                "name": name,
+                "value": value,
+                "host_only": true,
+            })
+        };
+        call(
+            &app,
+            "/api/cookies/set",
+            serde_json::json!({ "cookie": cookie("a", "1") }),
+        )
+        .await;
+        call(
+            &app,
+            "/api/cookies/set",
+            serde_json::json!({
+                "cookie": cookie("b", "2"),
+                "previous": { "domain": "api.example.com", "path": "/", "name": "a" },
+            }),
+        )
+        .await;
+        let request = {
+            let mut request = get("/api/cookies", "127.0.0.1:7878");
+            request
+                .headers_mut()
+                .insert("x-getman-token", HeaderValue::from_static("secret-token"));
+            request
+        };
+        let response = app.clone().oneshot(request).await.unwrap();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let cookies: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(cookies.as_array().unwrap().len(), 1, "{cookies}");
+        assert_eq!(cookies[0]["name"], "b");
+        assert_eq!(cookies[0]["value"], "2");
+
+        let refused = call(
+            &app,
+            "/api/cookies/set",
+            serde_json::json!({ "cookie": { "domain": "", "name": "x" } }),
+        )
+        .await;
+        assert!(refused["error"].as_str().unwrap().contains("domain"));
     }
 }

@@ -45,6 +45,7 @@ pub(crate) async fn run(args: RunArgs) -> Outcome {
         bail: args.bail,
         vars: args.vars.vars.iter().cloned().collect(),
         script_timeout: super::script_timeout(&args.vars),
+        settings: args.net.settings(),
         ..RunOptions::default()
     };
     let executor = Executor::new(workspace.clone());

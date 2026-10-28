@@ -23,6 +23,8 @@ pub mod script;
 #[cfg(test)]
 mod test_server;
 pub mod time;
+mod timing;
+pub mod tls;
 pub mod vars;
 pub mod workspace;
 

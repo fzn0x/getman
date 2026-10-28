@@ -19,9 +19,10 @@ hmac = "0.13"
 indexmap = { version = "2", features = ["serde"] }
 md-5 = "0.11"
 mime_guess = "2"
+p12-keystore = "0.4"
 percent-encoding = "2"
 regex = "1"
-reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "cookies", "gzip", "brotli", "deflate", "multipart", "system-proxy", "socks", "stream"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "cookies", "gzip", "brotli", "deflate", "zstd", "multipart", "system-proxy", "socks", "stream"] }
 reqwest_cookie_store = "0.10"
 rquickjs = "0.14"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
@@ -31,13 +32,28 @@ serde_yaml_ng = "0.10"
 sha1 = "0.11"
 sha2 = "0.11"
 thiserror = "2"
-tokio = { version = "1", features = ["rt", "macros", "time", "fs", "sync"] }
+tokio = { version = "1", features = ["rt", "macros", "time", "fs", "sync", "net"] }
+tower-layer = "0.3"
+tower-service = "0.3"
 url = "2"
+x509-parser = "0.18"
+
+# HTTP/3 needs reqwest's unstable cfg, which .cargo/config.toml sets.
+[target.'cfg(reqwest_unstable)'.dependencies]
+reqwest = { version = "0.13", default-features = false, features = ["http3"] }
 
 [lints]
 workspace = true
 
 [dev-dependencies]
-axum = "0.8"
+axum = { version = "0.8", features = ["http2"] }
+bytes = "1"
+h3 = "0.0.8"
+h3-quinn = "0.0.10"
+http = "1"
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-ring"] }
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring"] }
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "net", "macros"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+zstd = "0.14"

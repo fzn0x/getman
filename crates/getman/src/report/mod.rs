@@ -285,6 +285,9 @@ pub(crate) fn sample() -> Recorded {
             body: 2,
         },
         remote_addr: None,
+        timings: None,
+        tls: None,
+        http3_available: false,
     };
     let pass = |name: &str| TestResult {
         name: name.into(),

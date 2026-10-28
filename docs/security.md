@@ -50,6 +50,20 @@ A workspace is a folder you chose. Getman reads and writes only inside it:
   or in CI.
 - History, in `.getman/history.json`, is git-ignored and keeps the last 200
   requests.
+- Proxy user names and passwords, and the passphrase of a PKCS#12 client
+  certificate, are read from variables, so their values can live in
+  `*.local.yaml` files. A variable that is not defined stops the request
+  instead of sending the placeholder.
+
+## Cookies
+
+The browser UI keeps its cookie jar in the workspace's `.getman/cookies.json`
+so logins survive a restart. Like the rest of `.getman/`, it is
+git-ignored. It holds session cookies, which work as passwords for as long
+as they are valid, so treat it like a password file: it is written readable
+only by you on macOS and Linux, and cookies that expire are dropped when it
+is read. Remove all in the Cookies dialog empties it. `getman send` and
+`getman run` never read or write it.
 
 ## Scripts
 
@@ -68,7 +82,25 @@ read its scripts: they run when you send.
 Getman verifies certificates with your operating system's trust store,
 so company certificate authorities work without extra setup. A request
 can turn verification off with `verify_tls: false`; Getman never turns it
-off for you.
+off for you. `ca_certs` adds certificate authorities to trust for the
+requests that set it; it never removes the system's.
+
+Client certificates and CA files are read from inside the workspace only,
+like files in request bodies, so a collection someone sends you cannot
+present a key from elsewhere on your disk. A client certificate's private
+key is a secret: keep it, or the folder it is in, out of git (add it to
+`.gitignore`), and prefer a PKCS#12 file whose passphrase is in a
+`*.local.yaml` file over an unencrypted PEM key. Getman holds keys in
+memory only while it runs and never writes them anywhere.
+
+## Proxies
+
+A proxy sees every request sent through it, and, for `http://` URLs, their
+contents. Getman uses your system's proxy settings unless a request says
+otherwise, and `proxy: off` sends a request directly whatever the system
+says. Proxy credentials go to the proxy in a `Proxy-Authorization` header
+(Basic) or in the SOCKS5 handshake, which is plain text unless the proxy
+URL is `https://`.
 
 ## Reporting a vulnerability
 
