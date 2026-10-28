@@ -571,7 +571,7 @@ fn read_module(root: Option<&std::path::Path>, path: &str) -> Result<String, Str
     let Some(root) = root else {
         return Err("files cannot be required here".into());
     };
-    if !path.ends_with(".js") {
+    if std::path::Path::new(path).extension() != Some(std::ffi::OsStr::new("js")) {
         return Err("only .js files can be required".into());
     }
     let file = crate::prepare::resolve_file(root, path).map_err(|e| e.to_string())?;

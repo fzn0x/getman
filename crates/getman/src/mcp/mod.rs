@@ -7,6 +7,7 @@
 //! to 2025-11-25. Nothing but protocol messages goes to standard output;
 //! notes go to standard error.
 
+mod mask;
 mod tools;
 
 use getman_core::Workspace;
@@ -42,7 +43,7 @@ const METHOD_NOT_FOUND: i64 = -32601;
 const INVALID_PARAMS: i64 = -32602;
 const UNSUPPORTED_VERSION: i64 = -32022;
 
-const INSTRUCTIONS: &str = "Getman workspace: API requests stored as YAML files. Use list_requests to see them, read_request to look at one, send_request to send one and see its response and checks, run_folder to run many and get a summary, list_environments to pick an environment, save_request to create or change a request, and import_curl to turn a cURL command into a request. Paths are relative to the workspace root, such as users/get-user.yaml. Values from git-ignored *.local.yaml files and GETMAN_* variables are replaced by [secret] in every result.";
+const INSTRUCTIONS: &str = "Getman workspace: API requests stored as YAML files. Use list_requests to see them, read_request to look at one, send_request to send one and see its response and checks, run_folder to run many and get a summary, list_environments to pick an environment, save_request to create or change a request, and import_curl to turn a cURL command into a request. Paths are relative to the workspace root, such as users/get-user.yaml. Values from git-ignored *.local.yaml files, variables marked secret and GETMAN_* variables are replaced by [secret] in every result, in their encoded forms too.";
 
 /// Serves the workspace on standard input and output until input ends.
 pub(crate) async fn serve(workspace: Workspace) -> Result<(), String> {

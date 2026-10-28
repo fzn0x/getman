@@ -390,3 +390,99 @@ async fn secrets_never_reach_the_results() {
     assert_eq!(reply["result"]["isError"], true);
     mock.stop();
 }
+
+#[tokio::test]
+async fn secrets_of_any_length_are_masked_in_their_encodings_too() {
+    use base64::Engine as _;
+    let (_dir, ws) = workspace();
+    let password = "p@ss word";
+    // What an API might echo back: the secret in other forms, inside longer
+    // text, and a two-character secret inside a longer word.
+    let echoed = json!({
+        "basic": base64::engine::general_purpose::STANDARD.encode(format!("ada:{password}")),
+        "url": "https://x.test/?pw=p%40ss%20word&ok=1",
+        "hex": hex::encode(password),
+        "inside": "my password is p@ss word, sure",
+        "short": "xyz-in-a-longer-word",
+        "number": 12,
+    });
+    ws.create_request(
+        "",
+        "Echo",
+        &Request {
+            url: "{{baseUrl}}/echo".into(),
+            examples: vec![Example {
+                name: "Echo".into(),
+                body: echoed.to_string(),
+                ..Example::default()
+            }],
+            ..Request::default()
+        },
+    )
+    .unwrap();
+    let listener = crate::mock::bind(Some(0)).await.unwrap();
+    let mock =
+        crate::mock::start(ws.clone(), "", listener, Duration::ZERO, Box::new(|_| {})).unwrap();
+    let id = ws.create_environment("Dev").unwrap();
+    ws.write_environment(
+        &id,
+        &EnvironmentFiles {
+            shared: Environment {
+                variables: [("baseUrl".to_owned(), mock.url())].into_iter().collect(),
+                ..Environment::default()
+            },
+            local: [
+                ("password".to_owned(), password.to_owned()),
+                ("tiny".to_owned(), "xyz".to_owned()),
+            ]
+            .into_iter()
+            .collect(),
+        },
+    )
+    .unwrap();
+    let mut server = Server::new(ws.clone());
+
+    let sent = tool(
+        &mut server,
+        "send_request",
+        json!({ "path": "echo.yaml", "environment": "dev" }),
+    )
+    .await;
+    assert_eq!(sent["status"], 200, "{sent}");
+    let body: Value = serde_json::from_str(sent["body"].as_str().unwrap()).unwrap();
+    // The encoded "ada:" in front is not secret, so it stays.
+    let basic = body["basic"].as_str().unwrap();
+    assert!(
+        basic.starts_with("YWRh") && basic.ends_with("[secret]"),
+        "{basic}"
+    );
+    assert_eq!(body["url"], "https://x.test/?pw=[secret]&ok=1");
+    assert_eq!(body["hex"], "[secret]");
+    assert_eq!(body["inside"], "my password is [secret], sure");
+    assert_eq!(body["short"], "[secret]-in-a-longer-word");
+    assert_eq!(body["number"], 12);
+    let everything = sent.to_string();
+    for leaked in ["p@ss", "p%40ss", "xyz-in"] {
+        assert!(!everything.contains(leaked), "{leaked}: {everything}");
+    }
+
+    // The same holds for errors.
+    ws.write_local_state(&getman_core::workspace::LocalState {
+        variables: [("v".to_owned(), "no-such-folder".to_owned())]
+            .into_iter()
+            .collect(),
+        ..getman_core::workspace::LocalState::default()
+    })
+    .unwrap();
+    let reply = ask(
+        &mut server,
+        call(2, "list_requests", json!({ "folder": "no-such-folder" })),
+    )
+    .await;
+    assert_eq!(reply["result"]["isError"], true);
+    assert_eq!(
+        reply["result"]["content"][0]["text"],
+        "there is no folder [secret]"
+    );
+    mock.stop();
+}
