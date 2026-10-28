@@ -22,7 +22,7 @@ mod test_servers;
 mod test_socketio;
 #[cfg(test)]
 mod tests;
-mod tls;
+pub(crate) mod tls;
 mod websocket;
 
 use std::sync::Arc;

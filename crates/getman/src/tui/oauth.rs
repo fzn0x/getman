@@ -67,7 +67,11 @@ impl SignIn {
             let send = |event| {
                 let _ = tx.send(Message::SignIn(serial, event));
             };
-            let authorization = match executor.authenticator.authorize(&settings, &vars).await {
+            let authorization = match executor
+                .authenticator
+                .authorize(&settings, &vars, transport)
+                .await
+            {
                 Ok(authorization) => authorization,
                 Err(e) => return send(Event::Done(Err(e.to_string()))),
             };
@@ -85,7 +89,7 @@ impl SignIn {
             });
             let token = executor
                 .authenticator
-                .wait_for_token(&executor.http, &id, transport, TIMEOUT)
+                .wait_for_token(&executor.http, &id, TIMEOUT)
                 .await;
             send(Event::Done(token.map_err(|e| e.to_string())));
         });

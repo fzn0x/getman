@@ -168,6 +168,14 @@
           <dt>Size</dt>
           <dd class="num">{bytes(response.size.body)}</dd>
         </div>
+        {#if response.hops?.length}
+          <div>
+            <dt>Redirects</dt>
+            <dd class="num" title="Select the time to see the redirects Getman followed">
+              {response.hops.length}
+            </dd>
+          </div>
+        {/if}
         <div>
           <dt>Protocol</dt>
           <dd>

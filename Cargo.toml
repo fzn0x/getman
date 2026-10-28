@@ -21,8 +21,6 @@ getman-core = { path = "crates/getman-core" }
 rust_2018_idioms = { level = "warn", priority = -1 }
 unreachable_pub = "warn"
 unsafe_code = "deny"
-# Set in .cargo/config.toml; turns on reqwest's HTTP/3.
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(reqwest_unstable)"] }
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }

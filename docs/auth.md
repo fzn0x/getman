@@ -121,7 +121,10 @@ In the browser UI, open the request's **Auth** tab and choose
 **Get new token**. Getman opens your browser at the authorization URL and
 listens for the provider to send it back. It checks the `state` it sent,
 exchanges the code for a token (or, for `implicit`, takes the token the
-browser was given) and keeps it. The tab shows when the token expires,
+browser was given) and keeps it. The exchange goes out the way the
+request's other requests do: through the proxy, with the client
+certificate and extra certificate authorities, and with the TLS and HTTP
+version settings of its folder. The tab shows when the token expires,
 and **Clear token** forgets it. In the [terminal UI](terminal.md#signing-in-with-a-browser),
 press <kbd>b</kbd> on the auth pane; it shows the expiry too.
 
@@ -221,8 +224,12 @@ auth:
 Getman signs the host, `X-Amz-Date`, `X-Amz-Security-Token` and the
 request's headers, except those proxies may change, such as
 `User-Agent`. For S3 it also sends `X-Amz-Content-Sha256`. A presigned URL
-signs only the host. A multipart body cannot be hashed before it is
-sent, so it needs `unsigned_payload`.
+signs only the host.
+
+Signatures that hash the body (AWS Signature, the OAuth 1.0a
+`body_hash`, Hawk's `payload_hash` and EdgeGrid) cover multipart bodies
+too: Getman builds the whole body, boundary included, before it signs, and
+sends those same bytes.
 
 ## Hawk
 

@@ -974,6 +974,14 @@ pub struct Settings {
     /// Most redirects to follow. Default 10.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_redirects: Option<u32>,
+    /// Keep the method and body when a 301 or 302 redirect leads on,
+    /// instead of turning a POST into a GET. Default false.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub follow_original_method: Option<bool>,
+    /// Keep the `Authorization` header when a redirect leads to another
+    /// host, port or scheme. Default false.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub follow_authorization: Option<bool>,
     /// Check TLS certificates. Default true.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verify_tls: Option<bool>,
@@ -1019,6 +1027,10 @@ impl Settings {
             timeout_ms: self.timeout_ms.or(parent.timeout_ms),
             follow_redirects: self.follow_redirects.or(parent.follow_redirects),
             max_redirects: self.max_redirects.or(parent.max_redirects),
+            follow_original_method: self
+                .follow_original_method
+                .or(parent.follow_original_method),
+            follow_authorization: self.follow_authorization.or(parent.follow_authorization),
             verify_tls: self.verify_tls.or(parent.verify_tls),
             http_version: self.http_version.or(parent.http_version),
             title_case_headers: self.title_case_headers.or(parent.title_case_headers),

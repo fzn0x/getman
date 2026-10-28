@@ -755,12 +755,7 @@ async fn a_sign_in_can_be_cancelled() {
         .app
         .executor
         .authenticator
-        .wait_for_token(
-            &rig.app.executor.http,
-            &id,
-            getman_core::http::Transport::default(),
-            Duration::from_secs(1),
-        )
+        .wait_for_token(&rig.app.executor.http, &id, Duration::from_secs(1))
         .await;
     assert!(waited.is_err());
     // Late news from the cancelled sign-in is ignored.

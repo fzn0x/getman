@@ -33,7 +33,10 @@ use tokio_tungstenite::tungstenite::Message as Frame;
 
 use super::websocket::{self, Socket};
 use super::{Job, MAX_MESSAGE_BYTES, SocketIoTransport, header_list, within};
-use crate::http::{Header, HttpClient, Outgoing, OutgoingBody, Payload, Transport, set_header};
+use crate::http::{
+    Header, HttpClient, Incoming as HttpResponse, Outgoing, OutgoingBody, Payload, Transport,
+    set_header,
+};
 
 /// Separates the packets of a long-polling body.
 const SEPARATOR: char = '\u{1e}';
@@ -491,7 +494,7 @@ impl Client {
         method: &str,
         transport: &Transport,
         body: Option<String>,
-    ) -> Result<(reqwest::Response, f64), PollError> {
+    ) -> Result<(HttpResponse, f64), PollError> {
         let mut headers = self.headers.clone();
         let body = match body {
             Some(text) => {
@@ -556,13 +559,13 @@ impl Client {
 
 /// Reads a response's body as text, up to the largest message Getman
 /// reads, within the transport's timeout.
-async fn read(mut response: reqwest::Response, transport: &Transport) -> Result<String, PollError> {
+async fn read(mut response: HttpResponse, transport: &Transport) -> Result<String, PollError> {
     let reading = async {
         let mut bytes = Vec::new();
         while let Some(chunk) = response
             .chunk()
             .await
-            .map_err(|e| PollError::Failed(crate::http::describe(&e)))?
+            .map_err(|e| PollError::Failed(e.to_string()))?
         {
             bytes.extend_from_slice(&chunk);
             if bytes.len() > MAX_MESSAGE_BYTES {
