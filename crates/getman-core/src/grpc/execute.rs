@@ -15,10 +15,11 @@ use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 
 use super::json::{from_json, split_messages, to_json};
+use super::metadata::{self, Body, Signing};
 use super::schema::Schema;
 use super::status::{Code, Status};
 use super::transport::{self, Connection, Head, Target, header_list};
-use super::{CallType, Direction, GrpcCall, StreamMessage, metadata, reflected, reflection};
+use super::{CallType, Direction, GrpcCall, StreamMessage, reflected, reflection};
 use crate::checks::{run_captures, run_checks};
 use crate::error::{Error, Result};
 use crate::execute::{Context, Execution, Executor, absorb, run_scripts, script_scopes, var_stack};
@@ -281,12 +282,18 @@ async fn run(
     )
     .await;
     execution.missing_variables = missing;
-    let metadata = metadata?;
+    let base = metadata?;
+    let signing = Signing {
+        auth: &effective.auth,
+        vars: &vars,
+        root: executor.workspace.root(),
+        target: &target,
+    };
     call.method = request.method.trim().trim_start_matches('/').to_owned();
     execution.request = Some(Outgoing {
         method: "GRPC".into(),
         url: target.url(&format!("/{}", call.method)),
-        headers: metadata.clone(),
+        headers: base.clone(),
         body: if message_text.trim().is_empty() {
             OutgoingBody::None
         } else {
@@ -304,7 +311,7 @@ async fn run(
     let mut connection = connect(&target, &transport, &chain, &request).await?;
     let schema = match proto_schema {
         Some(schema) => schema,
-        None => reflect(&target, &mut connection, &metadata, false).await?,
+        None => reflect(&target, &mut connection, &signing, &base, false).await?,
     };
     let method = schema.method(&request.method)?;
     let call_type = CallType::of(&method);
@@ -328,8 +335,17 @@ async fn run(
     } else if control.commands.is_some() {
         initial.clear();
     }
+    // Signatures cover the call as the HTTP/2 request it is, so they wait
+    // for the method and the message.
+    let path = format!("/{}", call.method);
+    let body = match initial.first() {
+        Some(message) if !call_type.client_streams() => Body::Message(&message.bytes),
+        _ => Body::Stream,
+    };
+    let metadata = signing.apply(&base, &path, body, &mut execution.missing_variables)?;
     if let Some(outgoing) = &mut execution.request {
-        outgoing.url = target.url(&format!("/{}", call.method));
+        outgoing.url = target.url(&path);
+        outgoing.headers.clone_from(&metadata);
     }
 
     // The call.
@@ -412,7 +428,7 @@ pub async fn load_schema(
     if !refresh && let Some(schema) = cached(&target) {
         return Ok(schema);
     }
-    let metadata = metadata::build(
+    let base = metadata::build(
         &effective.headers,
         &effective.auth,
         &vars,
@@ -420,8 +436,14 @@ pub async fn load_schema(
         Some((&executor.authenticator, &executor.http, transport.clone())),
     )
     .await?;
+    let signing = Signing {
+        auth: &effective.auth,
+        vars: &vars,
+        root: executor.workspace.root(),
+        target: &target,
+    };
     let mut connection = connect(&target, &transport, &chain, request).await?;
-    reflect(&target, &mut connection, &metadata, true).await
+    reflect(&target, &mut connection, &signing, &base, true).await
 }
 
 /// A request as a `grpcurl` command, run from the workspace root, and the
@@ -590,16 +612,20 @@ fn cached(target: &Target) -> Option<Schema> {
         .cloned()
 }
 
+/// Reads the schema from the server. Reflection streams both ways, so
+/// request signatures cover no body.
 async fn reflect(
     target: &Target,
     connection: &mut Connection,
-    metadata: &[Header],
+    signing: &Signing<'_>,
+    base: &[Header],
     refresh: bool,
 ) -> Result<Schema> {
     if !refresh && let Some(schema) = cached(target) {
         return Ok(schema);
     }
-    let pool = reflection::reflect(connection, metadata, REFLECTION_TIMEOUT).await?;
+    let metadata = |path: &str| signing.apply(base, path, Body::Stream, &mut Vec::new());
+    let pool = reflection::reflect(connection, &metadata, REFLECTION_TIMEOUT).await?;
     let schema = Schema::from_pool(pool);
     reflected()
         .lock()
