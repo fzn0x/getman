@@ -38,6 +38,7 @@ are.
 | `gm.globals` | Globals |
 | `gm.variables` | Reads any scope, strongest first; writes local variables that last for the rest of a run |
 | `gm.iterationData` | The current data row in a run (read only) |
+| `gm.session` | Session variables: they last while the UI server runs, or for a whole `getman run`, and are never saved |
 
 Each has `get(name)`, `set(name, value)`, `has(name)`, `unset(name)`,
 `clear()`, `toObject()` and `replaceIn(text)`, which replaces
@@ -204,6 +205,19 @@ tab of the response and to `getman run --verbose`.
 `setTimeout`, `setInterval` and `setImmediate` work, on a virtual clock:
 callbacks run in order without waiting, so a script never slows a run
 down.
+
+## Turning scripts off
+
+You may not want to run scripts that came with a workspace you have
+not read. Settings in the UI has a "Run scripts" switch; it writes
+`scripts_off: true` to `getman.local.yaml`, which stays on your machine.
+`getman send --no-scripts` and `getman run --no-scripts` skip scripts
+for one command. Requests are sent as saved, checks and captures still
+run, and the result says how many scripts did not run:
+
+```text
+Scripts are turned off for this run, so 2 scripts did not run.
+```
 
 ## Limits
 

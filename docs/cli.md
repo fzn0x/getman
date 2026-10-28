@@ -64,14 +64,15 @@ Runs requests and reports the results. See [Running in CI](runner.md).
 ```sh
 getman run [TARGET]... [-e ENV] [--var NAME=VALUE]... [-d DATA] [-n N]
            [--delay MS] [--bail] [-r REPORTER[=PATH]]... [-v] [--persist]
-           [--http-version VERSION] [--proxy URL]
+           [--http-version VERSION] [--proxy URL] [--no-scripts]
            [--save]
 ```
 
 Each `TARGET` is a folder or a request; several run in the order given,
 and none runs the whole workspace. Reporters are `cli`, `json`, `junit`,
 `html`, `csv` and `xlsx`. `--save` keeps the run in `.getman/runs` for
-the UI's Runner.
+the UI's Runner. `--no-scripts` runs no [scripts](scripts.md#turning-scripts-off);
+each request notes how many it skipped.
 
 ## getman send
 
@@ -91,6 +92,7 @@ it receives on a line; see [WebSocket, SSE and Socket.IO](realtime.md).
 | `-m`, `--message NAME` | WebSocket and Socket.IO: a saved message to send once connected. Repeat to send several, in order |
 | `--until N\|TIME` | Connections: stop after `N` received messages, or after a time such as `30s`, `500ms` or `2m`. Repeat for both; the first reached stops. Without it, <kbd>Ctrl</kbd> <kbd>C</kbd> stops |
 | `--script-timeout SECONDS` | Default 10 |
+| `--no-scripts` | Run no scripts; the result notes how many were skipped |
 
 For a [gRPC request](grpc.md), `send` prints each response message as
 pretty JSON as it arrives, and the status, its message and any error

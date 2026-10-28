@@ -24,11 +24,37 @@ weakest to strongest:
 4. **Folder variables**: in each `_folder.yaml`, outermost first
 5. **Request variables**: the request's own `variables`
 6. **The current data row**, in a run with a data file
-7. **Local variables**: set by scripts with `gm.variables.set`, for the
+7. **Session variables**: set by scripts with `gm.session.set`, while the
+   UI server runs or for a whole `getman run`
+8. **Local variables**: set by scripts with `gm.variables.set`, for the
    rest of the run
 
 The UI shows the scope a value comes from when you complete a variable
 name after typing `{{`.
+
+### Session variables
+
+A session variable is for a value that should outlive one request but
+need not outlive Getman: a token you fetched once, a counter, an id a
+later request uses.
+
+```js
+// in a post-response script
+gm.session.set("cartId", gm.response.json().id);
+// in any later request: {{cartId}}
+```
+
+In the UI, a session lasts until you stop Getman (or the desktop app),
+across every request you send and every run you start. In
+`getman run`, it lasts for the whole run, all iterations included. They
+are never written to a file, so they cannot leak into git or into a
+screen share of your files. The variables list in the UI shows them
+with the scope `session`; "Clear session variables" in the command
+palette (<kbd>Ctrl</kbd> <kbd>K</kbd>, then `>`) and in Settings forgets
+them.
+
+Local variables (`gm.variables.set`) are stronger, and last for a run
+only: in the UI, only until the request that set them ends.
 
 ## Dynamic values
 
@@ -154,7 +180,7 @@ Three files are never committed (`getman init` adds them to `.gitignore`):
 | File | Holds |
 | --- | --- |
 | `environments/<name>.local.yaml` | Local values of an environment: secrets, tokens, your own base URL |
-| `getman.local.yaml` | Local overrides of workspace variables, and globals |
+| `getman.local.yaml` | Local overrides of workspace variables, globals, and the switch that turns [scripts](scripts.md#turning-scripts-off) off |
 | `.getman/` | History of sent requests and their responses, the trash, your header presets |
 
 When a script sets a variable with `gm.environment.set`,
