@@ -716,10 +716,10 @@
   // ---- Variables ---------------------------------------------------------
 
   const scopes = {};
-  for (const name of ["globals", "collection", "environment", "folder", "request", "data", "local"]) {
+  for (const name of ["globals", "collection", "environment", "folder", "request", "data", "session", "local"]) {
     scopes[name] = Object.assign(Object.create(null), (input.scopes && input.scopes[name]) || {});
   }
-  const STRONGEST_FIRST = ["local", "data", "request", "folder", "environment", "collection", "globals"];
+  const STRONGEST_FIRST = ["local", "session", "data", "request", "folder", "environment", "collection", "globals"];
 
   function resolve(name) {
     for (const scope of STRONGEST_FIRST) {
@@ -1215,6 +1215,7 @@
     collectionVariables: makeScope("collection", "collection"),
     globals: makeScope("globals", "global"),
     iterationData: makeScope("data", null),
+    session: makeScope("session", "session"),
     variables: {
       get: (name) => resolve(name),
       has: (name) => resolve(name) !== undefined,

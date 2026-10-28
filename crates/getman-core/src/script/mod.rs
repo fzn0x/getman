@@ -79,6 +79,8 @@ pub struct ScriptScopes {
     pub request: Vars,
     /// The current row of a data file, with its JSON types.
     pub data: serde_json::Map<String, Value>,
+    /// Variables set by scripts for the whole session.
+    pub session: Vars,
     /// Variables set by scripts for the rest of the run.
     pub local: Vars,
 }
@@ -173,6 +175,8 @@ pub enum ChangeScope {
     Collection,
     /// `gm.globals`.
     Global,
+    /// `gm.session`: while the UI server runs, or for a whole run.
+    Session,
     /// `gm.variables`: for the rest of the run only.
     Local,
 }
