@@ -773,4 +773,76 @@ mod tests {
         .await;
         assert!(refused["error"].as_str().unwrap().contains("domain"));
     }
+
+    #[tokio::test]
+    async fn session_variables_show_in_the_variables_list_until_cleared() {
+        let (_dir, app) = app();
+        let sent = call_json(
+            &app,
+            "/api/send",
+            serde_json::json!({
+                "request": {
+                    "url": "http://127.0.0.1:9/",
+                    "scripts": {
+                        "pre_request": "gm.session.set('token', 'abc'); gm.execution.skipRequest();",
+                    },
+                },
+            }),
+        )
+        .await;
+        assert_eq!(sent["changes"][0]["scope"], "session", "{sent}");
+
+        let variables = |app: Router| async move {
+            call_json(
+                &app,
+                "/api/variables",
+                serde_json::json!({ "request": { "url": "http://x/" } }),
+            )
+            .await
+        };
+        let listed = variables(app.clone()).await;
+        assert_eq!(
+            listed,
+            serde_json::json!([{ "name": "token", "value": "abc", "scope": "session" }])
+        );
+
+        call_json(&app, "/api/session/clear", serde_json::json!({})).await;
+        assert_eq!(variables(app.clone()).await, serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn scripts_off_in_the_local_state_is_noted_in_the_result() {
+        let (_dir, app) = app();
+        let request = serde_json::json!({
+            "request": {
+                "url": "http://127.0.0.1:9/",
+                "scripts": { "pre_request": "gm.execution.skipRequest();" },
+            },
+        });
+        let before = call_json(&app, "/api/send", request.clone()).await;
+        assert_eq!(before["skipped"], true, "{before}");
+
+        let request_with_state = |off: bool| {
+            let app = app.clone();
+            async move {
+                let put = HttpRequest::put("/api/globals")
+                    .header("host", "127.0.0.1:7878")
+                    .header("x-getman-token", "secret-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "scripts_off": off }).to_string(),
+                    ))
+                    .unwrap();
+                app.oneshot(put).await.unwrap();
+            }
+        };
+        request_with_state(true).await;
+        let after = call_json(&app, "/api/send", request.clone()).await;
+        assert_eq!(after["skipped"], false, "{after}");
+        assert_eq!(
+            after["warnings"][0],
+            "Scripts are turned off in this workspace's settings on this machine, so 1 script did not run."
+        );
+        request_with_state(false).await;
+    }
 }
