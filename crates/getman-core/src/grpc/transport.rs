@@ -25,10 +25,10 @@ use rustls_platform_verifier::BuilderVerifierExt as _;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc;
 
-use super::proxy;
 use super::status::{Code, Status};
 use crate::error::{Error, Result};
 use crate::http::{Header, Transport};
+use crate::tunnel;
 
 /// Largest message Getman sends or reads.
 pub(crate) const MAX_MESSAGE_BYTES: usize = 64 * 1024 * 1024;
@@ -90,10 +90,15 @@ impl Target {
 
     /// `host:port`, with brackets around an IPv6 address.
     pub(crate) fn authority(&self) -> String {
-        if self.host.contains(':') {
-            format!("[{}]:{}", self.host, self.port)
-        } else {
-            format!("{}:{}", self.host, self.port)
+        self.destination().authority()
+    }
+
+    /// The server, as the tunnel module takes it.
+    fn destination(&self) -> tunnel::Destination<'_> {
+        tunnel::Destination {
+            tls: self.tls,
+            host: &self.host,
+            port: self.port,
         }
     }
 
@@ -142,11 +147,6 @@ pub(crate) struct Connection {
     closed_hint: Option<&'static str>,
 }
 
-/// A byte stream under HTTP/2: a socket, or a tunnel and TLS over one.
-trait Io: AsyncRead + AsyncWrite + Unpin + Send {}
-
-impl<T: AsyncRead + AsyncWrite + Unpin + Send> Io for T {}
-
 /// Opens a connection the way `transport` says: through its proxy,
 /// trusting its certificate authorities, and presenting its client
 /// certificate. `timeout` bounds connecting and each handshake.
@@ -155,51 +155,29 @@ pub(crate) async fn connect(
     transport: &Transport,
     timeout: Duration,
 ) -> Result<Connection> {
-    let authority = target.authority();
-    let proxy = proxy::route(target, &transport.proxy)?;
-    let failed = |reason: String| match &proxy {
-        Some(proxy) => Error::Http(format!(
-            "Could not connect to {authority} through the proxy {}: {reason}",
-            proxy.authority()
-        )),
-        None => Error::Http(format!("Could not connect to {authority}: {reason}")),
-    };
-    let (host, port) = match &proxy {
-        Some(proxy) => (proxy.host.as_str(), proxy.port),
-        None => (target.host.as_str(), target.port),
-    };
-    let tcp = tokio::time::timeout(timeout, tokio::net::TcpStream::connect((host, port)))
-        .await
-        .map_err(|_| failed(format!("no answer within {} s", timeout.as_secs())))?
-        .map_err(|e| failed(e.to_string()))?;
-    let _ = tcp.set_nodelay(true);
-    let mut stream: Box<dyn Io> = Box::new(tcp);
-
-    if let Some(proxy) = &proxy {
-        if proxy.kind == proxy::Kind::Https {
-            // TLS to the proxy itself; the client certificate is for the
-            // server behind it.
-            let config =
-                tls_config(transport, false, Vec::new()).map_err(|e| failed(e.to_string()))?;
-            stream = secure(stream, &proxy.host, config, timeout)
-                .await
-                .map_err(failed)?;
-        }
-        tokio::time::timeout(timeout, proxy::tunnel(&mut stream, proxy, target))
-            .await
-            .map_err(|_| {
-                failed(format!(
-                    "the proxy did not set up the tunnel within {} s",
-                    timeout.as_secs()
-                ))
-            })?
-            .map_err(failed)?;
-    }
+    let destination = target.destination();
+    let proxy = tunnel::route(destination, &transport.proxy).map_err(Error::Invalid)?;
+    let failed =
+        |reason: String| Error::Http(tunnel::failure(destination, proxy.as_ref(), &reason));
+    let mut stream = tunnel::open(
+        destination,
+        proxy.as_ref(),
+        // TLS to the proxy itself; the client certificate is for the
+        // server behind it.
+        || {
+            tls_config(transport, false, Vec::new())
+                .map(Arc::new)
+                .map_err(|e| e.to_string())
+        },
+        Some(timeout),
+    )
+    .await
+    .map_err(failed)?;
 
     if target.tls {
         let config =
             tls_config(transport, true, vec![b"h2".to_vec()]).map_err(|e| failed(e.to_string()))?;
-        stream = secure(stream, &target.host, config, timeout)
+        stream = tunnel::secure(stream, &target.host, Arc::new(config), Some(timeout))
             .await
             .map_err(failed)?;
     }
@@ -221,23 +199,6 @@ pub(crate) async fn connect(
         target: target.clone(),
         closed_hint,
     })
-}
-
-/// Runs the TLS handshake with `host` over `stream`.
-async fn secure(
-    stream: Box<dyn Io>,
-    host: &str,
-    config: rustls::ClientConfig,
-    timeout: Duration,
-) -> Result<Box<dyn Io>, String> {
-    let name = ServerName::try_from(host.to_owned())
-        .map_err(|e| format!("{host} is not a valid server name: {e}"))?;
-    let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
-    let stream = tokio::time::timeout(timeout, connector.connect(name, stream))
-        .await
-        .map_err(|_| format!("the TLS handshake took longer than {} s", timeout.as_secs()))?
-        .map_err(|e| format!("TLS failed: {e}"))?;
-    Ok(Box::new(stream))
 }
 
 async fn handshake<T>(io: T) -> Result<SendRequest<Outbound>, String>
