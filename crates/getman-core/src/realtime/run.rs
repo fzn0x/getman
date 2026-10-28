@@ -19,7 +19,8 @@ use super::{
 use crate::checks::{messages_value, run_captures_on, run_checks_on};
 use crate::error::Result;
 use crate::execute::{
-    Context, Execution, Executor, absorb, run_scripts, script_request, script_scopes, var_stack,
+    Context, Execution, Executor, absorb, run_scripts, script_request, script_scopes, skip_scripts,
+    var_stack,
 };
 use crate::http::{Header, Outgoing, OutgoingBody, Payload, Response, Size};
 use crate::model::{KeyValue, Request, RequestKind};
@@ -326,15 +327,17 @@ impl Executor {
             Some(path) => self.workspace.folder_chain(path)?,
             None => vec![self.workspace.read_folder("")?],
         };
+        self.load_session(context);
         let mut request = request.clone();
         let effective = Effective::new(&chain, &request);
-        if effective.pre_request.is_empty() {
+        let files = self.file_vars(context.environment.as_deref())?;
+        if skip_scripts(&files, context, &effective, execution) || effective.pre_request.is_empty()
+        {
             return Ok(Some(Ready {
                 request,
                 headers: None,
             }));
         }
-        let files = self.file_vars(context.environment.as_deref())?;
         let settings = context.settings.clone().or(effective.settings.clone());
         let early = transport(
             &settings,
@@ -348,6 +351,7 @@ impl Executor {
             )),
             transport: early.unwrap_or_default(),
             timeout: context.script_timeout,
+            root: Some(self.workspace.root().to_path_buf()),
         };
         let mut headers = effective.headers.clone();
         let input = ScriptInput {
@@ -364,7 +368,9 @@ impl Executor {
             request.url.clone_from(&edited.url);
             headers.clone_from(&edited.headers);
         }
-        if absorb(output, context, execution) {
+        let failed = absorb(output, context, execution);
+        self.keep_session(&execution.changes);
+        if failed {
             execution.error =
                 Some("a pre-request script failed, so the connection was not made".into());
             return Ok(None);
@@ -395,6 +401,7 @@ impl Executor {
         {
             execution.error.get_or_insert_with(|| e.to_string());
         }
+        self.keep_session(&execution.changes);
     }
 
     async fn finish_connection(
@@ -435,7 +442,8 @@ impl Executor {
         let effective = Effective::new(&chain, request);
         let response = handshake_view(&call);
         let received = call.received();
-        if !effective.post_response.is_empty() {
+        let scripts_off = skip_scripts(&files, context, &effective, &mut Execution::default());
+        if !scripts_off && !effective.post_response.is_empty() {
             let settings = context.settings.clone().or(effective.settings.clone());
             let early = transport(
                 &settings,
@@ -449,6 +457,7 @@ impl Executor {
                 )),
                 transport: early.unwrap_or_default(),
                 timeout: context.script_timeout,
+                root: Some(self.workspace.root().to_path_buf()),
             };
             let input = ScriptInput {
                 event: Event::PostResponse,

@@ -1055,6 +1055,7 @@ mod tests {
             scopes: crate::script::ScriptScopes::default(),
             request: crate::script::ScriptRequest::default(),
             response: None,
+            messages: None,
             cookies: Vec::new(),
         };
         let output = crate::script::run(

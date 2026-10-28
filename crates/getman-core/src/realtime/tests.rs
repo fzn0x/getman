@@ -1162,6 +1162,63 @@ async fn a_failing_check_or_script_on_a_connection_fails_the_request() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn connections_keep_session_variables_and_obey_the_scripts_switch() {
+    let addr = test_servers::websocket().await;
+    let (_dir, executor) = setup();
+    let request = Request {
+        kind: RequestKind::Websocket,
+        url: format!("ws://{addr}/"),
+        scripts: Scripts {
+            pre_request: "gm.session.set('seen', gm.session.get('seen') + 'a');".into(),
+            post_response: "gm.session.set('seen', gm.session.get('seen') + 'b');".into(),
+        },
+        until: Until {
+            messages: Some(1),
+            time_ms: None,
+        },
+        ..Request::default()
+    };
+
+    // Session variables carry from one connection to the next.
+    executor.clear_session();
+    let mut context = Context::default();
+    context
+        .overlay
+        .session
+        .insert("seen".into(), Some(String::new()));
+    let execution = executor.execute(None, &request, &mut context).await;
+    assert!(!execution.failed(), "{execution:#?}");
+    let execution = executor
+        .execute(None, &request, &mut Context::default())
+        .await;
+    assert!(!execution.failed(), "{execution:#?}");
+    assert_eq!(
+        executor.session().get("seen").map(String::as_str),
+        Some("abab")
+    );
+
+    // With scripts off, neither script runs and the result says so once.
+    let context = &mut Context {
+        no_scripts: true,
+        ..Context::default()
+    };
+    let execution = executor.execute(None, &request, context).await;
+    assert!(!execution.failed(), "{execution:#?}");
+    assert!(execution.realtime.is_some());
+    assert_eq!(
+        executor.session().get("seen").map(String::as_str),
+        Some("abab")
+    );
+    let notes: Vec<_> = execution
+        .warnings
+        .iter()
+        .filter(|w| w.starts_with("Scripts are turned off"))
+        .collect();
+    assert_eq!(notes.len(), 1, "{:?}", execution.warnings);
+    assert!(notes[0].contains("2 scripts"), "{}", notes[0]);
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn event_streams_and_socket_io_run_too() {
     let server = test_server::spawn().await;
     let (_dir, executor) = setup();

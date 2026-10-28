@@ -242,7 +242,7 @@ impl Executor {
 
     /// Gives `context` the session variables it does not have its own
     /// value for.
-    fn load_session(&self, context: &mut Context) {
+    pub(crate) fn load_session(&self, context: &mut Context) {
         let session = self.session.lock().expect("session lock");
         for (name, value) in session.iter() {
             context
@@ -261,7 +261,7 @@ impl Executor {
     }
 
     /// Keeps the session variables a request changed.
-    fn keep_session(&self, changes: &[VarChange]) {
+    pub(crate) fn keep_session(&self, changes: &[VarChange]) {
         let mut session = self.session.lock().expect("session lock");
         for change in changes.iter().filter(|c| c.scope == ChangeScope::Session) {
             match &change.value {
