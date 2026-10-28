@@ -925,7 +925,7 @@ async fn websocket_goes_through_socks5_and_socks5h() {
     assert!(
         events.iter().any(|e| matches!(
             &e.kind,
-            EventKind::Error { message } if message.contains("refused the user name")
+            EventKind::Error { message } if message.contains("rejected the user name or password")
         )),
         "{events:#?}"
     );

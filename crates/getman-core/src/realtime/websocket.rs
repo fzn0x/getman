@@ -14,13 +14,14 @@ use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::{CloseFrame, WebSocketConfig};
 use tokio_tungstenite::tungstenite::{self, Message as Frame};
 
-use super::dial::{self, Io};
+use super::dial;
 use super::{
     Direction, EventKind, Job, MAX_MESSAGE_BYTES, Message, MessageFormat, Outbound, SavedMessage,
     Sink, header_list, within,
 };
 use crate::error::{Error, Result};
 use crate::http::{Header, HttpClient, Transport};
+use crate::tunnel::Io;
 
 /// An open WebSocket.
 pub(super) type Socket = WebSocketStream<Box<dyn Io>>;
@@ -72,17 +73,7 @@ pub(super) async fn open(
     subprotocols: &[String],
 ) -> Result<(Socket, Handshake), String> {
     let parsed = url::Url::parse(url).map_err(|e| format!("{url:?} is not a valid URL: {e}"))?;
-    let secure = parsed.scheme() == "wss";
-    let host = parsed
-        .host_str()
-        .ok_or_else(|| format!("{url:?} has no host"))?
-        .to_owned();
-    let tcp = dial::connect(&parsed, transport).await?;
-    let stream: Box<dyn Io> = if secure {
-        dial::secure(tcp, &host, transport.verify_tls).await?
-    } else {
-        tcp
-    };
+    let stream = dial::connect(&parsed, transport).await?;
 
     let mut request = url
         .into_client_request()
