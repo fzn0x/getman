@@ -20,7 +20,8 @@ Socket.IO requests show in the tree as `WS`, `SSE` and `SIO`, and gRPC
 requests as `GRPC`, but it does not connect to them or open them yet:
 use `getman send` or the browser UI. See
 [WebSocket, SSE and Socket.IO](realtime.md) and [gRPC](grpc.md). Runs
-started from it include gRPC requests.
+started from it include gRPC requests, and connect to WebSocket, event
+stream and Socket.IO requests as `getman run` does.
 
 ## Keys
 

@@ -36,10 +36,13 @@ sent, when one of its scripts throws, or when a test or check fails. A
 `500` with no checks is not a failure, so give the requests that matter
 a `status` check.
 
-WebSocket, event stream and Socket.IO requests are skipped, with a note
-that says why: they stay open, so there is no one response to check.
-`getman send` connects to them; see
-[WebSocket, SSE and Socket.IO](realtime.md).
+WebSocket, event stream and Socket.IO requests are connected to. A run
+sends the request's saved messages, collects what arrives until the
+request's `until` (10 messages or 5 seconds when it has none), then runs
+the post-response script, checks and captures, with the handshake as the
+response and the messages received as `gm.messages` and the `messages`
+check target. Their results count and are reported like any other request's.
+See [WebSocket, SSE and Socket.IO](realtime.md#scripts-and-checks).
 
 ## Options
 

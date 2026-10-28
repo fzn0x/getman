@@ -88,6 +88,38 @@ For a [gRPC request](grpc.md#checks-captures-and-scripts),
 name, the headers include the trailers, and `gm.response.json()` is the
 response message, or the list of messages of a stream from the server.
 
+### WebSocket, event stream and Socket.IO requests
+
+For a [WebSocket, event stream or Socket.IO request](realtime.md#scripts-and-checks),
+the pre-request script runs before it connects, and the post-response
+script when the connection ends. The handshake is the response, and the
+messages received are `gm.messages`:
+
+| | |
+| --- | --- |
+| `gm.response.code` | The handshake's status: `101` for a WebSocket, usually `200` otherwise |
+| `gm.response.headers.get(name)` | A header of the handshake's answer |
+| `gm.response.responseTime` | Milliseconds connecting took |
+| `gm.response.responseSize` | Bytes received |
+| `gm.messages` | The received messages, in order: an array of `{ direction, data, time, size, event, id, ack }` |
+| `gm.messages.length` | How many arrived |
+| `gm.messages.json(i)` | Message `i` parsed as JSON; throws a clear error if it is not JSON |
+
+`time` is milliseconds after the connection opened, `data` the message's
+text (Base64 when it is binary, a JSON array of arguments for a Socket.IO
+event), and `event` the type of a stream event or the name of a Socket.IO
+event. `gm.response.text()` is empty. `gm.messages` is `undefined` in
+pre-request scripts and for HTTP requests.
+
+```js
+gm.test("the feed starts with a welcome", () => {
+  gm.expect(gm.messages.length).to.be.at.least(2);
+  gm.expect(gm.messages[0].event).to.equal("welcome");
+  gm.expect(gm.messages.json(1).price).to.be.a("number");
+});
+gm.environment.set("lastId", gm.messages[gm.messages.length - 1].id);
+```
+
 ## Tests
 
 `gm.test(name, fn)` records a test that passes unless `fn` throws.
