@@ -715,10 +715,13 @@ async fn the_auth_pane_signs_in_with_the_browser_and_shows_the_expiry() {
         .and_then(|o| o.token.as_ref())
         .expect("a token");
     assert_eq!(token.access_token, "tok-1");
+    // A 30-minute token; a slow machine may take a minute off it.
+    let said = rig.said();
     assert!(
-        rig.said().starts_with("Signed in · expires in 29 min"),
-        "{}",
-        rig.said()
+        ["29 min", "28 min"]
+            .iter()
+            .any(|left| said.starts_with(&format!("Signed in · expires in {left}"))),
+        "{said}"
     );
     // It is kept: another look at the pane finds it.
     rig.app.refresh_credentials();
