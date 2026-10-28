@@ -1,6 +1,14 @@
 <script lang="ts">
   import { api } from "../../lib/api";
   import {
+    describeFiles,
+    describeText,
+    isCollection as canBeWorkspace,
+    readDropped,
+    readFileList,
+    type ImportFile,
+  } from "../../lib/importing";
+  import {
     allFolders,
     closeDialog,
     message,
@@ -16,40 +24,51 @@
   import Icon from "../Icon.svelte";
   import Dialog from "./Dialog.svelte";
 
-  let { folder: initialFolder }: { folder: string } = $props();
+  let { folder: initialFolder, files: initialFiles }: { folder: string; files?: ImportFile[] } =
+    $props();
 
   let text = $state("");
-  let fileName = $state("");
+  let files = $state<ImportFile[]>(untrack(() => initialFiles ?? []));
   let folder = $state(untrack(() => initialFolder));
   let root = $state(false);
   let busy = $state(false);
   let error = $state("");
-  let report = $state<ImportReport | null>(null);
+  let reports = $state<ImportReport[] | null>(null);
   let dragging = $state(false);
 
-  const kind = $derived.by(() => {
-    const trimmed = text.trimStart();
-    if (trimmed.startsWith("curl")) return "A cURL command, imported as one request";
-    if (!trimmed.startsWith("{")) return trimmed ? "Paste a cURL command or a Postman export" : "";
-    if (/"_postman_variable_scope"\s*:\s*"globals"/.test(trimmed)) return "Postman globals";
-    if (/"values"\s*:/.test(trimmed) && !/"item"\s*:/.test(trimmed)) return "A Postman environment";
-    if (/"item"\s*:/.test(trimmed)) return "A Postman collection";
-    return "JSON that does not look like a Postman export";
-  });
-  const isCollection = $derived(kind === "A Postman collection");
+  const kind = $derived(files.length ? describeFiles(files) : describeText(text));
+  const fileLabel = $derived(
+    files.length === 1 ? (files[0]?.path ?? "") : files.length > 1 ? `${files.length} files` : "",
+  );
+  const isCollection = $derived(canBeWorkspace(kind));
+  const ready = $derived(files.length > 0 || text.trim() !== "");
 
-  async function readFile(file: File | undefined): Promise<void> {
-    if (!file) return;
-    fileName = file.name;
-    text = await file.text();
+  async function choose(list: FileList | null | undefined): Promise<void> {
+    if (!list?.length) return;
+    files = await readFileList(list);
+    error = "";
+  }
+
+  async function drop(data: DataTransfer | null): Promise<void> {
+    if (!data) return;
+    const dropped = await readDropped(data);
+    if (dropped.length) {
+      files = dropped;
+      error = "";
+    }
   }
 
   async function run(): Promise<void> {
     busy = true;
     error = "";
+    const intoRoot = root && isCollection;
     try {
-      report = await api.importText(text, folder, root && isCollection);
-      if (report.kind === "collection" && report.path) setExpanded(report.path, true);
+      if (files.length > 1) reports = await api.importFiles(files, folder, intoRoot);
+      else if (files[0])
+        reports = [await api.importText(files[0].text, folder, intoRoot, files[0].path)];
+      else reports = [await api.importText(text, folder, intoRoot)];
+      for (const report of reports)
+        if (report.kind === "collection" && report.path) setExpanded(report.path, true);
       if (folder) setExpanded(folder, true);
       await refreshTree();
     } catch (e) {
@@ -60,6 +79,7 @@
   }
 
   function open(): void {
+    const report = reports?.[0];
     if (!report) return;
     closeDialog();
     if (report.kind === "request") void openRequest(report.path);
@@ -67,74 +87,118 @@
     else if (report.kind === "collection") void openFolder(report.path);
     else openEnvironments("__globals");
   }
+
+  function reset(): void {
+    reports = null;
+    text = "";
+    files = [];
+  }
+
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 </script>
 
 <Dialog title="Import" width="640px">
   <div class="body">
     <h2 class="bitmap">Import</h2>
-    {#if report}
+    {#if reports}
       <div class="done">
         <p class="bitmap ok">Imported</p>
-        <p>
-          {#if report.kind === "request"}
-            The request <strong>{report.name}</strong> as <code>{report.path}</code>.
-          {:else if report.kind === "collection"}
-            <strong>{report.name}</strong>: {report.requests} requests in {report.folders} folders{report.path
-              ? `, in ${report.path}/`
-              : ", as the workspace"}. Its scripts keep working: <code>pm</code> is the same as
-            <code>gm</code>.
-          {:else if report.kind === "environment"}
-            The environment <strong>{report.name}</strong> as
-            <code>environments/{report.path}.yaml</code>. Secret values went to its local file.
-          {:else}
-            The globals, into <code>getman.local.yaml</code>.
+        {#each reports as report, r (r)}
+          <p>
+            {#if report.kind === "request"}
+              The request <strong>{report.name}</strong> as <code>{report.path}</code>.
+            {:else if report.kind === "collection"}
+              <strong>{report.name}</strong>{report.format ? ` (${report.format})` : ""}: {plural(
+                report.requests,
+                "request",
+                "requests",
+              )} in {plural(report.folders, "folder", "folders")}{report.path
+                ? `, in ${report.path}/`
+                : ", as the workspace"}{report.environments?.length
+                ? `, and ${plural(report.environments.length, "environment", "environments")}`
+                : ""}.
+            {:else if report.kind === "environment"}
+              {#if (report.environments?.length ?? 0) > 1}
+                The environments <strong>{report.name}</strong>.
+              {:else}
+                The environment <strong>{report.name}</strong> as
+                <code>environments/{report.path}.yaml</code>.
+              {/if}
+              Secret values went to the local files.
+            {:else}
+              The globals, into <code>getman.local.yaml</code>.
+            {/if}
+          </p>
+          {#if report.warnings.length}
+            <div class="warnings">
+              <p class="bitmap">To check</p>
+              <ul>
+                {#each report.warnings as warning, i (i)}<li>{warning}</li>{/each}
+              </ul>
+            </div>
           {/if}
-        </p>
-        {#if report.warnings.length}
-          <div class="warnings">
-            <p class="bitmap">To check</p>
-            <ul>
-              {#each report.warnings as warning, i (i)}<li>{warning}</li>{/each}
-            </ul>
-          </div>
-        {/if}
+        {/each}
       </div>
     {:else}
       <p class="muted">
-        Paste a cURL command, as copied from documentation or a browser's developer tools, or a
-        Postman collection (v2.0 or v2.1), environment or globals export. Or drop a file here.
+        Paste a cURL command or an export, or drop files or a folder here: Postman, Insomnia,
+        Hoppscotch and Bruno collections and environments, OpenAPI and Swagger documents, and HAR
+        files from a browser.
       </p>
-      <textarea
-        class="input mono"
-        class:dragging
-        bind:value={text}
-        rows="10"
-        placeholder={"curl https://api.example.com/users -H 'Accept: application/json'"}
-        aria-label="Text to import"
-        spellcheck="false"
-        ondragover={(event) => {
-          event.preventDefault();
-          dragging = true;
-        }}
-        ondragleave={() => (dragging = false)}
-        ondrop={(event) => {
-          event.preventDefault();
-          dragging = false;
-          void readFile(event.dataTransfer?.files[0]);
-        }}></textarea>
+      {#if files.length}
+        <div class="files" class:dragging>
+          <p><Icon name="file" /> <strong>{fileLabel}</strong></p>
+          {#if files.length > 1}
+            <ul>
+              {#each files.slice(0, 8) as file (file.path)}<li><code>{file.path}</code></li>{/each}
+              {#if files.length > 8}<li class="muted">and {files.length - 8} more</li>{/if}
+            </ul>
+          {/if}
+          <button class="btn quiet" onclick={() => (files = [])}>Clear</button>
+        </div>
+      {:else}
+        <textarea
+          class="input mono"
+          class:dragging
+          bind:value={text}
+          rows="10"
+          placeholder={"curl https://api.example.com/users -H 'Accept: application/json'"}
+          aria-label="Text to import"
+          spellcheck="false"
+          ondragover={(event) => {
+            event.preventDefault();
+            dragging = true;
+          }}
+          ondragleave={() => (dragging = false)}
+          ondrop={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            dragging = false;
+            void drop(event.dataTransfer);
+          }}></textarea>
+      {/if}
       <div class="row">
         <label class="btn">
-          <Icon name="file" /> Choose a file
+          <Icon name="file" /> Choose files
           <input
             type="file"
             class="sr-only"
-            accept=".json,.txt,.sh,application/json,text/plain"
-            onchange={(event) => void readFile(event.currentTarget.files?.[0])}
+            multiple
+            accept=".json,.yaml,.yml,.har,.bru,.txt,.sh,application/json,text/plain"
+            onchange={(event) => void choose(event.currentTarget.files)}
           />
         </label>
-        <span class="muted">{fileName || kind}</span>
+        <label class="btn">
+          <Icon name="folder" /> Choose a folder
+          <input
+            type="file"
+            class="sr-only"
+            webkitdirectory
+            onchange={(event) => void choose(event.currentTarget.files)}
+          />
+        </label>
+        <span class="muted">{kind}</span>
       </div>
-      {#if fileName && kind}<p class="muted kind">{kind}</p>{/if}
       <div class="options">
         <label>
           <span class="bitmap">Into</span>
@@ -156,14 +220,12 @@
     {/if}
   </div>
   {#snippet footer()}
-    {#if report}
-      <button class="btn" onclick={() => ((report = null), (text = ""), (fileName = ""))}
-        >Import another</button
-      >
+    {#if reports}
+      <button class="btn" onclick={reset}>Import another</button>
       <button class="btn primary" onclick={open}>Open</button>
     {:else}
       <button class="btn" onclick={() => closeDialog()}>Cancel</button>
-      <button class="btn primary" onclick={run} disabled={busy || text.trim() === ""}
+      <button class="btn primary" onclick={run} disabled={busy || !ready}
         >{busy ? "Importing…" : "Import"}</button
       >
     {/if}
@@ -198,8 +260,23 @@
     border: 2px dashed var(--accent);
   }
 
+  .files {
+    display: grid;
+    gap: var(--s2);
+    justify-items: start;
+    padding: var(--s3);
+    border: 1px solid var(--rule-2);
+    background: var(--field);
+  }
+
+  .files ul {
+    margin: 0;
+    padding-left: 1.2em;
+  }
+
   .row {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--s3);
     min-width: 0;

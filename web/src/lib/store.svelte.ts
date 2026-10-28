@@ -4,6 +4,7 @@
 
 import { api, ApiError } from "./api";
 import { clone, fingerprint, newDraft, toDraft, toRequest } from "./draft";
+import type { ImportFile } from "./importing";
 import type {
   Draft,
   DynamicVar,
@@ -695,7 +696,8 @@ export async function stopRun(tab: RunnerTab): Promise<void> {
 
 export type Dialog =
   | { kind: "palette" }
-  | { kind: "import"; folder: string }
+  | { kind: "import"; folder: string; files?: ImportFile[] }
+  | { kind: "export"; target: "folder" | "environment" | "globals"; path: string; name: string }
   | { kind: "code"; tab: RequestTab }
   | { kind: "shortcuts" }
   | { kind: "cookies" }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import DialogHost from "./components/dialogs/DialogHost.svelte";
+  import DropZone from "./components/DropZone.svelte";
   import EnvironmentsView from "./components/EnvironmentsView.svelte";
   import FolderView from "./components/FolderView.svelte";
   import Notices from "./components/Notices.svelte";
@@ -234,6 +235,7 @@
 {/if}
 
 <DialogHost />
+<DropZone />
 <Notices />
 
 <style>

@@ -10,6 +10,7 @@ import type {
   Execution,
   Folder,
   HistoryEntry,
+  Exported,
   ImportReport,
   Language,
   LocalState,
@@ -21,6 +22,7 @@ import type {
   Token,
   WorkspaceInfo,
 } from "./types";
+import type { ImportFile } from "./importing";
 
 const TOKEN_KEY = "getman.token";
 
@@ -150,16 +152,24 @@ export const api = {
 
   send: (args: SendArgs) => post<Execution>("/send", args),
   prepare: (args: SendArgs) => post<{ request: Outgoing; missing: string[] }>("/prepare", args),
-  codegen: (args: SendArgs & { language: string }) =>
+  codegen: (args: SendArgs & { language: string; keep_vars?: boolean }) =>
     post<{ code: string; missing: string[] }>("/codegen", args),
+  exportItem: (args: {
+    kind: "folder" | "environment" | "globals";
+    path?: string;
+    format?: "postman" | "openapi" | "openapi-yaml";
+    secrets?: boolean;
+  }) => post<Exported>("/export", args),
   languages: () => call<Language[]>("GET", "/languages"),
   variables: (args: SendArgs) => post<ResolvedVar[]>("/variables", args),
   dynamic: () => call<DynamicVar[]>("GET", "/dynamic"),
   oauthToken: (args: { path?: string | null; auth: Auth; environment?: string | null }) =>
     post<Token>("/oauth2/token", args),
 
-  importText: (text: string, folder = "", root = false) =>
-    post<ImportReport>("/import", { text, folder, root }),
+  importText: (text: string, folder = "", root = false, name = "") =>
+    post<ImportReport>("/import", { text, folder, root, name }),
+  importFiles: (files: ImportFile[], folder = "", root = false) =>
+    post<ImportReport[]>("/import/files", { files, folder, root }),
   parseCurl: (text: string) => post<Request>("/parse-curl", { text }),
 
   cookies: () => call<Cookie[]>("GET", "/cookies"),
