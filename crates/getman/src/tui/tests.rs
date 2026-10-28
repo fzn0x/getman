@@ -715,10 +715,11 @@ async fn the_auth_pane_signs_in_with_the_browser_and_shows_the_expiry() {
         .and_then(|o| o.token.as_ref())
         .expect("a token");
     assert_eq!(token.access_token, "tok-1");
-    // A 30-minute token; a slow machine may take a minute off it.
+    // A 30-minute token reads 30 min when the pane shows it in the same
+    // millisecond, and less once any time has passed.
     let said = rig.said();
     assert!(
-        ["29 min", "28 min"]
+        ["30 min", "29 min", "28 min"]
             .iter()
             .any(|left| said.starts_with(&format!("Signed in · expires in {left}"))),
         "{said}"
