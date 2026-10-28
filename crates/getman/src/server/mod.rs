@@ -60,6 +60,21 @@ impl AppState {
     pub(crate) fn workspace(&self) -> &Workspace {
         &self.executor.workspace
     }
+
+    /// Ends what this state has under way, for when the server stops or
+    /// serves another workspace: live connections and gRPC calls (their
+    /// event streams never end by themselves), requests being sent, and
+    /// runs.
+    pub(crate) fn shutdown(&self) {
+        self.realtime.close_all();
+        self.grpc.cancel_all();
+        for cancel in self.sends.lock().expect("sends lock").values() {
+            cancel.cancel();
+        }
+        for run in self.runs.lock().expect("runs lock").values() {
+            run.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
 }
 
 /// Serves the UI until Ctrl+C.
@@ -105,7 +120,7 @@ pub(crate) async fn serve(
         .with_graceful_shutdown(async move {
             let _ = tokio::signal::ctrl_c().await;
             // Live connections' event streams never end by themselves.
-            state.realtime.close_all();
+            state.shutdown();
         })
         .await
         .map_err(|e| e.to_string())
