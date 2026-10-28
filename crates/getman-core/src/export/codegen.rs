@@ -1812,7 +1812,30 @@ fn php(request: &Outgoing) -> String {
 /// A Ruby single-quoted string: only `\` and `'` are special, and `#{` is
 /// not read.
 fn ruby_string(text: &str) -> String {
-    format!("'{}'", text.replace('\\', "\\\\").replace('\'', "\\'"))
+    // Ruby reads a carriage return before a line break in its source as
+    // part of the line break, so text with one is written with escapes in
+    // double quotes instead.
+    if !text.contains('\r') {
+        return format!("'{}'", text.replace('\\', "\\\\").replace('\'', "\\'"));
+    }
+    let mut out = String::from("\"");
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            // "#{", "#$" and "#@" would interpolate.
+            '#' => out.push_str("\\#"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if c.is_control() => {
+                let _ = write!(out, "\\u{{{:x}}}", u32::from(c));
+            }
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
 }
 
 fn ruby(request: &Outgoing, full: bool) -> String {
@@ -2391,6 +2414,15 @@ mod tests {
         assert!(
             code.contains("request.add_field('Accept', 'application/json')"),
             "{code}"
+        );
+    }
+
+    #[test]
+    fn ruby_keeps_carriage_returns_and_control_characters() {
+        assert_eq!(ruby_string("it's\na\\b"), "'it\\'s\na\\\\b'");
+        assert_eq!(
+            ruby_string("a\r\nb \"#{x}\" \u{1}\t"),
+            "\"a\\r\\nb \\\"\\#{x}\\\" \\u{1}\\t\""
         );
     }
 
