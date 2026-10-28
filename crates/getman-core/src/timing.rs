@@ -48,6 +48,21 @@ impl Probe {
     }
 }
 
+/// Notes time spent looking up a host name in the current send, for
+/// connections Getman opens itself.
+pub(crate) fn record_dns(elapsed: Duration) {
+    if let Some(probe) = current() {
+        Probe::add(&probe.dns_nanos, elapsed);
+    }
+}
+
+/// Notes that the current send opened a connection.
+pub(crate) fn record_connect() {
+    if let Some(probe) = current() {
+        probe.connects.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
 /// Runs `future` with `probe` receiving its timings.
 pub(crate) async fn measure<F: Future>(probe: Arc<Probe>, future: F) -> F::Output {
     PROBE.scope(probe, future).await

@@ -6,7 +6,7 @@ use std::time::Duration;
 use super::{Direction, EventKind, Job, MAX_MESSAGE_BYTES, Message, Sink};
 use crate::auth::answer_digest;
 use crate::error::{Error, Result};
-use crate::http::{Outgoing, describe, header_list, set_header};
+use crate::http::{Incoming, Outgoing, header_list, set_header};
 use crate::model::Auth;
 
 /// How long to wait before reconnecting when the server has not said.
@@ -135,7 +135,7 @@ pub(super) async fn run(job: &mut Job, sink: &mut Sink) {
                         }
                     }
                     Ok(None) => break None,
-                    Err(e) => break Some(describe(&e)),
+                    Err(e) => break Some(e.to_string()),
                 },
                 () = job.close.notified() => {
                     sink.closed(None, String::new(), true).await;
@@ -179,10 +179,10 @@ pub(super) async fn run(job: &mut Job, sink: &mut Sink) {
 
 /// Sends the request, answering a Digest challenge if the request uses
 /// Digest authentication.
-async fn open(job: &Job, outgoing: &mut Outgoing) -> Result<(reqwest::Response, f64)> {
+async fn open(job: &Job, outgoing: &mut Outgoing) -> Result<(Incoming, f64)> {
     let (response, time_ms) = job.http.open(outgoing, job.transport.clone()).await?;
     if let Auth::Digest { username, password } = &job.auth
-        && response.status() == reqwest::StatusCode::UNAUTHORIZED
+        && response.status() == http::StatusCode::UNAUTHORIZED
     {
         let headers = header_list(response.headers());
         let username = job.vars.render(username);
@@ -213,7 +213,7 @@ async fn wait(job: &mut Job, sink: &mut Sink, note: String, retry_ms: u64) -> bo
 }
 
 /// The start of a body, for explaining an error response.
-async fn excerpt(response: &mut reqwest::Response) -> String {
+async fn excerpt(response: &mut Incoming) -> String {
     let mut body = Vec::new();
     let read = async {
         while body.len() < 2048 {

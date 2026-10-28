@@ -83,6 +83,30 @@
     />
   </label>
   <label class="field">
+    <span class="bitmap">Keep method on 301/302</span>
+    <select
+      class="select"
+      value={tri(settings.follow_original_method)}
+      onchange={(event) => (settings.follow_original_method = fromTri(event.currentTarget.value))}
+    >
+      <option value="">{inherit} (no, POST becomes GET)</option>
+      <option value="on">Yes, keep the method and body</option>
+      <option value="off">No, POST becomes GET</option>
+    </select>
+  </label>
+  <label class="field">
+    <span class="bitmap">Keep Authorization</span>
+    <select
+      class="select"
+      value={tri(settings.follow_authorization)}
+      onchange={(event) => (settings.follow_authorization = fromTri(event.currentTarget.value))}
+    >
+      <option value="">{inherit} (no, not to another host)</option>
+      <option value="on">Yes, send it to the next host too</option>
+      <option value="off">No, drop it at another host</option>
+    </select>
+  </label>
+  <label class="field">
     <span class="bitmap">Cookie jar</span>
     <select
       class="select"

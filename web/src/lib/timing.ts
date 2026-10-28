@@ -1,7 +1,7 @@
 // Where a response's time went, and what its TLS certificate says, for
 // the timing panel under the response's Time.
 
-import type { Timings } from "./types";
+import type { Response, Timings } from "./types";
 
 export interface Phase {
   key: "dns" | "connect" | "wait" | "download";
@@ -40,6 +40,23 @@ export function timingNote(timings: Timings): string {
   if (timings.dns_ms === 0)
     return "No DNS lookup: the host is an IP address, or the proxy looks names up.";
   return "";
+}
+
+export interface Step {
+  status: number;
+  url: string;
+  /** Milliseconds until its headers arrived; `null` for the last step, whose time is the response's. */
+  ms: number | null;
+}
+
+/** The requests a response took, redirects first. Empty when there were no redirects. */
+export function steps(response: Pick<Response, "hops" | "status" | "url">): Step[] {
+  const hops = response.hops ?? [];
+  if (hops.length === 0) return [];
+  return [
+    ...hops.map((hop) => ({ status: hop.status, url: hop.url, ms: hop.time_ms })),
+    { status: response.status, url: response.url, ms: null },
+  ];
 }
 
 /** When a certificate expires, relative to now: `in 42 days`, `expired 3 days ago`. */

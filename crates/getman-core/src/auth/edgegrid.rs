@@ -97,11 +97,7 @@ pub(super) fn authorization(
         })
         .collect();
     let content_hash = if outgoing.method.eq_ignore_ascii_case("POST") {
-        let Some(body) = body_bytes(&outgoing.body)? else {
-            return Err(Error::Invalid(
-                "Akamai EdgeGrid cannot hash a multipart body before it is sent".into(),
-            ));
-        };
+        let body = body_bytes(outgoing)?;
         let max = usize::try_from(s.max_body.unwrap_or(DEFAULT_MAX_BODY)).unwrap_or(usize::MAX);
         if body.is_empty() {
             String::new()

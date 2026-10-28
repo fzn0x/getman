@@ -32,9 +32,9 @@ fn build(verify: bool) -> Result<Arc<ClientConfig>, String> {
     } else {
         builder
             .dangerous()
-            .with_custom_certificate_verifier(Arc::new(AcceptAnyCertificate {
-                algorithms: provider.signature_verification_algorithms,
-            }))
+            .with_custom_certificate_verifier(Arc::new(AcceptAnyCertificate::new(
+                provider.signature_verification_algorithms,
+            )))
             .with_no_client_auth()
     };
     // WebSocket upgrades an HTTP/1.1 connection.
@@ -46,8 +46,14 @@ fn build(verify: bool) -> Result<Arc<ClientConfig>, String> {
 /// handshake signatures are still checked, so the connection is encrypted
 /// to whoever holds the certificate's key; only who that is goes unchecked.
 #[derive(Debug)]
-struct AcceptAnyCertificate {
+pub(crate) struct AcceptAnyCertificate {
     algorithms: WebPkiSupportedAlgorithms,
+}
+
+impl AcceptAnyCertificate {
+    pub(crate) fn new(algorithms: WebPkiSupportedAlgorithms) -> Self {
+        Self { algorithms }
+    }
 }
 
 impl ServerCertVerifier for AcceptAnyCertificate {

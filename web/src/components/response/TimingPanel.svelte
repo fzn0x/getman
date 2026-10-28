@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { millis } from "../../lib/format";
-  import { commonName, expiry, phases, timingNote } from "../../lib/timing";
+  import { commonName, expiry, phases, steps, timingNote } from "../../lib/timing";
   import type { Response } from "../../lib/types";
 
   interface Props {
@@ -19,6 +19,7 @@
   const timings = $derived(response.timings);
   const list = $derived(timings ? phases(timings) : []);
   const note = $derived(timings ? timingNote(timings) : "");
+  const route = $derived(steps(response));
   const tls = $derived(response.tls);
   const certificate = $derived(tls?.certificate);
 
@@ -99,6 +100,22 @@
       {/each}
     </dl>
     {#if note}<p class="note">{note}</p>{/if}
+  {/if}
+
+  {#if route.length}
+    <div class="head">
+      <h3 class="bitmap">Redirects</h3>
+      <span class="num">{route.length - 1}</span>
+    </div>
+    <ol class="route">
+      {#each route as step, i (i)}
+        <li>
+          <span class="status num" class:final={step.ms === null}>{step.status}</span>
+          <span class="where mono">{step.url}</span>
+          {#if step.ms !== null}<span class="num ms">{fine(step.ms)}</span>{/if}
+        </li>
+      {/each}
+    </ol>
   {/if}
 
   <div class="head">
@@ -239,6 +256,39 @@
     margin: 0;
     color: var(--ink-3);
     font-size: var(--fs-meta);
+  }
+
+  .route {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 4px;
+  }
+
+  .route li {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: var(--s2);
+    align-items: baseline;
+  }
+
+  .route .status {
+    font-weight: 650;
+    color: var(--ink-2);
+  }
+
+  .route .status.final {
+    color: var(--ink);
+  }
+
+  .route .where {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .route .ms {
+    color: var(--ink-3);
   }
 
   .facts {

@@ -17,8 +17,6 @@ on:
 permissions:
   contents: write
 
-# No RUSTFLAGS here: it would replace the `--cfg reqwest_unstable` that
-# .cargo/config.toml sets, and the release would quietly lose HTTP/3.
 env:
   CARGO_TERM_COLOR: always
 

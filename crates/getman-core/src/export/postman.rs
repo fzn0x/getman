@@ -793,6 +793,12 @@ fn behavior(settings: &Settings) -> Map<String, Value> {
     if let Some(max) = settings.max_redirects {
         out.insert("maxRedirects".into(), max.into());
     }
+    if let Some(keep) = settings.follow_original_method {
+        out.insert("followOriginalHttpMethod".into(), keep.into());
+    }
+    if let Some(keep) = settings.follow_authorization {
+        out.insert("followAuthorizationHeader".into(), keep.into());
+    }
     if let Some(verify) = settings.verify_tls {
         out.insert("strictSSL".into(), verify.into());
     }
@@ -1040,6 +1046,7 @@ mod tests {
                     .collect(),
                 settings: Settings {
                     follow_redirects: Some(false),
+                    follow_original_method: Some(true),
                     timeout_ms: Some(100),
                     ..Settings::default()
                 },
@@ -1104,6 +1111,10 @@ mod tests {
         assert_eq!(url["query"][1]["disabled"], true);
         assert_eq!(url["variable"][0]["value"], "7");
         assert_eq!(list["protocolProfileBehavior"]["followRedirects"], false);
+        assert_eq!(
+            list["protocolProfileBehavior"]["followOriginalHttpMethod"],
+            true
+        );
         let events = list["event"].as_array().unwrap();
         assert_eq!(
             events[0]["script"]["exec"][0],

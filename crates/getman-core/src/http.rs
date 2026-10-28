@@ -13,6 +13,7 @@ use reqwest_cookie_store::CookieStoreMutex;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::error::{Error, Result};
+use crate::http3;
 use crate::model::HttpVersion;
 use crate::timing::{self, Probe, TimedConnectLayer, TimedResolver};
 use crate::tls::{CertificateInfo, ClientIdentity, TlsDetails};
@@ -170,6 +171,12 @@ pub struct Transport {
     pub follow_redirects: bool,
     /// Most redirects to follow.
     pub max_redirects: u32,
+    /// Keep the method and body across a 301 or 302, rather than turning
+    /// a POST into a GET.
+    pub follow_original_method: bool,
+    /// Keep `Authorization` across a redirect to another host, port or
+    /// scheme.
+    pub follow_authorization: bool,
     /// Check TLS certificates.
     pub verify_tls: bool,
     /// HTTP version to speak.
@@ -194,6 +201,8 @@ impl Default for Transport {
             timeout_ms: 30_000,
             follow_redirects: true,
             max_redirects: 10,
+            follow_original_method: false,
+            follow_authorization: false,
             verify_tls: true,
             http_version: HttpVersion::Auto,
             title_case_headers: true,
@@ -270,6 +279,10 @@ pub struct Response {
     pub time_ms: f64,
     /// Milliseconds from sending until the headers arrived.
     pub headers_ms: f64,
+    /// The redirects followed on the way, in order. Empty when the first
+    /// request got this response.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hops: Vec<Hop>,
     /// Size of the headers and the body.
     pub size: Size,
     /// Address of the server that answered.
@@ -289,6 +302,17 @@ pub struct Response {
     /// request timed out. The body holds what arrived until then.
     #[serde(default)]
     pub stream_open: bool,
+}
+
+/// A redirect Getman followed on the way to a response.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Hop {
+    /// Status the redirect came with, such as 302.
+    pub status: u16,
+    /// URL that was requested and answered with the redirect.
+    pub url: String,
+    /// Milliseconds from sending that request until its headers arrived.
+    pub time_ms: f64,
 }
 
 /// Where a response's time went, in milliseconds. The parts add up to
@@ -373,17 +397,24 @@ fn root_path() -> String {
 #[derive(Debug)]
 pub struct HttpClient {
     cookies: Arc<CookieStoreMutex>,
-    clients: Mutex<HashMap<ClientKey, reqwest::Client>>,
+    clients: Mutex<HashMap<ClientKey, Session>>,
     /// Where the jar is kept between runs, if anywhere, and what was last
     /// written there.
     cookie_file: Option<(PathBuf, Mutex<String>)>,
 }
 
+/// What requests with some settings are sent through.
+#[derive(Debug, Clone)]
+enum Session {
+    /// reqwest, for HTTP/1.1 and HTTP/2.
+    Tcp(reqwest::Client),
+    /// Getman's own HTTP/3, see [`crate::http3`].
+    Quic(Arc<http3::Client>),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[allow(clippy::struct_excessive_bools)]
 struct ClientKey {
-    follow_redirects: bool,
-    max_redirects: u32,
     verify_tls: bool,
     http_version: HttpVersion,
     title_case_headers: bool,
@@ -396,8 +427,6 @@ struct ClientKey {
 impl ClientKey {
     fn new(transport: &Transport) -> Self {
         Self {
-            follow_redirects: transport.follow_redirects,
-            max_redirects: transport.max_redirects,
             verify_tls: transport.verify_tls,
             http_version: transport.http_version,
             title_case_headers: transport.title_case_headers,
@@ -444,7 +473,7 @@ impl HttpClient {
         client
     }
 
-    fn client(&self, transport: &Transport) -> Result<reqwest::Client> {
+    fn client(&self, transport: &Transport) -> Result<Session> {
         let key = ClientKey::new(transport);
         let mut clients = self.clients.lock().expect("client cache lock");
         if let Some(client) = clients.get(&key) {
@@ -458,14 +487,21 @@ impl HttpClient {
         Ok(client)
     }
 
-    fn build_client(&self, key: &ClientKey) -> Result<reqwest::Client> {
-        let redirect = if key.follow_redirects {
-            reqwest::redirect::Policy::limited(key.max_redirects as usize)
-        } else {
-            reqwest::redirect::Policy::none()
-        };
+    fn build_client(&self, key: &ClientKey) -> Result<Session> {
+        if key.http_version == HttpVersion::Http3 {
+            let jar = key.cookies.then(|| Arc::clone(&self.cookies));
+            let client = http3::Client::new(
+                key.verify_tls,
+                &key.ca_certs,
+                key.client_identity.as_ref(),
+                jar,
+            )?;
+            return Ok(Session::Quic(Arc::new(client)));
+        }
+        // Redirects are followed in `follow`, which can keep the method and
+        // the credentials the way the settings ask.
         let mut builder = reqwest::Client::builder()
-            .redirect(redirect)
+            .redirect(reqwest::redirect::Policy::none())
             .tls_danger_accept_invalid_certs(!key.verify_tls)
             .tls_info(true)
             .connect_timeout(Duration::from_secs(30))
@@ -478,13 +514,9 @@ impl HttpClient {
             builder = builder.http1_title_case_headers();
         }
         builder = match key.http_version {
-            HttpVersion::Auto => builder,
+            HttpVersion::Auto | HttpVersion::Http3 => builder,
             HttpVersion::Http1 => builder.http1_only(),
             HttpVersion::Http2 => builder.http2_prior_knowledge(),
-            #[cfg(reqwest_unstable)]
-            HttpVersion::Http3 => builder.http3_prior_knowledge(),
-            #[cfg(not(reqwest_unstable))]
-            HttpVersion::Http3 => return Err(Error::Invalid(NO_HTTP3.into())),
         };
         builder = match &key.proxy {
             ProxyRoute::System => builder,
@@ -508,7 +540,10 @@ impl HttpClient {
                 builder = builder.add_root_certificate(cert);
             }
         }
-        builder.build().map_err(|e| Error::Http(describe(&e)))
+        builder
+            .build()
+            .map(Session::Tcp)
+            .map_err(|e| Error::Http(describe(&e)))
     }
 
     /// Sends a request and reads the whole response, up to the size
@@ -516,21 +551,24 @@ impl HttpClient {
     pub async fn send(&self, outgoing: &Outgoing, transport: Transport) -> Result<Response> {
         check_route(outgoing, &transport)?;
         let client = self.client(&transport)?;
-        let request = build(&client, outgoing, &transport).await?;
+        let wire = wire(outgoing).await?;
         let probe = Arc::new(Probe::default());
-        let exchange = timing::measure(Arc::clone(&probe), exchange(&client, request, &transport));
+        let exchange = timing::measure(Arc::clone(&probe), exchange(&client, wire, &transport));
         let result = exchange.await;
         if transport.cookies {
             self.save_cookies_quietly();
         }
-        let mut response = result.map_err(|e| {
-            let mut message = describe(&e);
-            if transport.http_version == HttpVersion::Http3 {
+        let mut response = result.map_err(|e| match e {
+            Error::Http(mut message)
+                if transport.http_version == HttpVersion::Http3
+                    && !message.starts_with("Stopped following redirects") =>
+            {
                 message.push_str(
                     ". The server did not answer over HTTP/3 (QUIC, on UDP); if it does not support HTTP/3, set the HTTP version to auto",
                 );
+                Error::Http(message)
             }
-            Error::Http(message)
+            other => other,
         })?;
 
         let connects = probe.connects();
@@ -543,11 +581,7 @@ impl HttpClient {
             connect_ms: (!over_quic).then(|| millis(connect)),
             first_byte_ms: round((response.headers_ms - setup).max(0.0)),
             download_ms: round((response.time_ms - response.headers_ms).max(0.0)),
-            reused: if over_quic {
-                dns.is_zero() && !is_ip_host(&response.url)
-            } else {
-                connects == 0
-            },
+            reused: connects == 0,
         });
         response.http3_available = transport.http_version == HttpVersion::Auto
             && !over_quic
@@ -563,24 +597,12 @@ impl HttpClient {
         &self,
         outgoing: &Outgoing,
         transport: Transport,
-    ) -> Result<(reqwest::Response, f64)> {
+    ) -> Result<(Incoming, f64)> {
         let client = self.client(&transport)?;
-        let timeout_ms = transport.timeout_ms;
-        let unlimited = Transport {
-            timeout_ms: 0,
-            ..transport
-        };
-        let request = build(&client, outgoing, &unlimited).await?;
+        let wire = wire(outgoing).await?;
         let started = Instant::now();
-        let pending = client.execute(request);
-        let response = if timeout_ms > 0 {
-            tokio::time::timeout(Duration::from_millis(timeout_ms), pending)
-                .await
-                .map_err(|_| Error::Http("The request timed out".into()))?
-        } else {
-            pending.await
-        }
-        .map_err(|e| Error::Http(describe(&e)))?;
+        let deadline = deadline(&transport);
+        let (response, _) = follow(&client, wire, &transport, deadline).await?;
         Ok((response, millis(started.elapsed())))
     }
 
@@ -742,17 +764,10 @@ fn build_cookie(info: &CookieInfo) -> Result<(cookie_store::Cookie<'static>, url
     Ok((cookie, url))
 }
 
-/// Said when HTTP/3 is asked of a build made without reqwest's unstable
-/// cfg (see `.cargo/config.toml`).
-const NO_HTTP3: &str = "this build of Getman has no HTTP/3 support; build it with RUSTFLAGS=\"--cfg reqwest_unstable\"";
-
 /// Refuses combinations that cannot work before trying them.
 fn check_route(outgoing: &Outgoing, transport: &Transport) -> Result<()> {
     if transport.http_version != HttpVersion::Http3 {
         return Ok(());
-    }
-    if !cfg!(reqwest_unstable) {
-        return Err(Error::Invalid(NO_HTTP3.into()));
     }
     if !outgoing
         .url
@@ -773,32 +788,266 @@ fn check_route(outgoing: &Outgoing, transport: &Transport) -> Result<()> {
     Ok(())
 }
 
-/// Sends the request and reads the response, inside the timing scope.
-async fn exchange(
-    client: &reqwest::Client,
-    request: reqwest::Request,
+/// The point in time a request must be answered by, if it has a timeout.
+fn deadline(transport: &Transport) -> Option<tokio::time::Instant> {
+    (transport.timeout_ms > 0)
+        .then(|| tokio::time::Instant::now() + Duration::from_millis(transport.timeout_ms))
+}
+
+fn timed_out() -> Error {
+    Error::Http("The request timed out".into())
+}
+
+/// Waits for `future`, at most until `deadline`.
+async fn until<F: std::future::Future>(
+    deadline: Option<tokio::time::Instant>,
+    future: F,
+) -> Result<F::Output> {
+    match deadline {
+        Some(deadline) => tokio::time::timeout_at(deadline, future)
+            .await
+            .map_err(|_| timed_out()),
+        None => Ok(future.await),
+    }
+}
+
+/// A request, parsed and ready to be sent as often as redirects need.
+struct Wire {
+    method: http::Method,
+    url: url::Url,
+    headers: http::HeaderMap,
+    body: Option<bytes::Bytes>,
+}
+
+impl Wire {
+    fn request(&self, client: &reqwest::Client) -> Result<reqwest::Request> {
+        let mut builder = client
+            .request(self.method.clone(), self.url.clone())
+            .headers(self.headers.clone());
+        if let Some(body) = &self.body {
+            builder = builder.body(body.clone());
+        }
+        builder.build().map_err(|e| Error::Http(describe(&e)))
+    }
+}
+
+/// A response whose headers have arrived, and the rest of it still to
+/// read.
+pub(crate) struct Incoming {
+    status: http::StatusCode,
+    version: String,
+    url: url::Url,
+    headers: http::HeaderMap,
+    remote_addr: Option<String>,
+    tls: Option<TlsDetails>,
+    body: IncomingBody,
+}
+
+enum IncomingBody {
+    Tcp(reqwest::Response),
+    Quic(Box<http3::Body>),
+}
+
+impl Incoming {
+    fn from_reqwest(response: reqwest::Response) -> Self {
+        let tls = response
+            .extensions()
+            .get::<reqwest::tls::TlsInfo>()
+            .map(|info| TlsDetails {
+                version: info
+                    .version()
+                    .and_then(crate::tls::version_name)
+                    .map(str::to_owned),
+                certificate: info.peer_certificate().and_then(CertificateInfo::from_der),
+            });
+        Self {
+            status: response.status(),
+            version: version_text(response.version()),
+            url: response.url().clone(),
+            headers: response.headers().clone(),
+            remote_addr: response.remote_addr().map(|a| a.to_string()),
+            tls,
+            body: IncomingBody::Tcp(response),
+        }
+    }
+
+    fn from_http3(reply: http3::Reply, url: url::Url) -> Self {
+        Self {
+            status: reply.status,
+            version: "HTTP/3".into(),
+            url,
+            headers: reply.headers,
+            remote_addr: Some(reply.remote_addr),
+            tls: Some(reply.tls),
+            body: IncomingBody::Quic(Box::new(reply.body)),
+        }
+    }
+
+    pub(crate) fn status(&self) -> http::StatusCode {
+        self.status
+    }
+
+    pub(crate) fn headers(&self) -> &http::HeaderMap {
+        &self.headers
+    }
+
+    /// The next piece of the body, `None` at its end.
+    pub(crate) async fn chunk(&mut self) -> Result<Option<bytes::Bytes>> {
+        match &mut self.body {
+            IncomingBody::Tcp(response) => response
+                .chunk()
+                .await
+                .map_err(|e| Error::Http(describe(&e))),
+            IncomingBody::Quic(body) => body.chunk().await,
+        }
+    }
+}
+
+/// Whether a status asks the client to go elsewhere, as these do.
+fn is_redirect(status: http::StatusCode) -> bool {
+    matches!(status.as_u16(), 301 | 302 | 303 | 307 | 308)
+}
+
+/// Whether two URLs name the same scheme, host and port.
+fn same_origin(a: &url::Url, b: &url::Url) -> bool {
+    a.scheme() == b.scheme()
+        && a.host_str() == b.host_str()
+        && a.port_or_known_default() == b.port_or_known_default()
+}
+
+/// Turns a request into the one a redirect asks for: `next` replaces the
+/// URL, the method and body change where the status says so, and
+/// credentials stay behind when the request leaves its origin.
+fn redirected(wire: &mut Wire, status: http::StatusCode, next: url::Url, transport: &Transport) {
+    // A 303 asks for the result with GET (or HEAD, if that is what was
+    // asked); 301 and 302 do the same for a POST, as browsers do.
+    let drop_body = match status.as_u16() {
+        303 => true,
+        301 | 302 => wire.method == http::Method::POST && !transport.follow_original_method,
+        _ => false,
+    };
+    if drop_body {
+        if wire.method != http::Method::HEAD {
+            wire.method = http::Method::GET;
+        }
+        wire.body = None;
+        for name in [
+            "content-type",
+            "content-length",
+            "content-encoding",
+            "content-language",
+            "content-location",
+            "transfer-encoding",
+        ] {
+            wire.headers.remove(name);
+        }
+    }
+    if !same_origin(&wire.url, &next) {
+        wire.headers.remove("cookie");
+        wire.headers.remove("cookie2");
+        wire.headers.remove("host");
+        if !transport.follow_authorization {
+            wire.headers.remove("authorization");
+            wire.headers.remove("proxy-authorization");
+        }
+    }
+    wire.url = next;
+}
+
+/// Sends the request once, and returns once the response headers arrive.
+async fn round_trip(session: &Session, wire: &Wire) -> Result<Incoming> {
+    match session {
+        Session::Tcp(client) => {
+            let response = client
+                .execute(wire.request(client)?)
+                .await
+                .map_err(|e| Error::Http(describe(&e)))?;
+            Ok(Incoming::from_reqwest(response))
+        }
+        Session::Quic(client) => {
+            // Boxed: the future of a QUIC request is large.
+            let reply =
+                Box::pin(client.send(&wire.method, &wire.url, &wire.headers, wire.body.as_ref()))
+                    .await?;
+            Ok(Incoming::from_http3(reply, wire.url.clone()))
+        }
+    }
+}
+
+/// Sends the request and follows its redirects, as the transport says.
+/// The timeout, if any, covers the whole chain. Returns the response that
+/// ended it, and the redirects on the way.
+async fn follow(
+    client: &Session,
+    mut wire: Wire,
     transport: &Transport,
-) -> std::result::Result<Response, reqwest::Error> {
+    deadline: Option<tokio::time::Instant>,
+) -> Result<(Incoming, Vec<Hop>)> {
+    let mut hops: Vec<Hop> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    seen.insert((wire.method.clone(), wire.url.clone()));
+    loop {
+        let started = Instant::now();
+        let incoming = until(deadline, round_trip(client, &wire)).await??;
+        if !transport.follow_redirects || !is_redirect(incoming.status) {
+            return Ok((incoming, hops));
+        }
+        let Some(location) = incoming
+            .headers
+            .get(http::header::LOCATION)
+            .map(|value| String::from_utf8_lossy(value.as_bytes()).trim().to_owned())
+        else {
+            return Ok((incoming, hops));
+        };
+        let next = wire.url.join(&location).map_err(|e| {
+            Error::Http(format!(
+                "Stopped following redirects: {} at {} led to {location:?}, which is not a valid URL ({e})",
+                incoming.status.as_u16(),
+                wire.url
+            ))
+        })?;
+        if !matches!(next.scheme(), "http" | "https") {
+            return Err(Error::Http(format!(
+                "Stopped following redirects: {} at {} led to {next}, and only http and https URLs can be sent",
+                incoming.status.as_u16(),
+                wire.url
+            )));
+        }
+        if hops.len() >= transport.max_redirects as usize {
+            return Err(Error::Http(format!(
+                "Stopped following redirects: there are more than {}, the most the max_redirects setting allows. The last one led to {next}",
+                transport.max_redirects
+            )));
+        }
+        hops.push(Hop {
+            status: incoming.status.as_u16(),
+            url: wire.url.to_string(),
+            time_ms: millis(started.elapsed()),
+        });
+        redirected(&mut wire, incoming.status, next, transport);
+        if !seen.insert((wire.method.clone(), wire.url.clone())) {
+            return Err(Error::Http(format!(
+                "Stopped following redirects: the server sent {} {} back to a request already made, so the redirects go in a circle",
+                wire.method, wire.url
+            )));
+        }
+    }
+}
+
+/// Sends the request and reads the response, inside the timing scope.
+async fn exchange(client: &Session, wire: Wire, transport: &Transport) -> Result<Response> {
     let started = Instant::now();
-    let mut response = client.execute(request).await?;
+    let deadline = deadline(transport);
+    let (mut response, hops) = follow(client, wire, transport, deadline).await?;
     let headers_ms = millis(started.elapsed());
 
-    let status = response.status();
-    let http_version = version_text(response.version());
-    let url = response.url().to_string();
-    let remote_addr = response.remote_addr().map(|a| a.to_string());
-    let tls = response
-        .extensions()
-        .get::<reqwest::tls::TlsInfo>()
-        .map(|info| TlsDetails {
-            version: info
-                .version()
-                .and_then(crate::tls::version_name)
-                .map(str::to_owned),
-            certificate: info.peer_certificate().and_then(CertificateInfo::from_der),
-        });
+    let status = response.status;
+    let http_version = response.version.clone();
+    let url = response.url.to_string();
+    let remote_addr = response.remote_addr.take();
+    let tls = response.tls.take();
     let headers: Vec<Header> = response
-        .headers()
+        .headers
         .iter()
         .map(|(name, value)| {
             Header::new(
@@ -823,11 +1072,13 @@ async fn exchange(
     let mut truncated = false;
     let mut stream_open = false;
     loop {
-        let chunk = match response.chunk().await {
-            Ok(Some(chunk)) => chunk,
-            Ok(None) => break,
+        let chunk = match until(deadline, response.chunk()).await {
+            Ok(chunk) => match chunk? {
+                Some(chunk) => chunk,
+                None => break,
+            },
             // An event stream need not end; keep what arrived in time.
-            Err(e) if event_stream && e.is_timeout() => {
+            Err(_) if event_stream => {
                 stream_open = true;
                 break;
             }
@@ -867,6 +1118,7 @@ async fn exchange(
         truncated,
         time_ms,
         headers_ms,
+        hops,
         remote_addr,
         timings: None,
         tls,
@@ -899,28 +1151,17 @@ fn advertises_http3(headers: &[Header]) -> bool {
         .any(|protocol| protocol == "h3" || protocol.starts_with("h3-"))
 }
 
-fn is_ip_host(url: &str) -> bool {
-    matches!(
-        url::Url::parse(url)
-            .ok()
-            .and_then(|u| u.host().map(|h| h.to_owned())),
-        Some(url::Host::Ipv4(_) | url::Host::Ipv6(_))
-    )
-}
-
 #[allow(clippy::trivially_copy_pass_by_ref)]
 fn is_false(value: &bool) -> bool {
     !*value
 }
 
-async fn build(
-    client: &reqwest::Client,
-    outgoing: &Outgoing,
-    transport: &Transport,
-) -> Result<reqwest::Request> {
-    let method = reqwest::Method::from_bytes(outgoing.method.trim().as_bytes())
+/// Parses a request into what is sent. Multipart bodies and files are
+/// read here.
+async fn wire(outgoing: &Outgoing) -> Result<Wire> {
+    let method = http::Method::from_bytes(outgoing.method.trim().as_bytes())
         .map_err(|_| Error::Invalid(format!("{:?} is not a valid method", outgoing.method)))?;
-    let url = reqwest::Url::parse(&outgoing.url)
+    let url = url::Url::parse(&outgoing.url)
         .map_err(|e| Error::Invalid(format!("{:?} is not a valid URL: {e}", outgoing.url)))?;
     if !matches!(url.scheme(), "http" | "https") {
         return Err(Error::Invalid(format!(
@@ -928,65 +1169,48 @@ async fn build(
             url.scheme()
         )));
     }
-    let mut builder = client.request(method, url);
-    for header in &outgoing.headers {
-        let name = reqwest::header::HeaderName::from_bytes(header.name.trim().as_bytes())
+    let mut source = outgoing.headers.clone();
+    // Multipart bodies are built here, with the boundary the request names,
+    // so that whatever signed them hashed the same bytes.
+    let body = match &outgoing.body {
+        OutgoingBody::None => None,
+        OutgoingBody::Bytes { data } => Some(bytes::Bytes::from(data.0.clone())),
+        OutgoingBody::File { path } => {
+            let data = tokio::fs::read(path)
+                .await
+                .map_err(|e| Error::io(path, e))?;
+            Some(bytes::Bytes::from(data))
+        }
+        OutgoingBody::Multipart { parts } => {
+            let boundary = crate::multipart::ensure_boundary(&mut source)?;
+            let parts = parts.clone();
+            let body =
+                tokio::task::spawn_blocking(move || crate::multipart::encode(&parts, &boundary))
+                    .await
+                    .map_err(|e| {
+                        Error::Http(format!("Could not build the multipart body: {e}"))
+                    })??;
+            Some(bytes::Bytes::from(body))
+        }
+    };
+    let mut headers = http::HeaderMap::new();
+    for header in &source {
+        let name = http::HeaderName::from_bytes(header.name.trim().as_bytes())
             .map_err(|_| Error::Invalid(format!("{:?} is not a valid header name", header.name)))?;
-        let value = reqwest::header::HeaderValue::from_str(&header.value).map_err(|_| {
+        let value = http::HeaderValue::from_str(&header.value).map_err(|_| {
             Error::Invalid(format!(
                 "the value of header {} contains characters headers cannot carry",
                 header.name
             ))
         })?;
-        builder = builder.header(name, value);
+        headers.append(name, value);
     }
-    if transport.timeout_ms > 0 {
-        builder = builder.timeout(Duration::from_millis(transport.timeout_ms));
-    }
-    #[cfg(reqwest_unstable)]
-    if transport.http_version == HttpVersion::Http3 {
-        builder = builder.version(reqwest::Version::HTTP_3);
-    }
-    builder = match &outgoing.body {
-        OutgoingBody::None => builder,
-        OutgoingBody::Bytes { data } => builder.body(data.0.clone()),
-        OutgoingBody::File { path } => {
-            let data = tokio::fs::read(path)
-                .await
-                .map_err(|e| Error::io(path, e))?;
-            builder.body(data)
-        }
-        OutgoingBody::Multipart { parts } => {
-            let mut form = reqwest::multipart::Form::new();
-            for part in parts {
-                let mut piece = match &part.file {
-                    Some(path) => {
-                        let data = tokio::fs::read(path)
-                            .await
-                            .map_err(|e| Error::io(path, e))?;
-                        let file_name = path
-                            .file_name()
-                            .map(|n| n.to_string_lossy().into_owned())
-                            .unwrap_or_default();
-                        let guessed = mime_guess::from_path(path).first_or_octet_stream();
-                        reqwest::multipart::Part::bytes(data)
-                            .file_name(file_name)
-                            .mime_str(guessed.essence_str())
-                            .map_err(|e| Error::Http(describe(&e)))?
-                    }
-                    None => reqwest::multipart::Part::text(part.value.clone()),
-                };
-                if let Some(content_type) = &part.content_type {
-                    piece = piece.mime_str(content_type).map_err(|_| {
-                        Error::Invalid(format!("{content_type:?} is not a valid content type"))
-                    })?;
-                }
-                form = form.part(part.name.clone(), piece);
-            }
-            builder.multipart(form)
-        }
-    };
-    builder.build().map_err(|e| Error::Http(describe(&e)))
+    Ok(Wire {
+        method,
+        url,
+        headers,
+        body,
+    })
 }
 
 /// Response headers as a list, in order.
@@ -1099,6 +1323,260 @@ mod tests {
             .unwrap();
         assert_eq!(stopped.status, 302);
         assert_eq!(stopped.header("location"), Some("/echo"));
+    }
+
+    fn post(url: String, body: &str) -> Outgoing {
+        Outgoing {
+            method: "POST".into(),
+            url,
+            headers: vec![Header::new("Content-Type", "text/plain")],
+            body: OutgoingBody::Bytes {
+                data: Payload(body.as_bytes().to_vec()),
+            },
+        }
+    }
+
+    #[tokio::test]
+    async fn a_post_becomes_a_get_after_301_302_and_303_unless_told_otherwise() {
+        let server = test_server::spawn().await;
+        let client = HttpClient::new();
+        for code in [301, 302, 303] {
+            let url = server.url(&format!("/go/{code}?to=/echo"));
+            let echo = client
+                .send(&post(url, "payload"), Transport::default())
+                .await
+                .unwrap()
+                .json()
+                .unwrap();
+            assert_eq!(echo["method"], "GET", "{code}");
+            assert_eq!(echo["body"], "", "{code}");
+            assert!(echo["headers"].get("content-type").is_none(), "{code}");
+        }
+        let keep = Transport {
+            follow_original_method: true,
+            ..Transport::default()
+        };
+        for (code, method, body) in [
+            (301, "POST", "payload"),
+            (302, "POST", "payload"),
+            // 303 always asks for the result with a GET.
+            (303, "GET", ""),
+            (307, "POST", "payload"),
+            (308, "POST", "payload"),
+        ] {
+            let url = server.url(&format!("/go/{code}?to=/echo"));
+            let echo = client
+                .send(&post(url, "payload"), keep.clone())
+                .await
+                .unwrap()
+                .json()
+                .unwrap();
+            assert_eq!(echo["method"], method, "{code}");
+            assert_eq!(echo["body"], body, "{code}");
+        }
+        // 307 and 308 keep the method and body without being asked.
+        let echo = client
+            .send(
+                &post(server.url("/go/307?to=/echo"), "payload"),
+                Transport::default(),
+            )
+            .await
+            .unwrap()
+            .json()
+            .unwrap();
+        assert_eq!(
+            (echo["method"].as_str(), echo["body"].as_str()),
+            (Some("POST"), Some("payload"))
+        );
+    }
+
+    #[test]
+    fn a_head_request_stays_a_head_request_and_other_methods_follow_the_status() {
+        let wire = |method: http::Method| Wire {
+            method,
+            url: url::Url::parse("http://a.test/start").unwrap(),
+            headers: http::HeaderMap::new(),
+            body: Some(bytes::Bytes::from_static(b"x")),
+        };
+        let next = || url::Url::parse("http://a.test/next").unwrap();
+        let transport = Transport::default();
+        let status = |code: u16| http::StatusCode::from_u16(code).unwrap();
+
+        let mut head = wire(http::Method::HEAD);
+        redirected(&mut head, status(303), next(), &transport);
+        assert_eq!(head.method, http::Method::HEAD);
+        assert!(head.body.is_none());
+
+        let mut put = wire(http::Method::PUT);
+        redirected(&mut put, status(302), next(), &transport);
+        assert_eq!(
+            put.method,
+            http::Method::PUT,
+            "only a POST turns into a GET"
+        );
+        assert!(put.body.is_some());
+        redirected(&mut put, status(303), next(), &transport);
+        assert_eq!(put.method, http::Method::GET);
+        assert!(put.body.is_none());
+    }
+
+    #[tokio::test]
+    async fn credentials_stay_behind_at_another_host_unless_told_otherwise() {
+        let server = test_server::spawn().await;
+        let client = HttpClient::new();
+        let mut outgoing = get(server.url(&format!(
+            "/go/302?to=http://localhost:{}/echo",
+            server.port()
+        )));
+        outgoing.headers = vec![
+            Header::new("Authorization", "Bearer secret"),
+            Header::new("Proxy-Authorization", "Basic c2VjcmV0"),
+            Header::new("Cookie", "mine=1"),
+            Header::new("X-Keep", "yes"),
+        ];
+        let echo = client
+            .send(&outgoing, Transport::default())
+            .await
+            .unwrap()
+            .json()
+            .unwrap();
+        for dropped in ["authorization", "proxy-authorization", "cookie"] {
+            assert!(echo["headers"].get(dropped).is_none(), "{dropped}: {echo}");
+        }
+        assert_eq!(echo["headers"]["x-keep"], "yes");
+
+        let echo = client
+            .send(
+                &outgoing,
+                Transport {
+                    follow_authorization: true,
+                    ..Transport::default()
+                },
+            )
+            .await
+            .unwrap()
+            .json()
+            .unwrap();
+        assert_eq!(echo["headers"]["authorization"], "Bearer secret");
+        assert_eq!(echo["headers"]["proxy-authorization"], "Basic c2VjcmV0");
+        assert!(echo["headers"].get("cookie").is_none(), "{echo}");
+
+        // The same host keeps everything.
+        outgoing.url = server.url("/go/302?to=/echo");
+        let echo = client
+            .send(&outgoing, Transport::default())
+            .await
+            .unwrap()
+            .json()
+            .unwrap();
+        assert_eq!(echo["headers"]["authorization"], "Bearer secret");
+        assert_eq!(echo["headers"]["cookie"], "mine=1");
+    }
+
+    #[tokio::test]
+    async fn the_hops_are_listed_and_the_timings_still_add_up() {
+        let server = test_server::spawn().await;
+        let client = HttpClient::new();
+        let response = client
+            .send(&get(server.url("/count/3")), Transport::default())
+            .await
+            .unwrap();
+        assert_eq!(response.text(), "done");
+        assert!(response.url.ends_with("/count/0"));
+        let hops: Vec<(u16, &str)> = response
+            .hops
+            .iter()
+            .map(|hop| (hop.status, hop.url.rsplit('/').next().unwrap()))
+            .collect();
+        assert_eq!(hops, [(302, "3"), (302, "2"), (302, "1")]);
+        assert!(response.hops.iter().all(|hop| hop.time_ms > 0.0));
+        assert!(response.hops.iter().map(|hop| hop.time_ms).sum::<f64>() <= response.headers_ms);
+
+        let timings = response.timings.unwrap();
+        let parts = timings.dns_ms
+            + timings.connect_ms.unwrap()
+            + timings.first_byte_ms
+            + timings.download_ms;
+        assert!((parts - response.time_ms).abs() < 0.1, "{timings:?}");
+
+        let plain = client
+            .send(&get(server.url("/echo")), Transport::default())
+            .await
+            .unwrap();
+        assert!(plain.hops.is_empty());
+        let json = serde_json::to_value(&plain).unwrap();
+        assert!(json.get("hops").is_none(), "an empty list is not written");
+    }
+
+    #[tokio::test]
+    async fn too_many_redirects_and_circles_are_named() {
+        let server = test_server::spawn().await;
+        let client = HttpClient::new();
+        let few = Transport {
+            max_redirects: 2,
+            ..Transport::default()
+        };
+        let error = client
+            .send(&get(server.url("/count/5")), few)
+            .await
+            .unwrap_err();
+        let message = error.to_string();
+        assert!(
+            message.starts_with("Stopped following redirects") && message.contains("max_redirects"),
+            "{message}"
+        );
+        let enough = Transport {
+            max_redirects: 5,
+            ..Transport::default()
+        };
+        let response = client
+            .send(&get(server.url("/count/5")), enough)
+            .await
+            .unwrap();
+        assert_eq!(response.hops.len(), 5);
+
+        let error = client
+            .send(&get(server.url("/loop/a")), Transport::default())
+            .await
+            .unwrap_err();
+        let message = error.to_string();
+        assert!(
+            message.starts_with("Stopped following redirects") && message.contains("circle"),
+            "{message}"
+        );
+
+        let error = client
+            .send(
+                &get(server.url("/go/302?to=ftp://example.com/file")),
+                Transport::default(),
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("only http and https"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn cookies_set_on_every_hop_are_stored() {
+        let server = test_server::spawn().await;
+        let client = HttpClient::new();
+        let url =
+            server.url("/go/302?cookie=first%3D1&to=/go/302%3Fcookie%3Dsecond%3D2%26to%3D/echo");
+        let echo = client
+            .send(&get(url), Transport::default())
+            .await
+            .unwrap()
+            .json()
+            .unwrap();
+        // The second hop already sent the first one's cookie back.
+        let mut sent: Vec<&str> = echo["headers"]["cookie"]
+            .as_str()
+            .unwrap()
+            .split("; ")
+            .collect();
+        sent.sort_unstable();
+        assert_eq!(sent, ["first=1", "second=2"]);
+        let names: Vec<String> = client.cookies().into_iter().map(|c| c.name).collect();
+        assert_eq!(names, ["first", "second"]);
     }
 
     #[tokio::test]
@@ -1270,7 +1748,6 @@ mod tests {
         assert_eq!(response.http_version, "HTTP/1.1");
     }
 
-    #[cfg(reqwest_unstable)]
     #[tokio::test]
     async fn http3_goes_over_quic() {
         let server = test_server::spawn_h3();
@@ -1299,7 +1776,6 @@ mod tests {
         }
     }
 
-    #[cfg(reqwest_unstable)]
     #[tokio::test]
     async fn http3_explains_a_server_without_it() {
         // Plain TCP: nothing answers QUIC on this port.
@@ -1325,30 +1801,226 @@ mod tests {
         assert!(error.to_string().contains("https://"), "{error}");
     }
 
-    #[cfg(not(reqwest_unstable))]
+    fn h3(extra: Transport) -> Transport {
+        Transport {
+            http_version: HttpVersion::Http3,
+            ..extra
+        }
+    }
+
     #[tokio::test]
-    async fn builds_without_http3_say_so() {
-        let error = HttpClient::new()
+    async fn http3_sends_headers_and_bodies_and_reports_the_connection() {
+        let server = test_server::spawn_h3();
+        let client = HttpClient::new();
+        let mut request = post(server.url("/echo"), "over quic");
+        request.headers.push(Header::new("X-Custom", "yes"));
+        let first = client.send(&request, h3(trusting())).await.unwrap();
+        let echo = first.json().unwrap();
+        assert_eq!(echo["method"], "POST");
+        assert_eq!(echo["body"], "over quic");
+        assert_eq!(echo["headers"]["x-custom"], "yes");
+        assert_eq!(echo["headers"]["content-type"], "text/plain");
+        assert_eq!(echo["headers"]["content-length"], "9");
+
+        let timings = first.timings.unwrap();
+        assert!(!timings.reused);
+        assert_eq!(timings.connect_ms, None);
+        let parts = timings.dns_ms + timings.first_byte_ms + timings.download_ms;
+        assert!((parts - first.time_ms).abs() < 0.1, "{timings:?}");
+        assert_eq!(
+            first.remote_addr,
+            Some(format!("127.0.0.1:{}", server.port()))
+        );
+        let tls = first.tls.unwrap();
+        assert_eq!(tls.version.as_deref(), Some("TLSv1.3"));
+        assert!(
+            tls.certificate
+                .unwrap()
+                .subject
+                .contains("getman test server"),
+            "the certificate is reported"
+        );
+
+        let second = client
+            .send(&get(server.url("/echo")), h3(trusting()))
+            .await
+            .unwrap();
+        assert!(
+            second.timings.unwrap().reused,
+            "the QUIC connection is kept"
+        );
+    }
+
+    #[tokio::test]
+    async fn http3_checks_certificates_and_presents_client_ones() {
+        let server = test_server::spawn_h3_with(true);
+        let client = HttpClient::new();
+        let url = server.url("/echo");
+        // The system does not trust the test CA.
+        assert!(
+            client
+                .send(&get(url.clone()), h3(Transport::default()))
+                .await
+                .is_err()
+        );
+        // The server wants a certificate.
+        assert!(
+            client
+                .send(&get(url.clone()), h3(trusting()))
+                .await
+                .is_err()
+        );
+
+        let pki = test_server::pki();
+        let pem = format!("{}{}", pki.client_cert_pem, pki.client_key_pem);
+        let identity = ClientIdentity::from_pem(pem.into_bytes(), "client.pem").unwrap();
+        let response = client
             .send(
-                &get("https://127.0.0.1:9/".into()),
-                with_version(HttpVersion::Http3),
+                &get(url),
+                h3(Transport {
+                    client_identity: Some(identity),
+                    ..trusting()
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status, 200);
+    }
+
+    #[tokio::test]
+    async fn http3_follows_redirects_and_keeps_cookies_from_every_hop() {
+        let server = test_server::spawn_h3();
+        let client = HttpClient::new();
+        let response = client
+            .send(&get(server.url("/redirect")), h3(trusting()))
+            .await
+            .unwrap();
+        assert_eq!(response.http_version, "HTTP/3");
+        assert_eq!(response.hops.len(), 1);
+        assert_eq!(response.hops[0].status, 302);
+        assert!(response.url.ends_with("/echo/after"));
+        let echo = response.json().unwrap();
+        assert_eq!(echo["headers"]["cookie"], "hop=1", "the redirect's cookie");
+
+        client
+            .send(&get(server.url("/cookie")), h3(trusting()))
+            .await
+            .unwrap();
+        let names: Vec<String> = client.cookies().into_iter().map(|c| c.name).collect();
+        assert_eq!(names, ["hop", "jar"]);
+        let echo = client
+            .send(&get(server.url("/echo")), h3(trusting()))
+            .await
+            .unwrap()
+            .json()
+            .unwrap();
+        let mut sent: Vec<&str> = echo["headers"]["cookie"]
+            .as_str()
+            .unwrap()
+            .split("; ")
+            .collect();
+        sent.sort_unstable();
+        assert_eq!(sent, ["hop=1", "jar=1"]);
+
+        let jarless = Transport {
+            cookies: false,
+            ..trusting()
+        };
+        let echo = client
+            .send(&get(server.url("/echo")), h3(jarless))
+            .await
+            .unwrap()
+            .json()
+            .unwrap();
+        assert!(echo["headers"].get("cookie").is_none(), "{echo}");
+
+        let stopped = client
+            .send(
+                &get(server.url("/redirect")),
+                h3(Transport {
+                    follow_redirects: false,
+                    ..trusting()
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(stopped.status, 302);
+        assert_eq!(stopped.header("location"), Some("/echo/after"));
+    }
+
+    #[tokio::test]
+    async fn http3_decodes_compressed_bodies() {
+        let server = test_server::spawn_h3();
+        let client = HttpClient::new();
+        for encoding in ["gzip", "deflate", "br", "zstd"] {
+            let response = client
+                .send(
+                    &get(server.url(&format!("/encoded/{encoding}"))),
+                    h3(trusting()),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.text(), "hello from h3", "{encoding}");
+            assert!(response.header("content-encoding").is_none(), "{encoding}");
+        }
+    }
+
+    #[tokio::test]
+    async fn http3_stops_at_the_size_limit_and_at_the_timeout() {
+        let server = test_server::spawn_h3();
+        let client = HttpClient::new();
+        let limited = Transport {
+            max_body_bytes: 1024 * 1024,
+            ..trusting()
+        };
+        let response = client
+            .send(&get(server.url("/big/2097152")), h3(limited))
+            .await
+            .unwrap();
+        assert!(response.truncated);
+        assert_eq!(response.body.0.len(), 1024 * 1024);
+        let whole = client
+            .send(&get(server.url("/big/2097152")), h3(trusting()))
+            .await
+            .unwrap();
+        assert!(!whole.truncated);
+        assert_eq!(whole.body.0.len(), 2 * 1024 * 1024);
+
+        let error = client
+            .send(
+                &get(server.url("/slow")),
+                h3(Transport {
+                    timeout_ms: 200,
+                    ..trusting()
+                }),
             )
             .await
             .unwrap_err();
-        assert!(error.to_string().contains("no HTTP/3 support"), "{error}");
+        assert!(
+            error.to_string().starts_with("The request timed out"),
+            "{error}"
+        );
     }
 
-    #[test]
-    #[allow(clippy::assertions_on_constants)]
-    fn ci_builds_include_http3() {
-        // A RUSTFLAGS variable in a workflow would replace the cfg that
-        // .cargo/config.toml sets, and releases would lose HTTP/3.
-        if std::env::var_os("CI").is_some() {
-            assert!(
-                cfg!(reqwest_unstable),
-                "build with --cfg reqwest_unstable (see .cargo/config.toml)"
-            );
-        }
+    #[tokio::test]
+    async fn http3_is_refused_through_a_proxy() {
+        let error = HttpClient::new()
+            .send(
+                &get("https://127.0.0.1:9/".into()),
+                h3(Transport {
+                    proxy: ProxyRoute::Url {
+                        url: "http://127.0.0.1:3128".into(),
+                        bypass: String::new(),
+                    },
+                    ..Transport::default()
+                }),
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("cannot go through a proxy"),
+            "{error}"
+        );
     }
 
     #[tokio::test]
