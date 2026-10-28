@@ -155,8 +155,9 @@ other forms:
 
 - JSON-escaped, as it looks inside a body that is itself a JSON string;
 - percent-encoded, in either case, with `%20` or `+` for a space;
-- hexadecimal, in either case;
-- Base64 and Base64URL, with or without padding, also when the secret
+- for a secret of four bytes or more, hexadecimal in either case;
+- for a secret of four bytes or more, Base64 and Base64URL, with or
+  without padding, also when the secret
   sits inside a longer text that was encoded as a whole, such as the
   `user:secret` of a Basic `Authorization` header. The part of the
   encoded text that belongs to the secret is masked and the rest stays.
@@ -164,9 +165,9 @@ other forms:
 Because every length counts, a very short secret hides every occurrence
 of itself, and the results around it can look garbled. A one-character
 value in a local file is masked like any other. Give secrets a real
-length. Remember that every `GETMAN_*` variable of the process counts,
-also one that only sets an option, such as `GETMAN_ENVIRONMENT=dev`:
-the word `dev` is masked in results too.
+length. Every `GETMAN_*` variable of the process counts, except
+`GETMAN_ENVIRONMENT`, `GETMAN_VERSION` and `GETMAN_INSTALL_DIR`, which
+only set options.
 
 Hashes and encryption are not undone: a response that echoes a hash or a
 signature of a secret, or the secret in a form not listed here, is not

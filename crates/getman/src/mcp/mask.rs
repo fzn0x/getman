@@ -5,14 +5,16 @@
 //! - a value in `getman.local.yaml` (variables and globals),
 //! - a value in an environment's `*.local.yaml`,
 //! - the value of a variable an environment lists under `secrets`, or
-//! - the value of an environment variable of the process named `GETMAN_*`.
+//! - the value of an environment variable of the process named `GETMAN_*`,
+//!   except the ones that set Getman's own options ([`OPTIONS`]).
 //!
 //! Whatever its length, such a value is replaced by [`MASK`] wherever it
 //! appears in text, also inside a longer string. So are its encodings: the
-//! JSON-escaped form, the percent-encoded forms, hexadecimal in either case,
-//! and Base64 and Base64URL with or without padding, including the Base64
-//! of a longer text that has the value somewhere inside, in any of the
-//! three alignments Base64 gives it.
+//! JSON-escaped form and the percent-encoded forms, and for a value of at
+//! least [`MIN_ENCODED_BYTES`] bytes hexadecimal in either case and Base64
+//! and Base64URL with or without padding, including the Base64 of a longer
+//! text that has the value somewhere inside, in any of the three alignments
+//! Base64 gives it.
 
 use std::collections::BTreeSet;
 
@@ -25,6 +27,15 @@ use serde_json::Value;
 
 /// What replaces a secret value in results.
 pub(super) const MASK: &str = "[secret]";
+
+/// `GETMAN_*` variables that set an option of Getman or its install
+/// scripts rather than hold a value for requests.
+const OPTIONS: [&str; 3] = ["GETMAN_ENVIRONMENT", "GETMAN_INSTALL_DIR", "GETMAN_VERSION"];
+
+/// The hexadecimal and Base64 forms of a shorter value are a few digits or
+/// letters that turn up everywhere, such as `61` for `a`, so only the value
+/// itself is looked for.
+const MIN_ENCODED_BYTES: usize = 4;
 
 /// A piece of Base64 found by shifting the value inside a longer text must
 /// be at least this long to be looked for, or it would match by chance.
@@ -141,7 +152,7 @@ fn secret_values(workspace: &Workspace) -> Vec<String> {
         }
     }
     for (name, value) in std::env::vars() {
-        if name.starts_with(getman_core::vars::ENV_PREFIX) {
+        if name.starts_with(getman_core::vars::ENV_PREFIX) && !OPTIONS.contains(&name.as_str()) {
             secrets.push(value);
         }
     }
@@ -171,6 +182,9 @@ fn forms(secret: &str, out: &mut BTreeSet<String>) {
     out.insert(form);
 
     let bytes = secret.as_bytes();
+    if bytes.len() < MIN_ENCODED_BYTES {
+        return;
+    }
     out.insert(hex::encode(bytes));
     out.insert(hex::encode_upper(bytes));
 
@@ -278,11 +292,13 @@ mod tests {
     }
 
     #[test]
-    fn short_values_are_masked_in_their_encodings_too() {
+    fn very_short_values_are_masked_but_not_their_hex_or_base64() {
         let masker = masking(&["a"]);
+        assert_eq!(masker.mask("YQ== 61 %61 a"), "YQ== 61 %61 [secret]");
+        let masker = masking(&["abcd"]);
         assert_eq!(
-            masker.mask("YQ== 61 %61 YQ"),
-            "[secret] [secret] %[secret] [secret]"
+            masker.mask("YWJjZA== 61626364 abcd"),
+            "[secret] [secret] [secret]"
         );
     }
 
