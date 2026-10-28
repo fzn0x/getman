@@ -211,4 +211,7 @@ getman send orders/watch-order.yaml --json | jq .state
 `getman export` prints a gRPC request as a `grpcurl` command, and the
 **Code** button in the UI does the same; it leaves out OAuth 2.0 tokens
 and signatures, which are made when the call is. The [terminal UI](terminal.md)
-cannot open gRPC requests yet; use the browser UI or `getman send`.
+also calls gRPC methods: <kbd>s</kbd> invokes the method and shows each
+reply as it arrives, <kbd>m</kbd> and <kbd>t</kbd> send the saved or a
+typed message on a stream from the client, <kbd>f</kbd> ends it and
+<kbd>x</kbd> cancels the call.
