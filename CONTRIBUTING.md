@@ -56,6 +56,33 @@ Clippy runs with its pedantic lints, and the crates deny unsafe code.
 `--workspace` includes the desktop app, which on Linux needs the
 libraries in the next section.
 
+CI also runs checks that need other tools. You can run them too:
+
+- **Exported code**: `node .github/scripts/verify-snippets.mjs --getman
+  target/debug/getman` exports tricky requests in every language and runs
+  each snippet against a local server. It needs the runtimes of the
+  languages you test (`--lang python,go` limits it; `--skip-missing`
+  skips the ones you lack). Run the shell snippets on Linux or macOS.
+  Change the code in `crates/getman-core/src/export/codegen.rs` with this
+  in mind: a snippet that compiles can still send the wrong bytes.
+- **AI agents**: `node .github/scripts/verify-mcp.mjs --getman
+  target/debug/getman` drives `getman mcp` with the MCP Inspector.
+- **Dependencies**: `cargo deny check` (install it with `cargo install
+  cargo-deny --locked`) reads `deny.toml`, and `node
+  .github/scripts/check-npm-licenses.mjs` checks the npm packages. A new
+  dependency must have a licence compatible with MIT OR Apache-2.0. If
+  one has an advisory you decide is harmless, allow it in `deny.toml` with
+  the reason.
+- **Workflows**: [actionlint](https://github.com/rhysd/actionlint) checks
+  `.github/workflows`.
+
+If you bundle anything of someone else's, such as a font, an icon or a
+protocol definition, add its notice to
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and keep its licence file
+beside it.
+
+Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## The desktop app
 
 `crates/getman-desktop` is a [Tauri](https://tauri.app) 2 app that starts

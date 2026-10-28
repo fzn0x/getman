@@ -1,0 +1,22 @@
+name: Feature request
+description: Suggest something Getman could do
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Getman keeps requests as plain files, needs no account and sends only
+        what you ask it to send ([CONTRIBUTING.md](https://github.com/fzn0x/getman/blob/main/CONTRIBUTING.md)
+        lists the principles). A large change is easier to agree on here
+        before anyone writes it.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The job first, then how you would like it to work.
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: What do you do today instead?
