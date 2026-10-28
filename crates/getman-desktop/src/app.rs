@@ -81,7 +81,8 @@ pub(crate) fn run(folder: Option<PathBuf>) -> ExitCode {
             updates.install_on_quit();
         }
     });
-    drop(runtime);
+    // Don't wait on work still under way, such as a script, to quit.
+    runtime.shutdown_timeout(Duration::from_secs(1));
     ExitCode::from(u8::try_from(code).unwrap_or(1))
 }
 
