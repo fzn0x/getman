@@ -266,6 +266,25 @@ impl Executor {
         )
     }
 
+    /// What a request inherits from its folders and the variables it sees,
+    /// for requests that are connected to rather than sent once (see
+    /// [`crate::realtime`]). Scripts are not run.
+    pub fn resolve(
+        &self,
+        path: Option<&str>,
+        request: &Request,
+        context: &Context,
+    ) -> Result<(Effective, VarStack)> {
+        let chain = match path {
+            Some(path) => self.workspace.folder_chain(path)?,
+            None => vec![self.workspace.read_folder("")?],
+        };
+        let files = self.file_vars(context.environment.as_deref())?;
+        let effective = Effective::new(&chain, request);
+        let vars = var_stack(&files, &chain, request, context);
+        Ok((effective, vars))
+    }
+
     /// Runs a saved request.
     pub async fn execute_path(&self, path: &str, context: &mut Context) -> Execution {
         match self.workspace.read_request(path) {
@@ -309,6 +328,14 @@ impl Executor {
         context: &mut Context,
         execution: &mut Execution,
     ) -> Result<()> {
+        if request.kind.is_realtime() {
+            execution.skipped = true;
+            execution.warnings.push(format!(
+                "{} requests stay open, so they are skipped here; connect to them with `getman send` or in the browser UI",
+                request.kind.label()
+            ));
+            return Ok(());
+        }
         let chain = match path {
             Some(path) => self.workspace.folder_chain(path)?,
             None => vec![self.workspace.read_folder("")?],
@@ -929,6 +956,28 @@ mod tests {
         let error = execution.error.unwrap();
         assert!(error.contains("missing.pem"), "{error}");
         assert!(execution.request.is_some());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn realtime_requests_are_skipped_with_a_reason() {
+        let (_dir, executor) = setup();
+        let request = Request {
+            kind: crate::model::RequestKind::Websocket,
+            url: "ws://127.0.0.1:9/".into(),
+            checks: vec!["status == 101".into()],
+            ..Request::default()
+        };
+        let execution = executor
+            .execute(None, &request, &mut Context::default())
+            .await;
+        assert!(execution.skipped);
+        assert!(execution.request.is_none());
+        assert!(!execution.failed());
+        assert!(
+            execution.warnings[0].starts_with("WebSocket requests stay open"),
+            "{:?}",
+            execution.warnings
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

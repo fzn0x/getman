@@ -740,6 +740,15 @@ impl App {
         if self.sending {
             return;
         }
+        if open.request.kind.is_realtime() {
+            let message = format!(
+                "{} requests are not supported in the terminal UI yet; connect with `getman send {}` or in the browser UI",
+                open.request.kind.label(),
+                open.path
+            );
+            self.say(message, true);
+            return;
+        }
         self.sending = true;
         self.focus = Focus::Response;
         let executor = self.executor.clone();
@@ -867,17 +876,22 @@ fn walk(
                 }
             }
             Node::Request {
-                path, name, method, ..
+                path,
+                name,
+                method,
+                request_kind,
+                ..
             } => {
                 let matches = filter.is_empty()
                     || name.to_lowercase().contains(filter)
                     || path.to_lowercase().contains(filter);
                 if matches {
+                    let mark = text::kind_mark(*request_kind).map(str::to_owned);
                     rows.push(Row {
                         depth,
                         path: path.clone(),
                         name: name.clone(),
-                        method: Some(method.clone()),
+                        method: Some(mark.unwrap_or_else(|| method.clone())),
                         open: false,
                     });
                 }
@@ -1079,6 +1093,20 @@ mod tests {
             apply(&mut request, pane, &text).unwrap();
             assert_eq!(request, before, "{pane:?}");
         }
+    }
+
+    #[test]
+    fn realtime_requests_show_their_kind() {
+        let tree = [Node::Request {
+            path: "chat.yaml".into(),
+            name: "Chat".into(),
+            method: "GET".into(),
+            request_kind: getman_core::model::RequestKind::Websocket,
+            error: None,
+        }];
+        let mut rows = Vec::new();
+        walk(&tree, 0, &HashSet::new(), "", &mut rows);
+        assert_eq!(rows[0].method.as_deref(), Some("WS"));
     }
 
     #[test]

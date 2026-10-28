@@ -28,6 +28,16 @@ pub(crate) async fn send(args: SendArgs) -> Outcome {
         ..Context::default()
     };
     let executor = Executor::new(workspace);
+    if let Ok(request) = executor.workspace.read_request(&path)
+        && request.kind.is_realtime()
+    {
+        return super::stream::stream(&args, &executor, &path, &request, &context).await;
+    }
+    if !args.messages.is_empty() || !args.until.is_empty() {
+        style::warn(
+            "--message and --until are for WebSocket, event stream and Socket.IO requests; this one is HTTP",
+        );
+    }
     let execution = executor.execute_path(&path, &mut context).await;
 
     if args.json {

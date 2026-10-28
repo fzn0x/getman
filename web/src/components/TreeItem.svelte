@@ -1,5 +1,6 @@
 <script lang="ts">
   import { methodClass, methodShort } from "../lib/format";
+  import { kindMark } from "../lib/realtime";
   import type { Node } from "../lib/types";
   import {
     clearSelection,
@@ -31,6 +32,7 @@
 
   const open = $derived(node.kind === "folder" && ws.expanded[node.path] === true);
   const picked = $derived(selection.paths.includes(node.path));
+  const mark = $derived(node.kind === "request" ? kindMark(node.request_kind) : "");
   const DRAG = "application/x-getman-path";
   const DRAG_MANY = "application/x-getman-paths";
 
@@ -171,8 +173,8 @@
       <span class="label folder">{node.name}</span>
     {:else}
       <span class="twisty"></span>
-      <span class="method {methodClass(node.method)}" title={node.method}>
-        {node.error ? "ERR" : methodShort(node.method)}
+      <span class="method {methodClass(mark || node.method)}" title={mark || node.method}>
+        {node.error ? "ERR" : mark || methodShort(node.method)}
       </span>
       <span class="label">{node.name}</span>
     {/if}

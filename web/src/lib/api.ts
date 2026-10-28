@@ -31,6 +31,7 @@ import type {
   Authorization,
   WorkspaceInfo,
 } from "./types";
+import type { Outbound } from "./realtime";
 
 const TOKEN_KEY = "getman.token";
 
@@ -75,7 +76,12 @@ export function whenSignedOut(handler: () => void): void {
   onSignedOut = handler;
 }
 
-async function call<T>(method: "GET" | "POST" | "PUT", path: string, body?: unknown): Promise<T> {
+async function call<T>(
+  method: "GET" | "POST" | "PUT",
+  path: string,
+  body?: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
   let response: globalThis.Response;
   try {
     response = await fetch(`/api${path}`, {
@@ -85,8 +91,10 @@ async function call<T>(method: "GET" | "POST" | "PUT", path: string, body?: unkn
         ...(body === undefined ? {} : { "content-type": "application/json" }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
     });
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) throw error;
     throw new ApiError(
       "Getman is not answering. Is `getman` still running in your terminal?",
       0,
@@ -175,7 +183,7 @@ export const api = {
   globals: () => call<LocalState>("GET", "/globals"),
   writeGlobals: (state: LocalState) => call("PUT", "/globals", state),
 
-  send: (args: SendArgs) => post<Execution>("/send", args),
+  send: (args: SendArgs, signal?: AbortSignal) => call<Execution>("POST", "/send", args, signal),
   cancelSend: (id: string) => post("/send/cancel", { id }),
   prepare: (args: SendArgs) => post<{ request: Outgoing; missing: string[] }>("/prepare", args),
   codegen: (args: SendArgs & { language: string }) =>
@@ -291,6 +299,46 @@ export const api = {
         const line = buffer.slice(0, newline).trim();
         buffer = buffer.slice(newline + 1);
         if (line) onEvent(JSON.parse(line) as RunEvent);
+      }
+    }
+  },
+
+  realtimeConnect: (args: SendArgs & { page: string }) =>
+    post<{ id: string }>("/realtime/connect", args),
+  realtimeSend: (id: string, message: Outbound) => post("/realtime/send", { id, message }),
+  realtimeClose: (id: string) => post("/realtime/close", { id }),
+
+  /**
+   * Opens this page's stream of live connection events. Lines arrive as
+   * they happen; the promise settles when the stream ends.
+   */
+  async realtimeEvents(onLine: (line: Record<string, unknown>) => void): Promise<void> {
+    let response: globalThis.Response;
+    try {
+      response = await fetch("/api/realtime/events", {
+        method: "POST",
+        headers: { "x-getman-token": token(), "content-type": "application/json" },
+        body: "{}",
+      });
+    } catch {
+      throw new ApiError("Getman is not answering.", 0, "offline");
+    }
+    if (!response.ok || !response.body) {
+      const data = (await response.json().catch(() => ({}))) as { error?: string; code?: string };
+      if (response.status === 401 && data.code === "token") onSignedOut();
+      throw new ApiError(data.error ?? response.statusText, response.status);
+    }
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += value;
+      let newline: number;
+      while ((newline = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        if (line) onLine(JSON.parse(line) as Record<string, unknown>);
       }
     }
   },

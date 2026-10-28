@@ -29,7 +29,7 @@ use sha2::{Digest as _, Sha256};
 use tokio::sync::Notify;
 
 use crate::error::{Error, Result};
-use crate::http::{HttpClient, Outgoing, OutgoingBody, Response, Transport, set_header};
+use crate::http::{Header, HttpClient, Outgoing, OutgoingBody, Response, Transport, set_header};
 use crate::model::{Auth, OAuth2};
 use crate::vars::VarStack;
 
@@ -408,6 +408,23 @@ impl Authenticator {
         }
         Ok(())
     }
+}
+
+/// The `Authorization` header that answers the Digest challenge in these
+/// response headers, for requests that read their response as a stream
+/// and so cannot go through [`Authenticator::send`]. `None` when the
+/// headers hold no Digest challenge.
+pub(crate) fn answer_digest(
+    headers: &[Header],
+    username: &str,
+    password: &str,
+    outgoing: &Outgoing,
+) -> Option<Result<String>> {
+    let challenge = headers
+        .iter()
+        .filter(|h| h.name.eq_ignore_ascii_case("www-authenticate"))
+        .find_map(|h| parse_challenge(&h.value))?;
+    Some(digest_header(&challenge, username, password, outgoing))
 }
 
 /// The parameters of a `Digest` challenge, with lowercase names.

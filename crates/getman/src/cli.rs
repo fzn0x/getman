@@ -34,7 +34,8 @@ pub(crate) enum Command {
     Tui(TuiArgs),
     /// Run a folder or the whole workspace and report the results, for CI.
     Run(RunArgs),
-    /// Send one request and print the response body.
+    /// Send one request and print the response body, or connect to a
+    /// WebSocket, event stream or Socket.IO request and print its messages.
     Send(SendArgs),
     /// Create a workspace.
     Init(InitArgs),
@@ -233,6 +234,27 @@ pub(crate) struct SendArgs {
     /// Print everything that happened as JSON instead of the body.
     #[arg(long)]
     pub(crate) json: bool,
+
+    /// WebSocket and Socket.IO: a saved message to send once connected,
+    /// by name. Repeat to send several, in order.
+    #[arg(long = "message", short = 'm', value_name = "NAME")]
+    pub(crate) messages: Vec<String>,
+
+    /// WebSocket, event stream and Socket.IO: disconnect after this many
+    /// received messages, such as `10`, or after this long, such as `30s`,
+    /// `500ms` or `2m`. Repeat for both; the first one reached stops.
+    /// Without it, Ctrl+C stops.
+    #[arg(long, value_name = "N|TIME", value_parser = parse_until)]
+    pub(crate) until: Vec<Until>,
+}
+
+/// When `getman send` stops listening to a connection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Until {
+    /// After this many received messages.
+    Messages(u64),
+    /// After this long.
+    Time(std::time::Duration),
 }
 
 #[derive(Debug, Args)]
@@ -337,6 +359,27 @@ fn parse_http_version(text: &str) -> Result<HttpVersion, String> {
     }
 }
 
+fn parse_until(text: &str) -> Result<Until, String> {
+    let text = text.trim();
+    let digits = text.bytes().take_while(u8::is_ascii_digit).count();
+    let (number, unit) = text.split_at(digits);
+    let number: u64 = number.parse().map_err(|_| {
+        format!("{text:?} should be a number of messages, such as 10, or a time, such as 30s")
+    })?;
+    let millis = match unit.trim() {
+        "" => return Ok(Until::Messages(number)),
+        "ms" => number,
+        "s" => number.saturating_mul(1000),
+        "m" => number.saturating_mul(60_000),
+        other => {
+            return Err(format!(
+                "{other:?} is not a unit of time; use ms, s or m, as in 30s"
+            ));
+        }
+    };
+    Ok(Until::Time(std::time::Duration::from_millis(millis)))
+}
+
 fn parse_reporter(text: &str) -> Result<Reporter, String> {
     let (kind, path) = match text.split_once('=') {
         Some((kind, path)) => (kind, Some(PathBuf::from(path))),
@@ -376,6 +419,45 @@ mod tests {
         assert!(parse_reporter("pdf").is_err());
         assert_eq!(parse_var("a=b=c").unwrap(), ("a".into(), "b=c".into()));
         assert!(parse_var("novalue").is_err());
+    }
+
+    #[test]
+    fn send_takes_messages_and_limits_for_streams() {
+        let cli = Cli::try_parse_from([
+            "getman",
+            "send",
+            "chat.yaml",
+            "-m",
+            "Hello",
+            "-m",
+            "Bye",
+            "--until",
+            "5",
+            "--until",
+            "30s",
+        ])
+        .unwrap();
+        let Some(Command::Send(args)) = cli.command else {
+            panic!()
+        };
+        assert_eq!(args.messages, ["Hello", "Bye"]);
+        assert_eq!(
+            args.until,
+            [
+                Until::Messages(5),
+                Until::Time(std::time::Duration::from_secs(30))
+            ]
+        );
+        assert_eq!(
+            parse_until("250ms").unwrap(),
+            Until::Time(std::time::Duration::from_millis(250))
+        );
+        assert_eq!(
+            parse_until("2m").unwrap(),
+            Until::Time(std::time::Duration::from_secs(120))
+        );
+        assert!(parse_until("soon").is_err());
+        assert!(parse_until("3h").is_err());
     }
 
     #[test]

@@ -15,6 +15,8 @@ import {
   type SavedSession,
   type SavedTab,
 } from "./session";
+import { isLive } from "./realtime";
+import { primary, type LiveState } from "./realtime.svelte";
 import type {
   Draft,
   DynamicVar,
@@ -290,6 +292,8 @@ export interface RequestTab {
   responsePane: string;
   /** Opened from history: when it was sent, and whether the body was cut. */
   fromHistory?: { at: number; bodyCut: boolean };
+  /** The connection of a WebSocket, event stream or Socket.IO request. */
+  live?: LiveState;
 }
 
 export interface FolderTab {
@@ -968,6 +972,10 @@ export async function saveAs(tab: RequestTab, folder: string, name: string): Pro
 }
 
 export async function send(tab: RequestTab): Promise<void> {
+  if (isLive(tab.draft.kind)) {
+    await primary(tab);
+    return;
+  }
   if (tab.sending) return;
   tab.sending = true;
   tab.sendId = sendId();

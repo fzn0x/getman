@@ -285,6 +285,10 @@ pub struct Response {
     /// request went out with the `auto` HTTP version.
     #[serde(default, skip_serializing_if = "is_false")]
     pub http3_available: bool,
+    /// Whether the body is an event stream that was still open when the
+    /// request timed out. The body holds what arrived until then.
+    #[serde(default)]
+    pub stream_open: bool,
 }
 
 /// Where a response's time went, in milliseconds. The parts add up to
@@ -551,6 +555,35 @@ impl HttpClient {
         Ok(response)
     }
 
+    /// Sends a request and returns once the response headers arrive,
+    /// leaving the body to be read as it streams in. The timeout covers
+    /// only the wait for the headers. Also returns the milliseconds that
+    /// took.
+    pub(crate) async fn open(
+        &self,
+        outgoing: &Outgoing,
+        transport: Transport,
+    ) -> Result<(reqwest::Response, f64)> {
+        let client = self.client(&transport)?;
+        let timeout_ms = transport.timeout_ms;
+        let unlimited = Transport {
+            timeout_ms: 0,
+            ..transport
+        };
+        let request = build(&client, outgoing, &unlimited).await?;
+        let started = Instant::now();
+        let pending = client.execute(request);
+        let response = if timeout_ms > 0 {
+            tokio::time::timeout(Duration::from_millis(timeout_ms), pending)
+                .await
+                .map_err(|_| Error::Http("The request timed out".into()))?
+        } else {
+            pending.await
+        }
+        .map_err(|e| Error::Http(describe(&e)))?;
+        Ok((response, millis(started.elapsed())))
+    }
+
     /// The cookies in the jar, expired ones excluded.
     pub fn cookies(&self) -> Vec<CookieInfo> {
         let store = self.cookies.lock().expect("cookie jar lock");
@@ -779,9 +812,27 @@ async fn exchange(
         Ok(0) | Err(_) => usize::MAX,
         Ok(limit) => limit,
     };
+    let event_stream = headers.iter().any(|h| {
+        h.name.eq_ignore_ascii_case("content-type")
+            && h.value
+                .trim_start()
+                .to_ascii_lowercase()
+                .starts_with("text/event-stream")
+    });
     let mut body = Vec::new();
     let mut truncated = false;
-    while let Some(chunk) = response.chunk().await? {
+    let mut stream_open = false;
+    loop {
+        let chunk = match response.chunk().await {
+            Ok(Some(chunk)) => chunk,
+            Ok(None) => break,
+            // An event stream need not end; keep what arrived in time.
+            Err(e) if event_stream && e.is_timeout() => {
+                stream_open = true;
+                break;
+            }
+            Err(e) => return Err(e),
+        };
         let room = limit - body.len();
         if chunk.len() > room {
             body.extend_from_slice(&chunk[..room]);
@@ -820,6 +871,7 @@ async fn exchange(
         timings: None,
         tls,
         http3_available: false,
+        stream_open,
     })
 }
 
@@ -937,8 +989,21 @@ async fn build(
     builder.build().map_err(|e| Error::Http(describe(&e)))
 }
 
+/// Response headers as a list, in order.
+pub(crate) fn header_list(headers: &reqwest::header::HeaderMap) -> Vec<Header> {
+    headers
+        .iter()
+        .map(|(name, value)| {
+            Header::new(
+                name.as_str(),
+                String::from_utf8_lossy(value.as_bytes()).into_owned(),
+            )
+        })
+        .collect()
+}
+
 /// Explains a transport error in one line, most general cause first.
-fn describe(error: &reqwest::Error) -> String {
+pub(crate) fn describe(error: &reqwest::Error) -> String {
     let mut message = String::from(if error.is_timeout() {
         "The request timed out"
     } else if error.is_connect() {
@@ -1059,6 +1124,34 @@ mod tests {
         assert_eq!(cookies[0].name, "flavor");
         assert!(client.remove_cookie(&cookies[0].domain, &cookies[0].path, "flavor"));
         assert_eq!(client.cookies(), []);
+    }
+
+    #[tokio::test]
+    async fn an_event_stream_keeps_what_arrived_before_the_timeout() {
+        let server = test_server::spawn().await;
+        let response = HttpClient::new()
+            .send(
+                &get(server.url("/sse/forever")),
+                Transport {
+                    timeout_ms: 300,
+                    ..Transport::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status, 200);
+        assert!(response.stream_open);
+        assert!(
+            response.text().contains("data: tick 0"),
+            "{}",
+            response.text()
+        );
+
+        let finished = HttpClient::new()
+            .send(&get(server.url("/sse")), Transport::default())
+            .await
+            .unwrap();
+        assert!(!finished.stream_open);
     }
 
     #[tokio::test]

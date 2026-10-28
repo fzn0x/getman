@@ -3,6 +3,7 @@
   import { copyText } from "../lib/clipboard";
   import { methodClass, methodShort } from "../lib/format";
   import { keyLabel } from "../lib/keys";
+  import { kindMark } from "../lib/realtime";
   import {
     closedTabs,
     closeTab,
@@ -188,8 +189,8 @@
           onkeydown={(event) => onKeydown(event, tab)}
         >
           {#if tab.kind === "request"}
-            <span class="method {methodClass(tab.draft.method)}"
-              >{methodShort(tab.draft.method)}</span
+            <span class="method {methodClass(kindMark(tab.draft.kind) || tab.draft.method)}"
+              >{kindMark(tab.draft.kind) || methodShort(tab.draft.method)}</span
             >
           {:else if tab.kind === "folder"}
             <Icon name="folder" />

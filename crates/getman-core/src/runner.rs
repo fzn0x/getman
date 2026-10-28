@@ -157,6 +157,7 @@ pub fn requests_in(tree: &[Node], target: &str) -> Result<Vec<RunItem>> {
                     name,
                     method,
                     error,
+                    ..
                 } => {
                     if error.is_none() {
                         out.push(RunItem {
@@ -561,6 +562,7 @@ mod tests {
                     path: "a/x.yaml".into(),
                     name: "X".into(),
                     method: "GET".into(),
+                    request_kind: crate::model::RequestKind::Http,
                     error: None,
                 }],
             },
@@ -568,6 +570,7 @@ mod tests {
                 path: "y.yaml".into(),
                 name: "Y".into(),
                 method: "POST".into(),
+                request_kind: crate::model::RequestKind::Http,
                 error: None,
             },
         ];

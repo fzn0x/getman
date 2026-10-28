@@ -2,6 +2,7 @@
   import { tick } from "svelte";
   import { api } from "../lib/api";
   import { methodClass } from "../lib/format";
+  import { kindMark } from "../lib/realtime";
   import { rank } from "../lib/fuzzy";
   import { sortNodes } from "../lib/tree";
   import {
@@ -196,7 +197,9 @@
                 class:current={current === request.path}
                 onclick={() => void openRequest(request.path)}
               >
-                <span class="method {methodClass(request.method)}">{request.method}</span>
+                <span class="method {methodClass(kindMark(request.request_kind) || request.method)}"
+                  >{kindMark(request.request_kind) || request.method}</span
+                >
                 <span class="text">
                   <span class="title">{request.name}</span>
                   <span class="path">{request.path}</span>

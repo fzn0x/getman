@@ -2,6 +2,7 @@
   import { tick } from "svelte";
   import { methodClass } from "../../lib/format";
   import { rank } from "../../lib/fuzzy";
+  import { KIND_LABELS, kindMark } from "../../lib/realtime";
   import type { IconName } from "../../lib/icons";
   import { keyLabel } from "../../lib/keys";
   import {
@@ -41,6 +42,13 @@
     const tab = activeTab();
     const entries: Entry[] = [
       { id: "new", title: "New request", icon: "plus", keys: "alt+n", run: () => newRequest() },
+      ...(["websocket", "socketio", "sse"] as const).map((kind) => ({
+        id: `new-${kind}`,
+        title: `New ${KIND_LABELS[kind]} request`,
+        icon: "plus" as IconName,
+        run: () =>
+          newRequest({ name: `Untitled ${KIND_LABELS[kind]}`, kind, method: "GET", url: "" }),
+      })),
       {
         id: "import",
         title: "Import a cURL command or Postman export",
@@ -126,7 +134,7 @@
       id: `r:${request.path}`,
       title: request.name,
       detail: request.path,
-      method: request.method,
+      method: kindMark(request.request_kind) || request.method,
       run: () => void openRequest(request.path),
     })),
   );

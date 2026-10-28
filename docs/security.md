@@ -27,6 +27,10 @@ Getman's server defends itself against them:
 If you open the address without its token, the UI asks you to use the link
 the terminal printed.
 
+WebSocket, event stream and Socket.IO connections opened from the UI are
+held by this server and stream their events to the page through the same
+checked API. When the page goes away, its connections are closed.
+
 ## Files
 
 A workspace is a folder you chose. Getman reads and writes only inside it:

@@ -37,6 +37,7 @@ export const sections = [
       "checks",
       "scripts",
       "http",
+      "realtime",
       "runner",
       "examples-and-mocks",
       "mcp",

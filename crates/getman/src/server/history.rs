@@ -210,6 +210,7 @@ mod tests {
             timings: None,
             tls: None,
             http3_available: false,
+            stream_open: false,
         }
     }
 

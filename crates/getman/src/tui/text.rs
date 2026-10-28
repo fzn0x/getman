@@ -1,8 +1,20 @@
 //! Turning responses into coloured terminal lines.
 
 use getman_core::execute::Execution;
+use getman_core::model::RequestKind;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
+
+/// What the tree and request line show instead of the method for requests
+/// that are not HTTP.
+pub(crate) fn kind_mark(kind: RequestKind) -> Option<&'static str> {
+    match kind {
+        RequestKind::Http => None,
+        RequestKind::Websocket => Some("WS"),
+        RequestKind::Sse => Some("SSE"),
+        RequestKind::Socketio => Some("SIO"),
+    }
+}
 
 /// The colour of an HTTP method.
 pub(crate) fn method_color(method: &str) -> Color {

@@ -1,6 +1,7 @@
 // Turning stored requests into complete drafts the editors can bind to,
 // and back into the compact form saved to disk.
 
+import { liveDraft, liveRequest } from "./realtime";
 import type { Auth, Body, Draft, Request, Settings } from "./types";
 
 /** A deep copy that also works on Svelte's reactive proxies. */
@@ -33,6 +34,7 @@ export function toDraft(request: Request): Draft {
     checks: [...(request.checks ?? [])],
     captures: { ...(request.captures ?? {}) },
     settings: { ...(request.settings ?? {}) },
+    ...liveDraft(request),
   };
 }
 
@@ -68,6 +70,7 @@ export function toRequest(draft: Draft): Request {
       Object.entries(draft.captures).filter(([name, target]) => name.trim() && target.trim()),
     ),
     settings,
+    ...liveRequest(draft),
   };
 }
 

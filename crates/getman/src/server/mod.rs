@@ -10,6 +10,7 @@ mod api;
 mod assets;
 mod history;
 mod presets;
+mod realtime;
 mod token;
 
 use std::collections::HashMap;
@@ -42,6 +43,8 @@ pub(crate) struct AppState {
     pub(crate) history: history::History,
     /// Mock servers started from the UI, by folder.
     pub(crate) mocks: Mutex<HashMap<String, crate::mock::Mock>>,
+    /// Live WebSocket, SSE and Socket.IO connections of the browser UI.
+    pub(crate) realtime: realtime::Hub,
 }
 
 impl AppState {
@@ -67,6 +70,7 @@ pub(crate) async fn serve(
         runs: Mutex::new(HashMap::new()),
         mocks: Mutex::new(HashMap::new()),
         sends: Mutex::new(HashMap::new()),
+        realtime: realtime::Hub::default(),
     });
     let app = router(Arc::clone(&state));
 
@@ -98,8 +102,10 @@ pub(crate) async fn serve(
     }
 
     axum::serve(listener, app)
-        .with_graceful_shutdown(async {
+        .with_graceful_shutdown(async move {
             let _ = tokio::signal::ctrl_c().await;
+            // Live connections' event streams never end by themselves.
+            state.realtime.close_all();
         })
         .await
         .map_err(|e| e.to_string())
@@ -124,7 +130,7 @@ async fn bind(port: Option<u16>) -> Result<tokio::net::TcpListener, String> {
 
 pub(crate) fn router(state: Arc<AppState>) -> Router {
     Router::new()
-        .nest("/api", api::routes())
+        .nest("/api", api::routes().merge(realtime::routes()))
         .fallback(assets::serve)
         .layer(middleware::from_fn_with_state(Arc::clone(&state), guard))
         .with_state(state)
@@ -215,6 +221,7 @@ mod tests {
             runs: Mutex::new(HashMap::new()),
             mocks: Mutex::new(HashMap::new()),
             sends: Mutex::new(HashMap::new()),
+            realtime: realtime::Hub::default(),
         });
         (dir, router(state))
     }

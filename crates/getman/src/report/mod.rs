@@ -288,6 +288,7 @@ pub(crate) fn sample() -> Recorded {
         timings: None,
         tls: None,
         http3_available: false,
+        stream_open: false,
     };
     let pass = |name: &str| TestResult {
         name: name.into(),
