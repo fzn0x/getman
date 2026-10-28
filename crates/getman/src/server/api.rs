@@ -14,7 +14,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use getman_core::Error;
 use getman_core::execute::{Context, persist_changes, resolved_variables};
-use getman_core::export::codegen;
+use getman_core::export::{codegen, openapi, postman};
 use getman_core::import::{self, SourceFile, curl};
 use getman_core::model::{Auth, Folder, Request};
 use getman_core::runner::{self, RunEvent, RunOptions};
@@ -53,6 +53,7 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/prepare", post(prepare))
         .route("/codegen", post(code))
         .route("/languages", get(languages))
+        .route("/export", post(export))
         .route("/variables", post(variables))
         .route("/dynamic", get(dynamic))
         .route("/run", post(run))
@@ -373,6 +374,9 @@ struct PrepareArg {
     environment: Option<String>,
     #[serde(default)]
     language: Option<String>,
+    /// Keep `{{variables}}` as written in code.
+    #[serde(default)]
+    keep_vars: bool,
 }
 
 async fn prepare(State(state): Shared, Json(arg): Json<PrepareArg>) -> ApiResult {
@@ -389,17 +393,47 @@ async fn prepare(State(state): Shared, Json(arg): Json<PrepareArg>) -> ApiResult
 
 async fn code(State(state): Shared, Json(arg): Json<PrepareArg>) -> ApiResult {
     let language = arg.language.clone().unwrap_or_else(|| "curl".into());
-    let context = context(arg.environment.as_deref());
-    let prepared = state.executor.prepare(
-        arg.path.as_deref().filter(|p| !p.is_empty()),
-        &arg.request,
-        &context,
-    )?;
+    let path = arg.path.as_deref().filter(|p| !p.is_empty());
+    let prepared = if arg.keep_vars {
+        state.executor.prepare_unresolved(path, &arg.request)?
+    } else {
+        let context = context(arg.environment.as_deref());
+        state.executor.prepare(path, &arg.request, &context)?
+    };
     let mut outgoing = prepared.outgoing;
     codegen::relativize(&mut outgoing, state.workspace().root());
     let code = codegen::generate(&language, &outgoing)
         .ok_or_else(|| bad(format!("unknown language {language}")))?;
     Ok(Json(json!({ "code": code, "missing": prepared.missing })))
+}
+
+#[derive(Deserialize)]
+struct ExportArg {
+    /// `folder`, `environment` or `globals`.
+    kind: String,
+    /// The folder's path or the environment's id.
+    #[serde(default)]
+    path: String,
+    /// `postman`, `openapi` or `openapi-yaml`.
+    #[serde(default)]
+    format: String,
+    /// Include values from git-ignored local files.
+    #[serde(default)]
+    secrets: bool,
+}
+
+/// Writes a folder, environment or the globals as a file to download.
+async fn export(State(state): Shared, Json(arg): Json<ExportArg>) -> ApiResult {
+    let ws = state.workspace();
+    let exported = match (arg.kind.as_str(), arg.format.as_str()) {
+        ("folder", "postman") => postman::collection(ws, &arg.path)?,
+        ("folder", "openapi") => openapi::document(ws, &arg.path, false)?,
+        ("folder", "openapi-yaml") => openapi::document(ws, &arg.path, true)?,
+        ("environment", _) => postman::environment(ws, &arg.path, arg.secrets)?,
+        ("globals", _) => postman::globals(ws, arg.secrets)?,
+        (kind, format) => return Err(bad(format!("cannot export a {kind} as {format:?}"))),
+    };
+    Ok(Json(json!(exported)))
 }
 
 async fn languages() -> Json<Value> {
