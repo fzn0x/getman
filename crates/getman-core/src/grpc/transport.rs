@@ -488,12 +488,15 @@ impl Call {
     pub(crate) async fn wait_head(&mut self) -> Result<&Head> {
         if let Stage::Waiting(response) = &mut self.stage {
             let response = response.await.map_err(|e| {
-                let hint = self
-                    .closed_hint
-                    .filter(|_| e.is_canceled() || e.is_closed());
+                // The refusal shows as a closed connection, or on some
+                // systems as the TLS alert the server sent.
+                let reason = describe(&e);
+                let hint = self.closed_hint.filter(|_| {
+                    e.is_canceled() || e.is_closed() || reason.contains("received fatal alert")
+                });
                 Error::Http(match hint {
-                    Some(hint) => format!("{}; {hint}", describe(&e)),
-                    None => describe(&e),
+                    Some(hint) => format!("{reason}; {hint}"),
+                    None => reason,
                 })
             })?;
             let (parts, body) = response.into_parts();
