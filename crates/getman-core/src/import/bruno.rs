@@ -533,6 +533,7 @@ impl Reader {
             "graphql" => Body::Graphql {
                 query: self.template(&text("body:graphql")),
                 variables: self.template(&text("body:graphql:vars")),
+                operation_name: String::new(),
             },
             "formUrlEncoded" | "form-urlencoded" => Body::Form {
                 fields: self.key_values(file.pairs("body:form-urlencoded")),

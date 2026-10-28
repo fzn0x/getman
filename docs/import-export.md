@@ -215,6 +215,27 @@ The code then holds `{{token}}` rather than the token, and Basic
 credentials that use variables appear as `base64(user:password)`,
 since they cannot be encoded.
 
+### Indent and boilerplate
+
+Each language is written the way it is usually written: tabs in Go, two
+spaces in JavaScript, Ruby and Dart, four elsewhere. Two options change
+that, in the code dialog and on the command line:
+
+| Option | Does |
+| --- | --- |
+| **Indent**, `--indent 2\|4\|tab` | Indents with two spaces, four spaces or tabs, in every language that indents. Text inside quotes, such as a multi-line body, is never touched |
+| **Imports and `main`**, `--no-boilerplate` | Leaves out what wraps the request, where a language has it: the imports, the `main` function or class and the `package` line. What is left is the statements that make the request, to paste into your own code |
+
+```sh
+getman export orders/create.yaml --to go --indent 2 --no-boilerplate
+```
+
+cURL, HTTPie, Wget, PowerShell, the raw request and PHP have no
+boilerplate to leave out. HTTPie and the raw request have no indent, and
+neither do C# and Swift, whose snippets are top-level statements. The
+dialog shows only the options a language has. gRPC requests print as
+`grpcurl`, which has neither.
+
 ## Export a folder or an environment
 
 Folders, the workspace and environments export as files other tools

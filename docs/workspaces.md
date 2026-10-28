@@ -87,7 +87,7 @@ Examples are described in [Examples and mocks](examples-and-mocks.md).
 | `form` | `fields` (like headers) | `application/x-www-form-urlencoded` |
 | `multipart` | `fields`, each with `value` or `file`, and an optional `content_type` | `multipart/form-data` |
 | `binary` | `file`, `content_type` | the file's bytes, typed from its name unless set |
-| `graphql` | `query`, `variables` (JSON text) | `application/json` |
+| `graphql` | `query`, `variables` (JSON text), `operation_name` | `application/json`; see [GraphQL](http.md#graphql) |
 
 Paths in `file` are relative to the workspace root, and must stay inside
 it.

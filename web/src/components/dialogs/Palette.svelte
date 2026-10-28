@@ -45,6 +45,13 @@
     const tab = activeTab();
     const entries: Entry[] = [
       { id: "new", title: "New request", icon: "plus", keys: "alt+n", run: () => newRequest() },
+      {
+        id: "tabs",
+        title: "Search open and recently closed tabs",
+        icon: "search",
+        keys: "alt+a",
+        run: () => openDialog({ kind: "tabs" }),
+      },
       ...(["websocket", "socketio", "sse"] as const).map((kind) => ({
         id: `new-${kind}`,
         title: `New ${KIND_LABELS[kind]} request`,

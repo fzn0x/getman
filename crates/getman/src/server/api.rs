@@ -486,6 +486,12 @@ struct PrepareArg {
     /// Keep `{{variables}}` as written in code.
     #[serde(default)]
     keep_vars: bool,
+    /// `2`, `4` or `tab`; left out for each language's own habit.
+    #[serde(default)]
+    indent: Option<String>,
+    /// Leave out the imports and `main` function.
+    #[serde(default)]
+    no_boilerplate: bool,
 }
 
 async fn prepare(State(state): Shared, Json(arg): Json<PrepareArg>) -> ApiResult {
@@ -511,7 +517,14 @@ async fn code(State(state): Shared, Json(arg): Json<PrepareArg>) -> ApiResult {
     };
     let mut outgoing = prepared.outgoing;
     codegen::relativize(&mut outgoing, state.workspace().root());
-    let code = codegen::generate(&language, &outgoing)
+    let options = codegen::Options {
+        indent: match arg.indent.as_deref().filter(|i| !i.is_empty()) {
+            Some(indent) => Some(indent.parse().map_err(bad)?),
+            None => None,
+        },
+        boilerplate: !arg.no_boilerplate,
+    };
+    let code = codegen::generate_with(&language, &outgoing, &options)
         .ok_or_else(|| bad(format!("unknown language {language}")))?;
     Ok(Json(json!({ "code": code, "missing": prepared.missing })))
 }

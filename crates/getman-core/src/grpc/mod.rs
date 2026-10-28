@@ -19,11 +19,14 @@ mod execute;
 mod generate;
 mod json;
 mod metadata;
+mod proxy;
 mod reflection;
 mod schema;
 mod status;
 mod transport;
 
+#[cfg(test)]
+mod network_tests;
 #[cfg(test)]
 mod test_server;
 #[cfg(test)]
