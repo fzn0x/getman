@@ -6,6 +6,15 @@ import { api, ApiError } from "./api";
 import { clone, fingerprint, newDraft, toDraft, toRequest } from "./draft";
 import { examples } from "./examples.svelte";
 import { planFor, refreshPlan, runTargets, type PlanItem } from "./plan";
+import {
+  closeTargets,
+  findMoved,
+  moveTo,
+  pushClosed,
+  readSession,
+  type SavedSession,
+  type SavedTab,
+} from "./session";
 import type {
   Draft,
   DynamicVar,
@@ -21,6 +30,7 @@ import type {
   RunEvent,
   RunItem,
   RunSummary,
+  TrashItem,
 } from "./types";
 
 // ---- Preferences, kept in this browser only --------------------------------
@@ -83,7 +93,11 @@ export const ws = $state({
   environments: [] as EnvironmentSummary[],
   environment: "",
   expanded: {} as Record<string, boolean>,
+  /** Show the tree sorted A to Z instead of in each folder's order. */
+  sortTree: false,
   history: [] as HistoryEntry[],
+  /** Deleted requests and folders, newest first. */
+  trash: [] as TrashItem[],
   dynamic: [] as DynamicVar[],
   languages: [] as Language[],
   /** Variables the active request sees, for highlighting and completion. */
@@ -106,6 +120,7 @@ export async function loadWorkspace(): Promise<void> {
     ws.tree = info.tree;
     ws.environments = info.environments;
     ws.expanded = load(scoped("expanded"), {});
+    ws.sortTree = load(scoped("sortTree"), false);
     const saved = load<string>(scoped("environment"), "");
     ws.environment = info.environments.some((e) => e.id === saved) ? saved : "";
     ws.ready = true;
@@ -117,6 +132,7 @@ export async function loadWorkspace(): Promise<void> {
         ws.history = history;
       },
     );
+    void refreshTrash();
     await restoreTabs();
   } catch (error) {
     if (!(error instanceof ApiError && error.code === "token")) ws.failure = message(error);
@@ -133,6 +149,14 @@ export async function refreshTree(): Promise<void> {
     }
   } catch (error) {
     notify(message(error), "error");
+  }
+}
+
+export async function refreshTrash(): Promise<void> {
+  try {
+    ws.trash = await api.trash();
+  } catch {
+    // The trash list is a convenience; the items stay on disk.
   }
 }
 
@@ -153,6 +177,24 @@ export function selectEnvironment(id: string): void {
 export function setExpanded(path: string, open: boolean): void {
   ws.expanded[path] = open;
   store(scoped("expanded"), ws.expanded);
+}
+
+export function collapseAll(): void {
+  ws.expanded = {};
+  store(scoped("expanded"), ws.expanded);
+}
+
+/** Sorts the sidebar A to Z, for this workspace in this browser only. */
+export function setSortTree(on: boolean): void {
+  ws.sortTree = on;
+  store(scoped("sortTree"), on);
+}
+
+/** Items picked in the sidebar with Ctrl or Shift, to act on together. */
+export const selection = $state({ paths: [] as string[], anchor: "" });
+
+export function clearSelection(): void {
+  selection.paths = [];
 }
 
 /** Every request in the tree, in order. */
@@ -185,9 +227,44 @@ export function parentOf(path: string): string {
 /** Names offered when completing `{{`. */
 export function completionNames(): { label: string; detail?: string }[] {
   return [
-    ...ws.variables.map((v) => ({ label: v.name, detail: `${v.scope} · ${preview(v.value)}` })),
+    ...ws.variables.map((v) => ({
+      label: v.name,
+      detail: `${v.scope} · ${v.secret ? "secret" : preview(v.value)}`,
+    })),
     ...ws.dynamic.map((d) => ({ label: d.name, detail: d.description })),
   ];
+}
+
+let knownCache: { from: ResolvedVar[]; names: Set<string> } | null = null;
+
+/** Names the active tab can use, or `null` until they are known. */
+export function knownNames(): Set<string> | null {
+  if (!ws.variablesReady) return null;
+  if (knownCache?.from !== ws.variables) {
+    knownCache = { from: ws.variables, names: new Set(ws.variables.map((v) => v.name)) };
+  }
+  return knownCache.names;
+}
+
+/** What a `{{name}}` stands for, for showing on hover. */
+export function describeVariable(
+  name: string,
+): { kind: "variable"; variable: ResolvedVar } | { kind: "dynamic"; description: string } | null {
+  if (name.startsWith("$env.")) {
+    const variable = name.slice(5);
+    return {
+      kind: "dynamic",
+      description: variable.startsWith("GETMAN_")
+        ? `The ${variable} environment variable of the getman process`
+        : "Only environment variables named GETMAN_* can be read",
+    };
+  }
+  if (name.startsWith("$")) {
+    const dynamic = ws.dynamic.find((d) => d.name === name || name.startsWith(`${d.name}.`));
+    return dynamic ? { kind: "dynamic", description: dynamic.description } : null;
+  }
+  const variable = ws.variables.find((v) => v.name === name);
+  return variable ? { kind: "variable", variable } : null;
 }
 
 function preview(value: string): string {
@@ -211,6 +288,8 @@ export interface RequestTab {
   sendId?: string;
   requestPane: string;
   responsePane: string;
+  /** Opened from history: when it was sent, and whether the body was cut. */
+  fromHistory?: { at: number; bodyCut: boolean };
 }
 
 export interface FolderTab {
@@ -321,6 +400,7 @@ export function closeTab(id: string, force = false): void {
     });
     return;
   }
+  rememberClosed([tab]);
   tabs.list.splice(at, 1);
   if (tabs.active === id) {
     const next = tabs.list[Math.min(at, tabs.list.length - 1)];
@@ -329,45 +409,321 @@ export function closeTab(id: string, force = false): void {
   persistTabs();
 }
 
-function persistTabs(): void {
-  if (!ws.root) return;
-  const open = tabs.list
-    .map((tab) =>
-      tab.kind === "request" && tab.path
-        ? `r:${tab.path}`
-        : tab.kind === "folder"
-          ? `f:${tab.path}`
-          : tab.kind === "environments"
-            ? "e:"
-            : "",
-    )
-    .filter(Boolean);
-  store(scoped("tabs"), { open, active: tabs.active });
+/** Closes several tabs, asking once if any has changes that are not saved. */
+export function closeTabs(ids: string[], force = false): void {
+  const closing = tabs.list.filter((tab) => ids.includes(tab.id));
+  if (closing.length === 0) return;
+  const dirty = closing.filter(isDirty);
+  if (!force && dirty.length > 0) {
+    confirmDialog({
+      title:
+        closing.length === 1 ? `Close ${tabTitle(closing[0]!)}?` : `Close ${closing.length} tabs?`,
+      body:
+        dirty.length === 1
+          ? `${tabTitle(dirty[0]!)} has changes that are not saved.`
+          : `${dirty.length} of them have changes that are not saved.`,
+      confirm: "Close without saving",
+      danger: true,
+      onConfirm: () => closeTabs(ids, true),
+    });
+    return;
+  }
+  rememberClosed(closing);
+  const before = tabs.list;
+  const at = before.findIndex((tab) => tab.id === tabs.active);
+  const stays = (tab: Tab) => !ids.includes(tab.id);
+  tabs.list = before.filter(stays);
+  if (!tabs.list.some((tab) => tab.id === tabs.active)) {
+    const next =
+      before.slice(at + 1).find(stays) ?? before.slice(0, Math.max(0, at)).reverse().find(stays);
+    tabs.active = next?.id ?? "";
+  }
+  persistTabs();
+}
+
+/** Closes the other tabs, those to the right of one, or all of them. */
+export function closeTabsFrom(id: string, mode: "others" | "right" | "all"): void {
+  closeTabs(
+    closeTargets(
+      tabs.list.map((tab) => tab.id),
+      id,
+      mode,
+    ),
+  );
+}
+
+/** Puts a tab at another place in the strip. */
+export function moveTab(id: string, to: number): void {
+  const from = tabs.list.findIndex((tab) => tab.id === id);
+  if (from < 0 || from === to) return;
+  tabs.list = moveTo(tabs.list, from, to);
+  persistTabs();
+}
+
+/** Opens a copy of a request tab as a new, unsaved request. */
+export function duplicateTab(id: string): void {
+  const tab = tabs.list.find((t) => t.id === id);
+  if (tab?.kind !== "request") return;
+  const copy = toRequest(clone(tab.draft));
+  copy.name = `${tab.draft.name || "Untitled request"} copy`;
+  newRequest(copy, contextPath(tab));
+}
+
+// ---- Remembering tabs ----------------------------------------------------------
+//
+// Open tabs and their unsaved drafts are kept in this browser, per workspace,
+// so they survive a reload or a restart. Closed tabs go on a short stack that
+// Alt+Shift+T (or Ctrl+Shift+T where the browser lets it through) reopens.
+
+export const closedTabs = $state({ list: [] as SavedTab[] });
+
+function saveTab(tab: Tab): SavedTab {
+  switch (tab.kind) {
+    case "request": {
+      const keep = !tab.path || isDirty(tab);
+      return {
+        kind: "request",
+        path: tab.path,
+        inheritPath: tab.inheritPath,
+        name: tab.draft.name,
+        method: tab.draft.method,
+        ...(keep ? { draft: clone(tab.draft), base: tab.saved } : {}),
+        requestPane: tab.requestPane,
+        responsePane: tab.responsePane,
+      };
+    }
+    case "folder":
+      return {
+        kind: "folder",
+        path: tab.path,
+        name: tab.draft.name,
+        ...(isDirty(tab) ? { draft: clone(tab.draft), base: tab.saved } : {}),
+        pane: tab.pane,
+      };
+    case "environments":
+      return { kind: "environments", selected: tab.selected };
+    case "runner":
+      return { kind: "runner", target: tab.target };
+  }
+}
+
+function rememberClosed(list: Tab[]): void {
+  for (const tab of list) closedTabs.list = pushClosed(closedTabs.list, saveTab(tab));
+}
+
+/** Writes the open tabs down; false if the drafts did not fit. */
+function persistTabs(): boolean {
+  if (!ws.root || !sessionRestored) return true;
+  const session: SavedSession = {
+    version: 2,
+    tabs: tabs.list.map(saveTab),
+    active: tabs.list.findIndex((tab) => tab.id === tabs.active),
+  };
+  try {
+    localStorage.setItem(`getman.${scoped("tabs")}`, JSON.stringify(session));
+    return true;
+  } catch {
+    // Too big for the browser's storage: keep the tabs without drafts.
+    const light = session.tabs.map((tab) =>
+      tab.kind === "request" || tab.kind === "folder" ? { ...tab, draft: undefined } : tab,
+    );
+    store(scoped("tabs"), { ...session, tabs: light });
+    return false;
+  }
+}
+
+let sessionRestored = false;
+let persistTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Saves the tabs now, as the page goes away; false if drafts were lost. */
+export function flushSession(): boolean {
+  clearTimeout(persistTimer);
+  return persistTabs();
+}
+
+/** Saves the tabs a moment after any draft changes. */
+let watching = false;
+
+function watchSession(): void {
+  if (watching) return;
+  watching = true;
+  $effect.root(() => {
+    $effect(() => {
+      JSON.stringify(
+        tabs.list.map((tab) =>
+          tab.kind === "request"
+            ? [tab.draft, tab.requestPane, tab.responsePane]
+            : tab.kind === "folder"
+              ? [tab.draft, tab.pane]
+              : tab.kind === "environments"
+                ? tab.selected
+                : tab.target,
+        ),
+      );
+      void tabs.active;
+      clearTimeout(persistTimer);
+      persistTimer = setTimeout(persistTabs, 400);
+    });
+  });
+  window.addEventListener("pagehide", flushSession);
+}
+
+function savedId(saved: SavedTab): string {
+  switch (saved.kind) {
+    case "request":
+      return saved.path ? `r:${saved.path}` : "";
+    case "folder":
+      return `f:${saved.path}`;
+    case "environments":
+      return "environments";
+    case "runner":
+      return `run:${saved.target}`;
+  }
+}
+
+const restoreNotes = { lost: 0, changed: 0 };
+
+/** Opens a remembered tab, coping with files moved or deleted meanwhile. */
+async function openSaved(saved: SavedTab, taken: Set<string>): Promise<Tab | null> {
+  switch (saved.kind) {
+    case "request": {
+      const asNew = (inheritPath: string | null) => {
+        const tab = requestTab(null, toRequest(newDraft()), inheritPath);
+        tab.draft = toDraft(saved.draft as unknown as Request);
+        tab.requestPane = saved.requestPane;
+        tab.responsePane = saved.responsePane;
+        return tab;
+      };
+      // A new request inherits the settings of the folders above the path
+      // it was opened from, which need not exist as a file.
+      const inherits = (path: string | null) => {
+        const folder = path === null ? "" : parentOf(path);
+        return path !== null && (folder === "" || findNode(folder)?.kind === "folder");
+      };
+      if (saved.path === null) {
+        if (!saved.draft) return null;
+        return asNew(inherits(saved.inheritPath) ? saved.inheritPath : null);
+      }
+      let path = saved.path;
+      let request = await api.readRequest(path).catch(() => null);
+      if (!request) {
+        const moved = findMoved(
+          { path, name: saved.draft?.name ?? saved.name, method: saved.method },
+          allRequests(),
+          taken,
+        );
+        if (moved) {
+          path = moved;
+          request = await api.readRequest(moved).catch(() => null);
+        }
+      }
+      if (!request) {
+        if (!saved.draft) return null;
+        // The file is gone; keep the unsaved work as a new request.
+        restoreNotes.lost++;
+        return asNew(inherits(saved.path) ? saved.path : null);
+      }
+      const tab = requestTab(path, request);
+      if (saved.draft) {
+        if (saved.base !== undefined && saved.base !== tab.saved) restoreNotes.changed++;
+        tab.draft = toDraft(saved.draft as unknown as Request);
+      }
+      tab.requestPane = saved.requestPane;
+      tab.responsePane = saved.responsePane;
+      return tab;
+    }
+    case "folder": {
+      const folder = await api.readFolder(saved.path).catch(() => null);
+      if (!folder) {
+        if (saved.draft) restoreNotes.lost++;
+        return null;
+      }
+      const tab = folderTab(saved.path, folder);
+      if (saved.draft) {
+        if (saved.base !== undefined && saved.base !== tab.saved) restoreNotes.changed++;
+        tab.draft = normalizeFolder(saved.draft);
+      }
+      tab.pane = saved.pane;
+      return tab;
+    }
+    case "environments":
+      return { kind: "environments", id: "environments", selected: saved.selected };
+    case "runner":
+      return saved.target === "" || findNode(saved.target) ? runnerTab(saved.target) : null;
+  }
 }
 
 async function restoreTabs(): Promise<void> {
-  const saved = load<{ open: string[]; active: string }>(scoped("tabs"), { open: [], active: "" });
-  for (const entry of saved.open) {
-    const kind = entry.slice(0, 2);
-    const path = entry.slice(2);
+  const saved = readSession(load<unknown>(scoped("tabs"), null));
+  const taken = new Set<string>();
+  let active = "";
+  restoreNotes.lost = 0;
+  restoreNotes.changed = 0;
+  for (const [i, entry] of saved.tabs.entries()) {
     try {
-      if (kind === "r:") {
-        const request = await api.readRequest(path);
-        tabs.list.push(requestTab(path, request));
-      } else if (kind === "f:") {
-        const folder = await api.readFolder(path);
-        tabs.list.push(folderTab(path, folder));
-      } else if (kind === "e:") {
-        tabs.list.push({ kind: "environments", id: "environments", selected: "" });
-      }
+      const tab = await openSaved(entry, taken);
+      if (!tab || tabs.list.some((t) => t.id === tab.id)) continue;
+      tabs.list.push(tab);
+      if (tab.kind === "request" && tab.path) taken.add(tab.path);
+      if (i === saved.active) active = tab.id;
     } catch {
-      // The file is gone; skip it.
+      // A tab that cannot be read back is left closed.
     }
   }
-  tabs.active = tabs.list.some((t) => t.id === saved.active)
-    ? saved.active
-    : (tabs.list[0]?.id ?? "");
+  tabs.active = active || (tabs.list[0]?.id ?? "");
+  sessionRestored = true;
+  watchSession();
+  if (restoreNotes.lost > 0) {
+    notify(
+      restoreNotes.lost === 1
+        ? "A file with unsaved changes is gone; its changes are open as a new request."
+        : `${restoreNotes.lost} files with unsaved changes are gone; their changes are open as new requests.`,
+      "info",
+    );
+  } else if (restoreNotes.changed > 0) {
+    notify(
+      "Some files changed on disk since your unsaved edits; saving keeps your version.",
+      "info",
+    );
+  }
   void refreshVariables();
+}
+
+/** Reopens the tab closed last. */
+export async function reopenClosedTab(): Promise<void> {
+  const saved = closedTabs.list.at(-1);
+  if (!saved) {
+    notify("No closed tabs to reopen.");
+    return;
+  }
+  closedTabs.list = closedTabs.list.slice(0, -1);
+  const id = savedId(saved);
+  if (id && tabs.list.some((tab) => tab.id === id)) {
+    focusTab(id);
+    return;
+  }
+  const open = new Set(
+    tabs.list.flatMap((tab) => (tab.kind === "request" && tab.path ? [tab.path] : [])),
+  );
+  try {
+    const tab = await openSaved(saved, open);
+    if (tab) addTab(tab);
+    else notify("That tab's file is gone.", "error");
+  } catch (error) {
+    notify(message(error), "error");
+  }
+}
+
+/** Shows an item in the sidebar: opens it and its folders, and focuses it. */
+export function revealInTree(path: string): void {
+  prefs.sidebarOpen = true;
+  let folder = parentOf(path);
+  while (folder) {
+    setExpanded(folder, true);
+    folder = parentOf(folder);
+  }
+  signals.revealPath = path;
+  signals.reveal++;
 }
 
 function requestTab(
@@ -438,6 +794,32 @@ export function newRequest(seed?: Request, inheritPath: string | null = null): v
   addTab(tab);
 }
 
+/** Opens a request from history as a new tab, with the response it got. */
+export async function openHistoryEntry(entry: HistoryEntry): Promise<void> {
+  const detail = await api.historyEntry(entry.id).catch(() => null);
+  newRequest({ ...entry.request, name: entry.request.name || entry.url }, entry.path);
+  const tab = activeTab();
+  if (tab?.kind !== "request") return;
+  tab.fromHistory = { at: entry.at, bodyCut: detail?.body_cut ?? false };
+  if (!detail?.response && !entry.error) return;
+  tab.execution = {
+    path: entry.path,
+    name: entry.name,
+    request: null,
+    response: detail?.response ?? null,
+    error: entry.error,
+    tests: [],
+    checks: [],
+    logs: [],
+    script_errors: [],
+    changes: [],
+    missing_variables: [],
+    warnings: [],
+    skipped: false,
+    next_request: null,
+  };
+}
+
 export async function openFolder(path: string): Promise<void> {
   const id = `f:${path}`;
   if (tabs.list.some((tab) => tab.id === id)) {
@@ -468,9 +850,13 @@ export function openRunner(target: string): void {
     focusTab(id);
     return;
   }
-  addTab({
+  addTab(runnerTab(target));
+}
+
+function runnerTab(target: string): RunnerTab {
+  return {
     kind: "runner",
-    id,
+    id: `run:${target}`,
     target,
     environment: ws.environment,
     iterations: null,
@@ -490,7 +876,7 @@ export function openRunner(target: string): void {
     plan: planFor(ws.tree, target),
     shownRun: "",
     reopened: null,
-  });
+  };
 }
 
 /** Path whose folder settings a request tab inherits. */
@@ -500,14 +886,23 @@ export function contextPath(tab: RequestTab): string | null {
 
 export async function refreshVariables(): Promise<void> {
   const tab = activeTab();
-  if (!tab || tab.kind !== "request") return;
+  if (!tab || (tab.kind !== "request" && tab.kind !== "folder")) return;
   if (!ws.ready) return;
   try {
-    ws.variables = await api.variables({
-      path: contextPath(tab),
-      request: toRequest(tab.draft),
-      environment: ws.environment || null,
-    });
+    ws.variables = await api.variables(
+      tab.kind === "request"
+        ? {
+            path: contextPath(tab),
+            request: toRequest(tab.draft),
+            environment: ws.environment || null,
+          }
+        : {
+            // What a request inside the folder would see.
+            path: tab.path ? `${tab.path}/_folder.yaml` : null,
+            request: { name: "", method: "GET", url: "" },
+            environment: ws.environment || null,
+          },
+    );
     ws.variablesReady = true;
   } catch {
     // Highlighting falls back to marking nothing as missing.
@@ -576,6 +971,7 @@ export async function send(tab: RequestTab): Promise<void> {
   if (tab.sending) return;
   tab.sending = true;
   tab.sendId = sendId();
+  tab.fromHistory = undefined;
   try {
     const execution = await api.send({
       path: contextPath(tab),
@@ -658,10 +1054,12 @@ export function retargetTabs(from: string, to: string): void {
 
 /** Closes tabs of an item that no longer exists. */
 export function dropTabs(path: string): void {
-  tabs.list = tabs.list.filter((tab) => {
+  const inside = (tab: Tab) => {
     const own = tab.kind === "request" ? tab.path : tab.kind === "folder" ? tab.path : null;
-    return !(own && (own === path || own.startsWith(`${path}/`)));
-  });
+    return !!own && (own === path || own.startsWith(`${path}/`));
+  };
+  rememberClosed(tabs.list.filter(inside));
+  tabs.list = tabs.list.filter((tab) => !inside(tab));
   if (!tabs.list.some((t) => t.id === tabs.active)) tabs.active = tabs.list[0]?.id ?? "";
   persistTabs();
 }
@@ -777,7 +1175,10 @@ export type Dialog =
       confirm: string;
       onSubmit: (value: string) => void | Promise<void>;
     }
-  | { kind: "saveAs"; tab: RequestTab };
+  | { kind: "saveAs"; tab: RequestTab }
+  | { kind: "move"; paths: string[] }
+  | { kind: "headerPresets" }
+  | { kind: "setVariable"; value: string; name: string; tab: RequestTab | null };
 
 export const dialogs = $state({ current: null as Dialog | null });
 
@@ -817,20 +1218,34 @@ export interface Notice {
   id: number;
   text: string;
   kind: "ok" | "error" | "info";
+  /** A button on the notice, such as Undo. */
+  action?: { label: string; run: () => void };
 }
 
 export const notices = $state({ list: [] as Notice[] });
 let noticeId = 0;
 
-export function notify(text: string, kind: Notice["kind"] = "info"): void {
+export function notify(
+  text: string,
+  kind: Notice["kind"] = "info",
+  action?: Notice["action"],
+): void {
   const id = ++noticeId;
-  notices.list.push({ id, text, kind });
-  setTimeout(
-    () => {
-      notices.list = notices.list.filter((n) => n.id !== id);
-    },
-    kind === "error" ? 6000 : 2200,
-  );
+  notices.list.push({ id, text, kind, action });
+  setTimeout(() => dismiss(id), action ? 10000 : kind === "error" ? 6000 : 2200);
+}
+
+export function dismiss(id: number): void {
+  notices.list = notices.list.filter((n) => n.id !== id);
+}
+
+/** Runs the action of the newest notice that offers one, such as Undo. */
+export function runNoticeAction(): boolean {
+  const notice = [...notices.list].reverse().find((n) => n.action);
+  if (!notice?.action) return false;
+  dismiss(notice.id);
+  notice.action.run();
+  return true;
 }
 
 export function message(error: unknown): string {
@@ -838,7 +1253,14 @@ export function message(error: unknown): string {
 }
 
 /** Requests to move focus, counted so the same request can repeat. */
-export const signals = $state({ focusUrl: 0, focusEnvironment: 0, focusFilter: 0 });
+export const signals = $state({
+  focusUrl: 0,
+  focusEnvironment: 0,
+  focusFilter: 0,
+  /** Asks the sidebar to show `revealPath`. */
+  reveal: 0,
+  revealPath: "",
+});
 
 // ---- Item actions -------------------------------------------------------------------
 
@@ -877,23 +1299,106 @@ export function renameItem(path: string, kind: "request" | "folder", current: st
   });
 }
 
-export function deleteItem(path: string, kind: "request" | "folder", name: string): void {
+/** Moves an item to the trash; the kind and name are not needed any more. */
+export function deleteItem(path: string, _kind?: "request" | "folder", _name?: string): void {
+  deleteItems([path]);
+}
+
+/** Paths without those inside another of them. */
+export function outermost(paths: string[]): string[] {
+  const unique = [...new Set(paths)];
+  return unique.filter((path) => !unique.some((other) => path.startsWith(`${other}/`)));
+}
+
+/**
+ * Moves items to the trash, offering to undo it. Asks first only when an
+ * open tab inside them has changes that are not saved.
+ */
+export function deleteItems(paths: string[]): void {
+  const targets = outermost(paths).filter(Boolean);
+  if (targets.length === 0) return;
+  const inside = (own: string) => targets.some((p) => own === p || own.startsWith(`${p}/`));
+  const unsaved = tabs.list.filter(
+    (tab) =>
+      (tab.kind === "request" || tab.kind === "folder") &&
+      tab.path &&
+      inside(tab.path) &&
+      isDirty(tab),
+  );
+  const go = () => void trashItems(targets);
+  if (unsaved.length === 0) {
+    go();
+    return;
+  }
   confirmDialog({
-    title: `Delete ${name}?`,
+    title: unsaved.length === 1 ? `Delete ${tabTitle(unsaved[0]!)}?` : "Delete these items?",
     body:
-      kind === "folder"
-        ? `The folder ${path}/ and everything in it will be deleted from disk. Git can bring it back if it was committed.`
-        : `${path} will be deleted from disk. Git can bring it back if it was committed.`,
+      unsaved.length === 1
+        ? "It has changes that are not saved. They go; the file can be put back from the trash."
+        : `${unsaved.length} open tabs have changes that are not saved. They go; the files can be put back from the trash.`,
     confirm: "Delete",
+    danger: true,
+    onConfirm: go,
+  });
+}
+
+async function trashItems(paths: string[]): Promise<void> {
+  clearSelection();
+  const trashed: TrashItem[] = [];
+  for (const path of paths) {
+    try {
+      trashed.push(await api.remove(path));
+      dropTabs(path);
+    } catch (error) {
+      notify(message(error), "error");
+    }
+  }
+  await refreshTree();
+  await refreshTrash();
+  if (trashed.length === 0) return;
+  const what = trashed.length === 1 ? trashed[0]!.name : `${trashed.length} items`;
+  notify(`Moved ${what} to the trash`, "info", {
+    label: "Undo",
+    run: () => void restoreItems(trashed),
+  });
+}
+
+/** Puts items back from the trash, the last deleted first. */
+export async function restoreItems(items: TrashItem[]): Promise<void> {
+  const restored: string[] = [];
+  for (const item of [...items].reverse()) {
+    try {
+      const { path } = await api.restore(item.id);
+      restored.push(path);
+      if (parentOf(path)) setExpanded(parentOf(path), true);
+    } catch (error) {
+      notify(message(error), "error");
+    }
+  }
+  await refreshTree();
+  await refreshTrash();
+  if (restored.length > 0) {
+    notify(
+      restored.length === 1 ? `Put back ${restored[0]}` : `Put back ${restored.length} items`,
+      "ok",
+    );
+  }
+}
+
+export function emptyTrash(): void {
+  const count = ws.trash.length;
+  confirmDialog({
+    title: "Empty the trash?",
+    body: `${count === 1 ? "The item" : `All ${count} items`} in the trash will be deleted from disk for good. Git can bring back only what was committed.`,
+    confirm: "Empty trash",
     danger: true,
     onConfirm: async () => {
       try {
-        await api.remove(path);
-        dropTabs(path);
-        await refreshTree();
+        await api.emptyTrash();
       } catch (error) {
         notify(message(error), "error");
       }
+      await refreshTrash();
     },
   });
 }
@@ -905,6 +1410,43 @@ export async function duplicateItem(path: string, kind: "request" | "folder"): P
     if (kind === "request") await openRequest(copy.path);
   } catch (error) {
     notify(message(error), "error");
+  }
+}
+
+/** Copies several items next to their originals. */
+export async function duplicateItems(paths: string[]): Promise<void> {
+  let copies = 0;
+  for (const path of outermost(paths)) {
+    try {
+      await api.duplicate(path);
+      copies++;
+    } catch (error) {
+      notify(message(error), "error");
+    }
+  }
+  await refreshTree();
+  if (copies > 0) notify(copies === 1 ? "Duplicated" : `Duplicated ${copies} items`, "ok");
+}
+
+/** Moves several items into one folder. */
+export async function moveItems(paths: string[], to: string): Promise<void> {
+  clearSelection();
+  let moved = 0;
+  for (const path of outermost(paths)) {
+    if (parentOf(path) === to || to === path || to.startsWith(`${path}/`)) continue;
+    try {
+      const result = await api.move(path, to);
+      retargetTabs(path, result.path);
+      moved++;
+    } catch (error) {
+      notify(message(error), "error");
+    }
+  }
+  if (to) setExpanded(to, true);
+  await refreshTree();
+  if (moved > 0) {
+    const where = to === "" ? ws.name : (findNode(to)?.name ?? to);
+    notify(moved === 1 ? `Moved to ${where}` : `Moved ${moved} items to ${where}`, "ok");
   }
 }
 

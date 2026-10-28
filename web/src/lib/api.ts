@@ -10,6 +10,8 @@ import type {
   Example,
   Execution,
   Folder,
+  HeaderPreset,
+  HistoryDetail,
   HistoryEntry,
   ImportReport,
   Language,
@@ -25,6 +27,7 @@ import type {
   RunListing,
   StoredRun,
   Token,
+  TrashItem,
   WorkspaceInfo,
 } from "./types";
 
@@ -144,8 +147,13 @@ export const api = {
   rename: (path: string, name: string) => post<{ path: string }>("/item/rename", { path, name }),
   move: (path: string, to: string) => post<{ path: string }>("/item/move", { path, to }),
   duplicate: (path: string) => post<{ path: string }>("/item/duplicate", { path }),
-  remove: (path: string) => post("/item/delete", { path }),
+  /** Moves the item to the trash. */
+  remove: (path: string) => post<TrashItem>("/item/delete", { path }),
   order: (folder: string, order: string[]) => post("/item/order", { folder, order }),
+
+  trash: () => call<TrashItem[]>("GET", "/trash"),
+  restore: (id: string) => post<{ path: string }>("/trash/restore", { id }),
+  emptyTrash: () => post("/trash/empty"),
 
   environments: () => call<EnvironmentSummary[]>("GET", "/environments"),
   createEnvironment: (name: string) => post<{ id: string }>("/environment/create", { name }),
@@ -155,6 +163,7 @@ export const api = {
   renameEnvironment: (id: string, name: string) =>
     post<{ id: string }>("/environment/rename", { id, name }),
   deleteEnvironment: (id: string) => post("/environment/delete", { id }),
+  duplicateEnvironment: (id: string) => post<{ id: string }>("/environment/duplicate", { id }),
   globals: () => call<LocalState>("GET", "/globals"),
   writeGlobals: (state: LocalState) => call("PUT", "/globals", state),
 
@@ -165,6 +174,13 @@ export const api = {
     post<{ code: string; missing: string[] }>("/codegen", args),
   languages: () => call<Language[]>("GET", "/languages"),
   variables: (args: SendArgs) => post<ResolvedVar[]>("/variables", args),
+  /** Saves a variable where the matching script call would. */
+  setVariable: (args: {
+    scope: "environment" | "workspace" | "global";
+    name: string;
+    value: string;
+    environment?: string | null;
+  }) => post("/variables/set", args),
   dynamic: () => call<DynamicVar[]>("GET", "/dynamic"),
   oauthToken: (args: { path?: string | null; auth: Auth; environment?: string | null }) =>
     post<Token>("/oauth2/token", args),
@@ -182,7 +198,11 @@ export const api = {
   clearCookies: () => post("/cookies/clear"),
 
   history: () => call<HistoryEntry[]>("GET", "/history"),
+  historyEntry: (id: string) => post<HistoryDetail>("/history/read", { id }),
   clearHistory: () => post("/history/clear"),
+
+  headerPresets: () => call<HeaderPreset[]>("GET", "/header-presets"),
+  writeHeaderPresets: (presets: HeaderPreset[]) => call("PUT", "/header-presets", presets),
 
   cancelRun: (id: string) => post("/run/cancel", { id }),
 

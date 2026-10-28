@@ -1,9 +1,13 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { api } from "../lib/api";
-  import { ago, methodClass } from "../lib/format";
+  import { methodClass } from "../lib/format";
   import { rank } from "../lib/fuzzy";
+  import { sortNodes } from "../lib/tree";
   import {
     allRequests,
+    collapseAll,
+    emptyTrash,
     message,
     newRequest,
     notify,
@@ -12,16 +16,20 @@
     openRequest,
     openRunner,
     promptDialog,
+    refreshTrash,
     refreshTree,
     setExpanded,
+    setSortTree,
     signals,
     activeTab,
     ws,
   } from "../lib/store.svelte";
+  import HistoryList from "./HistoryList.svelte";
   import Icon from "./Icon.svelte";
+  import TrashList from "./TrashList.svelte";
   import Tree from "./Tree.svelte";
 
-  let view = $state<"requests" | "history">("requests");
+  let view = $state<"requests" | "history" | "trash">("requests");
   let filter = $state("");
   let filterInput: HTMLInputElement;
   let seen = signals.focusFilter;
@@ -35,11 +43,30 @@
     }
   });
 
+  let revealed = signals.reveal;
+  $effect(() => {
+    if (signals.reveal === revealed) return;
+    revealed = signals.reveal;
+    view = "requests";
+    filter = "";
+    const path = signals.revealPath;
+    void tick().then(() => {
+      const row = [...document.querySelectorAll<HTMLElement>(".sidebar [data-row]")].find(
+        (element) => element.dataset.path === path,
+      );
+      row?.scrollIntoView({ block: "nearest" });
+      row?.focus();
+    });
+  });
+
   const matches = $derived(
     filter.trim() === ""
       ? []
       : rank(filter, allRequests(), (r) => `${r.name} ${r.path}`).slice(0, 80),
   );
+
+  const nodes = $derived(ws.sortTree ? sortNodes(ws.tree) : ws.tree);
+  const anyOpen = $derived(Object.values(ws.expanded).some(Boolean));
 
   const current = $derived.by(() => {
     const tab = activeTab();
@@ -75,10 +102,6 @@
     }
   }
 
-  function openHistory(entry: (typeof ws.history)[number]): void {
-    newRequest({ ...entry.request, name: entry.request.name || entry.url }, entry.path);
-  }
-
   async function clearHistory(): Promise<void> {
     await api.clearHistory().catch(() => {});
     ws.history = [];
@@ -110,20 +133,57 @@
     <kbd aria-hidden="true">/</kbd>
   </div>
 
-  <div class="switch tablist" role="tablist" aria-label="Sidebar">
-    <button
-      class="tab"
-      role="tab"
-      aria-selected={view === "requests"}
-      onclick={() => (view = "requests")}>Requests</button
-    >
-    <button
-      class="tab"
-      role="tab"
-      aria-selected={view === "history"}
-      onclick={() => (view = "history")}
-      >History <span class="count">{ws.history.length}</span></button
-    >
+  <div class="switch-row">
+    <div class="switch tablist" role="tablist" aria-label="Sidebar">
+      <button
+        class="tab"
+        role="tab"
+        aria-selected={view === "requests"}
+        onclick={() => (view = "requests")}>Requests</button
+      >
+      <button
+        class="tab"
+        role="tab"
+        aria-selected={view === "history"}
+        onclick={() => (view = "history")}
+        >History <span class="count">{ws.history.length}</span></button
+      >
+      <button
+        class="tab"
+        role="tab"
+        aria-selected={view === "trash"}
+        onclick={() => {
+          view = "trash";
+          void refreshTrash();
+        }}
+        >Trash {#if ws.trash.length}<span class="count">{ws.trash.length}</span>{/if}</button
+      >
+    </div>
+    {#if view === "requests"}
+      <div class="tools">
+        <button
+          class="icon-btn"
+          aria-label="Collapse all folders"
+          title="Collapse all folders"
+          disabled={!anyOpen}
+          onclick={collapseAll}
+        >
+          <Icon name="collapse" />
+        </button>
+        <button
+          class="icon-btn"
+          class:on={ws.sortTree}
+          aria-label="Sort A to Z"
+          aria-pressed={ws.sortTree}
+          title={ws.sortTree
+            ? "Sorted A to Z; click for each folder's own order"
+            : "Sort A to Z (only here, the files keep their order)"}
+          onclick={() => setSortTree(!ws.sortTree)}
+        >
+          <Icon name="sort" />
+        </button>
+      </div>
+    {/if}
   </div>
 
   <div class="body">
@@ -159,31 +219,12 @@
           </button>
         </div>
       {:else}
-        <Tree nodes={ws.tree} {current} onNewFolder={newFolder} />
+        <Tree {nodes} {current} onNewFolder={newFolder} />
       {/if}
+    {:else if view === "trash"}
+      <TrashList />
     {:else}
-      <ul class="results history">
-        {#each ws.history as entry (entry.id)}
-          <li>
-            <button onclick={() => openHistory(entry)} title={entry.url}>
-              <span class="method {methodClass(entry.method)}">{entry.method}</span>
-              <span class="text">
-                <span class="title">{entry.name || entry.url}</span>
-                <span class="path">
-                  {#if entry.status !== null}
-                    <span class="num">{entry.status}</span> ·
-                  {:else if entry.error}
-                    <span class="failed">failed</span> ·
-                  {/if}
-                  {ago(entry.at)}
-                </span>
-              </span>
-            </button>
-          </li>
-        {:else}
-          <li class="none">Requests you send appear here.</li>
-        {/each}
-      </ul>
+      <HistoryList />
     {/if}
   </div>
 
@@ -203,6 +244,10 @@
       >
         <Icon name="play" /> Run
       </button>
+    {:else if view === "trash"}
+      <button class="btn quiet danger" onclick={emptyTrash} disabled={ws.trash.length === 0}>
+        <Icon name="trash" /> Empty trash
+      </button>
     {:else}
       <button class="btn quiet" onclick={clearHistory} disabled={ws.history.length === 0}>
         <Icon name="trash" /> Clear history
@@ -215,6 +260,7 @@
   .sidebar {
     display: grid;
     grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     height: 100%;
     min-width: 0;
   }
@@ -276,8 +322,28 @@
     right: 6px;
   }
 
+  .switch-row {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--rule-2);
+  }
+
   .switch {
+    flex: 1;
+    min-width: 0;
     padding: 0 var(--s1);
+    border-bottom: 0;
+  }
+
+  .tools {
+    display: flex;
+    gap: 2px;
+    padding-right: var(--s1);
+  }
+
+  .tools .on {
+    background: var(--ink);
+    color: var(--paper);
   }
 
   .body {
@@ -340,10 +406,6 @@
   .current .path {
     color: inherit;
     opacity: 0.7;
-  }
-
-  .failed {
-    color: var(--error);
   }
 
   .none {

@@ -19,12 +19,15 @@
     closeTab,
     cycleTab,
     dialogs,
+    flushSession,
     isDirty,
     loadWorkspace,
     newRequest,
     openDialog,
     prefs,
     refreshTree,
+    reopenClosedTab,
+    runNoticeAction,
     save,
     selectTab,
     send,
@@ -56,8 +59,9 @@
       if (ws.ready) void refreshTree();
     };
     window.addEventListener("focus", onFocus);
+    // Unsaved drafts are kept for the next visit; warn only if they did not fit.
     const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (tabs.list.some(isDirty)) event.preventDefault();
+      if (!flushSession() && tabs.list.some(isDirty)) event.preventDefault();
     };
     window.addEventListener("beforeunload", beforeUnload);
     return () => {
@@ -93,6 +97,8 @@
       handle(() => newRequest());
     } else if (matches(event, "alt+w")) {
       if (current) handle(() => closeTab(current.id));
+    } else if (matches(event, "alt+shift+t") || matches(event, "mod+shift+t")) {
+      handle(() => void reopenClosedTab());
     } else if (matches(event, "alt+]")) {
       handle(() => cycleTab(1));
     } else if (matches(event, "alt+[")) {
@@ -110,6 +116,9 @@
     } else if (/^[1-9]$/.test(event.key) && event.altKey && !event.ctrlKey && !event.metaKey) {
       const target = tabs.list[Number(event.key) - 1];
       if (target) handle(() => selectTab(target.id));
+    } else if (matches(event, "mod+z") && !typing(event)) {
+      // Undoes what a notice offers to undo, such as a delete.
+      if (runNoticeAction()) event.preventDefault();
     } else if (event.key === "?" && !typing(event)) {
       handle(() => openDialog({ kind: "shortcuts" }));
     } else if (event.key === "/" && !typing(event)) {

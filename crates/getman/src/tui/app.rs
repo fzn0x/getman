@@ -8,7 +8,7 @@ use getman_core::Workspace;
 use getman_core::execute::{Context, Execution, Executor, persist_changes};
 use getman_core::model::{Body, KeyValue, Request};
 use getman_core::runner::{RunEvent, RunOptions};
-use getman_core::workspace::{EnvironmentSummary, Node};
+use getman_core::workspace::{EnvironmentSummary, Node, TrashItem};
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::text;
@@ -34,6 +34,11 @@ pub(crate) enum Mode {
     /// Typing the name of a new request in a folder.
     Name {
         folder: String,
+    },
+    /// Asking before moving a request or folder to the trash.
+    Delete {
+        path: String,
+        name: String,
     },
 }
 
@@ -155,6 +160,8 @@ pub(crate) struct App {
     quit_armed: bool,
     pub(crate) edit: Option<Edit>,
     pub(crate) spinner: usize,
+    /// The last item moved to the trash, which `u` puts back.
+    trashed: Option<TrashItem>,
 }
 
 impl App {
@@ -192,6 +199,7 @@ impl App {
             quit_armed: false,
             edit: None,
             spinner: 0,
+            trashed: None,
         };
         app.rebuild_rows();
         Ok(app)
@@ -321,6 +329,7 @@ impl App {
             Mode::Url => return self.url_key(key, tx),
             Mode::Filter => return self.filter_key(key),
             Mode::Name { folder } => return self.name_key(key, &folder),
+            Mode::Delete { path, .. } => return self.delete_key(key, &path),
             Mode::Normal => {}
         }
         if self.help {
@@ -400,7 +409,71 @@ impl App {
                 self.name_input.clear();
                 self.mode = Mode::Name { folder };
             }
+            KeyCode::Char('d') | KeyCode::Delete => {
+                if let Some(row) = self.rows.get(self.selected) {
+                    self.mode = Mode::Delete {
+                        path: row.path.clone(),
+                        name: row.name.clone(),
+                    };
+                }
+            }
+            KeyCode::Char('u') => self.restore_trashed(),
             _ => {}
+        }
+    }
+
+    /// Moves the item to the trash once `y` confirms it.
+    fn delete_key(&mut self, key: KeyEvent, path: &str) {
+        self.mode = Mode::Normal;
+        if key.code != KeyCode::Char('y') {
+            return;
+        }
+        let inside = |p: &str| p == path || p.starts_with(&format!("{path}/"));
+        if self
+            .open
+            .as_ref()
+            .is_some_and(|open| inside(&open.path) && open.dirty())
+        {
+            self.say("Save (w) or undo the changes before deleting it", true);
+            return;
+        }
+        match self.workspace().trash(path) {
+            Ok(item) => {
+                if self.open.as_ref().is_some_and(|open| inside(&open.path)) {
+                    self.open = None;
+                    self.execution = None;
+                    self.response_lines.clear();
+                    self.focus = Focus::Tree;
+                }
+                self.say(
+                    format!("Moved {} to the trash · u puts it back", item.name),
+                    false,
+                );
+                self.trashed = Some(item);
+                self.refresh();
+            }
+            Err(e) => self.say(e.to_string(), true),
+        }
+    }
+
+    /// Puts back the item deleted last.
+    fn restore_trashed(&mut self) {
+        let Some(item) = self.trashed.take() else {
+            self.say("Nothing to put back", true);
+            return;
+        };
+        match self.workspace().restore(&item.id) {
+            Ok(path) => {
+                if let Some((parent, _)) = path.rsplit_once('/') {
+                    self.expanded.insert(parent.to_owned());
+                }
+                self.refresh();
+                if let Some(at) = self.rows.iter().position(|r| r.path == path) {
+                    self.selected = at;
+                }
+                self.say(format!("Put {} back", item.name), false);
+            }
+            Err(e) => self.say(e.to_string(), true),
         }
     }
 

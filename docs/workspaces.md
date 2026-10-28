@@ -199,6 +199,6 @@ login request's token survives a restart without ever being committed.
 
 | Commit | Keep local |
 | --- | --- |
-| `getman.yaml`, `_folder.yaml`, request files, `*.examples/` (example bodies), `environments/*.yaml` | `*.local.yaml`, `.getman/` (history, past runs, cookies) |
+| `getman.yaml`, `_folder.yaml`, request files, `*.examples/` (example bodies), `environments/*.yaml` | `*.local.yaml`, `.getman/` (history, past runs, cookies, trash, header presets) |
 
 `getman init` writes a `.gitignore` with exactly those two lines.

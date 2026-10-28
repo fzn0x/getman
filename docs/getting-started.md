@@ -140,6 +140,7 @@ anything.
 | <kbd>Alt</kbd> <kbd>E</kbd> | Switch environment |
 | <kbd>Alt</kbd> <kbd>C</kbd> | Copy the request as code |
 | <kbd>Alt</kbd> <kbd>W</kbd> | Close the tab |
+| <kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>T</kbd> | Reopen the tab closed last |
 | <kbd>Alt</kbd> <kbd>[</kbd> <kbd>Alt</kbd> <kbd>]</kbd> | Previous and next tab |
 | <kbd>/</kbd> | Filter the sidebar |
 | <kbd>?</kbd> | Show every shortcut |
@@ -152,6 +153,7 @@ themselves.
 ## Next
 
 - [Workspaces](workspaces.md): the files and how they fit together
+- [The browser UI](browser-ui.md): tabs, history, the trash and more
 - [Variables and environments](variables.md)
 - [Checks and scripts](checks.md)
 - [Running in CI](runner.md)

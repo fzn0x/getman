@@ -9,6 +9,7 @@
 mod api;
 mod assets;
 mod history;
+mod presets;
 mod token;
 
 use std::collections::HashMap;
@@ -263,6 +264,79 @@ mod tests {
             .insert("origin", HeaderValue::from_static("https://evil.example"));
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    /// Calls the API as the UI does, with GET when there is no body, and
+    /// returns the JSON answer.
+    async fn call(app: &Router, path: &str, body: &str) -> (StatusCode, serde_json::Value) {
+        let builder = if body.is_empty() {
+            HttpRequest::get(path)
+        } else {
+            HttpRequest::post(path)
+        };
+        let request = builder
+            .header("host", "127.0.0.1:7878")
+            .header("x-getman-token", "secret-token")
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_owned()))
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        (status, serde_json::from_slice(&bytes).unwrap_or_default())
+    }
+
+    #[tokio::test]
+    async fn deleting_moves_items_to_the_trash() {
+        let (_dir, app) = app();
+        let (_, created) = call(&app, "/api/request/create", r#"{"name":"Ping"}"#).await;
+        assert_eq!(created["path"], "ping.yaml");
+        let (status, item) = call(&app, "/api/item/delete", r#"{"path":"ping.yaml"}"#).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(item["name"], "Ping");
+        let (_, tree) = call(&app, "/api/tree", "").await;
+        assert_eq!(tree, serde_json::json!([]));
+
+        let id = item["id"].as_str().unwrap();
+        let (_, restored) = call(&app, "/api/trash/restore", &format!(r#"{{"id":"{id}"}}"#)).await;
+        assert_eq!(restored["path"], "ping.yaml");
+        let (status, _) = call(&app, "/api/trash/empty", "{}").await;
+        assert_eq!(status, StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn variables_set_from_the_ui_land_in_local_files_and_secrets_are_marked() {
+        let (_dir, app) = app();
+        let (_, env) = call(&app, "/api/environment/create", r#"{"name":"Dev"}"#).await;
+        assert_eq!(env["id"], "dev");
+        let files = r#"{"id":"dev","environment":{"shared":{"variables":{"token":""},"secrets":["token"]},"local":{"token":"s3cret"}}}"#;
+        call(&app, "/api/environment/write", files).await;
+
+        let set = r#"{"scope":"environment","name":"id","value":"42","environment":"dev"}"#;
+        let (status, _) = call(&app, "/api/variables/set", set).await;
+        assert_eq!(status, StatusCode::OK);
+        let (_, read) = call(&app, "/api/environment/read", r#"{"id":"dev"}"#).await;
+        assert_eq!(read["local"]["id"], "42");
+
+        let ask = r#"{"request":{"name":"x","method":"GET","url":""},"environment":"dev"}"#;
+        let (_, vars) = call(&app, "/api/variables", ask).await;
+        let token = vars
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["name"] == "token")
+            .unwrap();
+        assert_eq!(token["secret"], true);
+
+        let nowhere = r#"{"scope":"environment","name":"id","value":"42"}"#;
+        let (status, _) = call(&app, "/api/variables/set", nowhere).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        let global = r#"{"scope":"global","name":"who","value":"me"}"#;
+        call(&app, "/api/variables/set", global).await;
+        let (_, globals) = call(&app, "/api/globals", "").await;
+        assert_eq!(globals["globals"]["who"], "me");
     }
 
     #[tokio::test]
@@ -536,7 +610,7 @@ mod tests {
         assert_eq!(list, json!([]));
     }
 
-    async fn call(app: &Router, path: &str, body: serde_json::Value) -> serde_json::Value {
+    async fn call_json(app: &Router, path: &str, body: serde_json::Value) -> serde_json::Value {
         let request = HttpRequest::post(path)
             .header("host", "127.0.0.1:7878")
             .header("x-getman-token", "secret-token")
@@ -565,7 +639,7 @@ mod tests {
         let sending = {
             let app = app.clone();
             tokio::spawn(async move {
-                call(
+                call_json(
                     &app,
                     "/api/send",
                     serde_json::json!({
@@ -577,7 +651,7 @@ mod tests {
             })
         };
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-        call(
+        call_json(
             &app,
             "/api/send/cancel",
             serde_json::json!({ "id": "send-1" }),
@@ -603,13 +677,13 @@ mod tests {
                 "host_only": true,
             })
         };
-        call(
+        call_json(
             &app,
             "/api/cookies/set",
             serde_json::json!({ "cookie": cookie("a", "1") }),
         )
         .await;
-        call(
+        call_json(
             &app,
             "/api/cookies/set",
             serde_json::json!({
@@ -634,7 +708,7 @@ mod tests {
         assert_eq!(cookies[0]["name"], "b");
         assert_eq!(cookies[0]["value"], "2");
 
-        let refused = call(
+        let refused = call_json(
             &app,
             "/api/cookies/set",
             serde_json::json!({ "cookie": { "domain": "", "name": "x" } }),

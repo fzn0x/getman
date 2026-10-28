@@ -41,6 +41,11 @@ Press <kbd>?</kbd> in the terminal UI to see these.
 | <kbd>Enter</kbd> or <kbd>l</kbd> | Open a request, expand a folder |
 | <kbd>h</kbd> | Collapse |
 | <kbd>a</kbd> | Add a request in the selected folder |
+| <kbd>d</kbd> or <kbd>Del</kbd> | Move the selected request or folder to the trash, after <kbd>y</kbd> confirms |
+| <kbd>u</kbd> | Put back what you moved to the trash last |
+
+Deleted items wait in `.getman/trash/`, which git ignores; the browser
+UI's Trash lists them, puts them back and empties it.
 
 ### Request
 

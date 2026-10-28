@@ -12,7 +12,6 @@ use axum::extract::State;
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
-use getman_core::Error;
 use getman_core::execute::{Cancel, Context, persist_changes, resolved_variables};
 use getman_core::export::codegen;
 use getman_core::http::{CookieInfo, Payload};
@@ -21,10 +20,12 @@ use getman_core::model::{Auth, Example, Folder, Request};
 use getman_core::runner::{self, RunEvent, RunOptions};
 use getman_core::script::{ChangeScope, VarChange};
 use getman_core::workspace::{EnvironmentFiles, LocalState};
+use getman_core::{Error, Scope};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::AppState;
+use super::presets::{self, Preset};
 use crate::report::{About, Format};
 use crate::runs::{self, StoredRun};
 
@@ -45,12 +46,16 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/item/duplicate", post(duplicate))
         .route("/item/delete", post(delete))
         .route("/item/order", post(order))
+        .route("/trash", get(trash))
+        .route("/trash/restore", post(restore))
+        .route("/trash/empty", post(empty_trash))
         .route("/environments", get(environments))
         .route("/environment/create", post(create_environment))
         .route("/environment/read", post(read_environment))
         .route("/environment/write", post(write_environment))
         .route("/environment/rename", post(rename_environment))
         .route("/environment/delete", post(delete_environment))
+        .route("/environment/duplicate", post(duplicate_environment))
         .route("/globals", get(read_globals).put(write_globals))
         .route("/send", post(send))
         .route("/send/cancel", post(cancel_send))
@@ -58,6 +63,7 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/codegen", post(code))
         .route("/languages", get(languages))
         .route("/variables", post(variables))
+        .route("/variables/set", post(set_variable))
         .route("/dynamic", get(dynamic))
         .route("/run", post(run))
         .route("/run/cancel", post(cancel_run))
@@ -72,6 +78,7 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/cookies/delete", post(delete_cookie))
         .route("/cookies/clear", post(clear_cookies))
         .route("/history", get(history))
+        .route("/history/read", post(read_history))
         .route("/history/clear", post(clear_history))
         .route("/oauth2/token", post(oauth2_token))
         .route("/examples", post(list_examples))
@@ -82,6 +89,10 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/mocks", get(list_mocks))
         .route("/mock/start", post(start_mock))
         .route("/mock/stop", post(stop_mock))
+        .route(
+            "/header-presets",
+            get(read_header_presets).put(write_header_presets),
+        )
 }
 
 /// An error answered as `{"error": "..."}` with a fitting status.
@@ -251,13 +262,34 @@ async fn duplicate(State(state): Shared, Json(arg): Json<PathArg>) -> ApiResult 
     Ok(Json(json!({ "path": path })))
 }
 
+/// Moves the item to the trash, from where it can be restored.
 async fn delete(State(state): Shared, Json(arg): Json<PathArg>) -> ApiResult {
-    state.workspace().delete(&arg.path)?;
-    Ok(done())
+    Ok(Json(json!(state.workspace().trash(&arg.path)?)))
 }
 
 async fn order(State(state): Shared, Json(arg): Json<Order>) -> ApiResult {
     state.workspace().set_order(&arg.folder, arg.order)?;
+    Ok(done())
+}
+
+// ---- Trash --------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct TrashId {
+    id: String,
+}
+
+async fn trash(State(state): Shared) -> ApiResult {
+    Ok(Json(json!(state.workspace().trash_list()?)))
+}
+
+async fn restore(State(state): Shared, Json(arg): Json<TrashId>) -> ApiResult {
+    let path = state.workspace().restore(&arg.id)?;
+    Ok(Json(json!({ "path": path })))
+}
+
+async fn empty_trash(State(state): Shared) -> ApiResult {
+    state.workspace().empty_trash()?;
     Ok(done())
 }
 
@@ -317,6 +349,11 @@ async fn rename_environment(State(state): Shared, Json(arg): Json<RenameEnvironm
 async fn delete_environment(State(state): Shared, Json(arg): Json<EnvironmentId>) -> ApiResult {
     state.workspace().delete_environment(&arg.id)?;
     Ok(done())
+}
+
+async fn duplicate_environment(State(state): Shared, Json(arg): Json<EnvironmentId>) -> ApiResult {
+    let id = state.workspace().duplicate_environment(&arg.id)?;
+    Ok(Json(json!({ "id": id })))
 }
 
 async fn read_globals(State(state): Shared) -> ApiResult {
@@ -465,14 +502,77 @@ async fn languages() -> Json<Value> {
     Json(json!(codegen::LANGUAGES))
 }
 
+/// The variables a request sees. Values from the environment that it marks
+/// secret come with `"secret": true`, so the UI can mask them.
 async fn variables(State(state): Shared, Json(arg): Json<PrepareArg>) -> ApiResult {
+    let environment = arg.environment.as_deref().filter(|e| !e.is_empty());
     let resolved = resolved_variables(
         state.workspace(),
         arg.path.as_deref().filter(|p| !p.is_empty()),
         &arg.request,
-        arg.environment.as_deref().filter(|e| !e.is_empty()),
+        environment,
     )?;
-    Ok(Json(json!(resolved)))
+    let secrets = match environment {
+        Some(id) => state.workspace().read_environment(id)?.shared.secrets,
+        None => Vec::new(),
+    };
+    let list: Vec<Value> = resolved
+        .into_iter()
+        .map(|var| {
+            let secret = var.scope == Scope::Environment && secrets.contains(&var.name);
+            let mut value = json!(var);
+            if secret {
+                value["secret"] = Value::Bool(true);
+            }
+            value
+        })
+        .collect();
+    Ok(Json(Value::Array(list)))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum SetScope {
+    Environment,
+    Workspace,
+    Global,
+}
+
+#[derive(Deserialize)]
+struct SetVariable {
+    scope: SetScope,
+    name: String,
+    value: String,
+    #[serde(default)]
+    environment: Option<String>,
+}
+
+/// Saves one variable where a script's `gm.environment.set`,
+/// `gm.collectionVariables.set` or `gm.globals.set` would: the
+/// environment's local file, or the workspace's `getman.local.yaml`.
+async fn set_variable(State(state): Shared, Json(arg): Json<SetVariable>) -> ApiResult {
+    let name = arg.name.trim();
+    if name.is_empty() || name.contains(['{', '}', '\n', '"']) {
+        return Err(bad(
+            "A variable name cannot be empty or hold braces, quotes or line breaks.",
+        ));
+    }
+    let environment = arg.environment.as_deref().filter(|e| !e.is_empty());
+    let scope = match arg.scope {
+        SetScope::Environment if environment.is_none() => {
+            return Err(bad("Choose an environment to save the variable in."));
+        }
+        SetScope::Environment => ChangeScope::Environment,
+        SetScope::Workspace => ChangeScope::Collection,
+        SetScope::Global => ChangeScope::Global,
+    };
+    let change = VarChange {
+        scope,
+        name: name.to_owned(),
+        value: Some(arg.value),
+    };
+    persist_changes(state.workspace(), environment, &[change])?;
+    Ok(done())
 }
 
 async fn dynamic() -> Json<Value> {
@@ -954,7 +1054,37 @@ async fn history(State(state): Shared) -> Json<Value> {
     Json(json!(state.history.list()))
 }
 
+#[derive(Deserialize)]
+struct HistoryId {
+    id: String,
+}
+
+/// An entry with the response kept with it.
+async fn read_history(State(state): Shared, Json(arg): Json<HistoryId>) -> ApiResult {
+    let (entry, stored) = state
+        .history
+        .read(&arg.id)
+        .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "That history entry is gone.".into()))?;
+    let mut value = json!(entry);
+    value["response"] = stored
+        .as_ref()
+        .map_or(Value::Null, |stored| json!(stored.response));
+    value["body_cut"] = json!(stored.is_some_and(|stored| stored.body_cut));
+    Ok(Json(value))
+}
+
 async fn clear_history(State(state): Shared) -> ApiResult {
     state.history.clear();
+    Ok(done())
+}
+
+// ---- Header presets -------------------------------------------------------------
+
+async fn read_header_presets(State(state): Shared) -> ApiResult {
+    Ok(Json(json!(presets::read(state.workspace())?)))
+}
+
+async fn write_header_presets(State(state): Shared, Json(list): Json<Vec<Preset>>) -> ApiResult {
+    presets::write(state.workspace(), &list)?;
     Ok(done())
 }

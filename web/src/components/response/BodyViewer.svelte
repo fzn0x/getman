@@ -1,12 +1,16 @@
 <script lang="ts">
+  import { pickedValue, suggestName } from "../../lib/bytes";
   import { copyText } from "../../lib/clipboard";
   import { bodyKind, bytes, payloadBytes, payloadText, prettyJson } from "../../lib/format";
   import { parsePath, walk } from "../../lib/jsonpath";
+  import { keyLabel } from "../../lib/keys";
+  import { openDialog, type RequestTab } from "../../lib/store.svelte";
   import type { Response } from "../../lib/types";
   import Editor from "../Editor.svelte";
   import Icon from "../Icon.svelte";
+  import HexView from "./HexView.svelte";
 
-  let { response }: { response: Response } = $props();
+  let { response, tab = null }: { response: Response; tab?: RequestTab | null } = $props();
 
   const contentType = $derived(
     response.headers.find((h) => h.name.toLowerCase() === "content-type")?.value,
@@ -15,14 +19,32 @@
   const text = $derived(payloadText(response.body));
   const big = $derived(response.size.body > 4_000_000);
 
-  let mode = $state<"pretty" | "raw" | "preview">("pretty");
+  let mode = $state<"pretty" | "raw" | "hex" | "preview">("pretty");
   let wrap = $state(false);
   let filter = $state("");
+  let editor = $state<ReturnType<typeof Editor>>();
+  let selected = $state({ text: "", line: "" });
 
   const previewable = $derived(kind === "html" || kind === "image" || kind === "pdf");
   $effect(() => {
-    if ((kind === "image" || kind === "pdf") && mode !== "preview") mode = "preview";
+    if ((kind === "image" || kind === "pdf") && mode !== "preview" && mode !== "hex") {
+      mode = "preview";
+    }
+    if (kind === "binary" && mode !== "hex" && mode !== "raw") mode = "hex";
   });
+  const hexBytes = $derived(mode === "hex" ? payloadBytes(response.body) : new Uint8Array());
+  const showsText = $derived(
+    mode !== "hex" && mode !== "preview" && kind !== "binary" && text !== "",
+  );
+
+  function setAsVariable(): void {
+    openDialog({
+      kind: "setVariable",
+      value: pickedValue(selected.text),
+      name: suggestName(selected.line),
+      tab,
+    });
+  }
 
   const language = $derived(
     kind === "json"
@@ -114,13 +136,20 @@
       >
       <button
         role="radio"
+        aria-checked={mode === "hex"}
+        class:on={mode === "hex"}
+        onclick={() => (mode = "hex")}
+        disabled={response.size.body === 0}>Hex</button
+      >
+      <button
+        role="radio"
         aria-checked={mode === "preview"}
         class:on={mode === "preview"}
         onclick={() => (mode = "preview")}
         disabled={!previewable}>Preview</button
       >
     </div>
-    {#if kind === "json" && mode !== "preview"}
+    {#if kind === "json" && mode !== "preview" && mode !== "hex"}
       <label class="filter">
         <span class="sr-only">Filter the JSON by path</span>
         <input
@@ -132,6 +161,27 @@
       </label>
     {/if}
     <span class="kind bitmap">{kind} · {bytes(response.size.body)}</span>
+    {#if showsText}
+      <button
+        class="icon-btn"
+        aria-label="Set the selected text as a variable"
+        title={selected.text
+          ? "Set the selected text as a variable"
+          : "Select a value in the body to set it as a variable"}
+        disabled={!selected.text.trim()}
+        onclick={setAsVariable}
+      >
+        <Icon name="pencil" />
+      </button>
+      <button
+        class="icon-btn"
+        aria-label="Find in the body"
+        title="Find: match case, whole word, regex ({keyLabel('mod+f').join(' ')})"
+        onclick={() => editor?.openSearch()}
+      >
+        <Icon name="search" />
+      </button>
+    {/if}
     <button
       class="icon-btn"
       aria-label="Wrap lines"
@@ -176,6 +226,8 @@
       <div class="image"><img src={blobUrl} alt="Response body" /></div>
     {:else if mode === "preview" && kind === "pdf" && blobUrl}
       <iframe title="PDF preview" src={blobUrl}></iframe>
+    {:else if mode === "hex"}
+      <HexView data={hexBytes} />
     {:else if kind === "binary"}
       <div class="binary">
         <p class="bitmap big">Binary</p>
@@ -188,7 +240,16 @@
         <p>The response has no body.</p>
       </div>
     {:else}
-      <Editor value={shown} readonly {language} {wrap} label="Response body" />
+      <Editor
+        bind:this={editor}
+        value={shown}
+        readonly
+        {language}
+        {wrap}
+        links
+        label="Response body"
+        onSelection={(text, line) => (selected = { text, line })}
+      />
     {/if}
   </div>
 </div>

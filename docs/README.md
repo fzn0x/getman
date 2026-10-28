@@ -18,6 +18,7 @@ These pages are also published at <https://fzn0x.github.io/getman/>.
 - [Examples and mocks](examples-and-mocks.md): saved responses, `getman mock`
 - [AI agents](mcp.md): `getman mcp` for Claude and other MCP clients
 - [Import and export](import-export.md): Postman, cURL, code
+- [Browser UI](browser-ui.md): tabs, history, the trash, header presets
 - [Terminal UI](terminal.md)
 
 **Reference**

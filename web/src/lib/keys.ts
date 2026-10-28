@@ -61,6 +61,7 @@ export const SHORTCUTS: { combo: string; action: string }[] = [
   { combo: "mod+k", action: "Find requests and commands" },
   { combo: "alt+n", action: "New request" },
   { combo: "alt+w", action: "Close the tab" },
+  { combo: "alt+shift+t", action: "Reopen the tab closed last" },
   { combo: "alt+]", action: "Next tab" },
   { combo: "alt+[", action: "Previous tab" },
   { combo: "alt+l", action: "Edit the URL" },
@@ -68,5 +69,6 @@ export const SHORTCUTS: { combo: string; action: string }[] = [
   { combo: "alt+c", action: "Copy the request as code" },
   { combo: "mod+b", action: "Show or hide the sidebar" },
   { combo: "alt+i", action: "Import" },
+  { combo: "mod+z", action: "Undo a delete, outside a text field" },
   { combo: "?", action: "Show these shortcuts" },
 ];

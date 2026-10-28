@@ -4,7 +4,7 @@
   import { api } from "../../lib/api";
   import { exampleFrom, exampleName } from "../../lib/example";
   import { examples } from "../../lib/examples.svelte";
-  import { payloadText } from "../../lib/format";
+  import { ago, payloadText } from "../../lib/format";
   import {
     message,
     notify,
@@ -124,6 +124,16 @@
 <div class="response">
   <Specimen {execution} sending={tab.sending} />
 
+  {#if tab.fromHistory && !tab.sending}
+    <p class="from-history">
+      <Icon name="clock" />
+      <span
+        >From history, sent {ago(tab.fromHistory.at)}.{#if tab.fromHistory.bodyCut}
+          History keeps the first MiB of a body.{/if} Send it to run it again.</span
+      >
+    </p>
+  {/if}
+
   {#if execution && !tab.sending}
     {#if execution.cancelled}
       <div class="warning" role="status">
@@ -194,7 +204,7 @@
     <div class="pane" class:fill={tab.responsePane === "body"}>
       {#if tab.responsePane === "body"}
         {#if response}
-          <BodyViewer {response} />
+          <BodyViewer {response} {tab} />
         {:else}
           <p class="none">No response arrived.</p>
         {/if}
@@ -342,6 +352,21 @@
     grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
     height: 100%;
     min-height: 0;
+  }
+
+  .from-history {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    margin: 0;
+    padding: 6px var(--s4);
+    border-bottom: 1px solid var(--rule-3);
+    color: var(--ink-2);
+  }
+
+  .from-history :global(.icon) {
+    flex: none;
+    color: var(--ink-3);
   }
 
   .error {

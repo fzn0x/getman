@@ -107,6 +107,7 @@
           onChange={(rows) => (draft.headers = rows)}
           label="Headers"
           nameLabel="Header"
+          presets
         />
       </div>
     {:else if tab.pane === "auth"}

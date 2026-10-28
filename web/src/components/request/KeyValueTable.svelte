@@ -2,6 +2,8 @@
   import { tick } from "svelte";
   import type { KeyValue } from "../../lib/types";
   import Icon from "../Icon.svelte";
+  import HeaderPresets from "./HeaderPresets.svelte";
+  import VarInput from "./VarInput.svelte";
 
   interface Props {
     rows: KeyValue[];
@@ -14,6 +16,8 @@
     fixedNames?: boolean;
     toggles?: boolean;
     bulk?: boolean;
+    /** Offer header presets beside Bulk edit. */
+    presets?: boolean;
     label: string;
   }
 
@@ -26,6 +30,7 @@
     fixedNames = false,
     toggles = true,
     bulk = true,
+    presets = false,
     label,
   }: Props = $props();
 
@@ -118,27 +123,25 @@
             </span>
           {/if}
           <span role="cell">
-            <input
-              class="input mono"
+            <VarInput
               value={row.name}
+              onValue={(value) => edit(i, "name", value)}
               placeholder={nameLabel}
-              aria-label={nameLabel}
-              data-field="name"
+              label={nameLabel}
+              field="name"
               list={names.length ? listId : undefined}
               readonly={fixedNames}
-              spellcheck="false"
-              oninput={(event) => edit(i, "name", event.currentTarget.value)}
+              off={row.enabled === false}
             />
           </span>
           <span role="cell">
-            <input
-              class="input mono"
+            <VarInput
               value={row.value}
+              onValue={(value) => edit(i, "value", value)}
               placeholder={valueLabel}
-              aria-label="{valueLabel} of {row.name || 'this row'}"
-              data-field="value"
-              spellcheck="false"
-              oninput={(event) => edit(i, "value", event.currentTarget.value)}
+              label="{valueLabel} of {row.name || 'this row'}"
+              field="value"
+              off={row.enabled === false}
             />
           </span>
           <span role="cell">
@@ -195,6 +198,7 @@
   {/if}
   {#if bulk && !fixedNames}
     <div class="tools">
+      {#if presets && !bulkMode}<HeaderPresets {rows} {onChange} />{/if}
       <button class="btn quiet" onclick={() => (bulkMode ? closeBulk() : openBulk())}>
         {bulkMode ? "Back to table" : "Bulk edit"}
       </button>
@@ -248,26 +252,43 @@
     padding: 0 var(--s2) 0 2px;
   }
 
-  .row .input {
+  .row :global(.input) {
     width: 100%;
     height: 30px;
     border-color: transparent;
     background: transparent;
   }
 
-  .row .input:hover {
+  .row :global(.input:hover) {
     border-color: var(--rule-2);
   }
 
-  .row .input:focus {
+  .row :global(.input:focus) {
     border-color: var(--ink);
     background: var(--field);
   }
 
-  .row.off .input {
+  /* With variables marked, the field behind the input carries its colour. */
+  .row :global(.var-input.marked) {
+    background: transparent;
+  }
+
+  .row :global(.var-input.marked:focus-within) {
+    background: var(--field);
+  }
+
+  .row :global(.var-input.marked .input:focus) {
+    background: transparent;
+  }
+
+  .row.off :global(.input) {
     color: var(--ink-3);
     text-decoration: line-through;
     text-decoration-color: var(--t4);
+  }
+
+  .row.off :global(.var-input.marked .input) {
+    color: transparent;
   }
 
   .ghost .input::placeholder {

@@ -278,6 +278,8 @@ export interface ResolvedVar {
   name: string;
   value: string;
   scope: "global" | "workspace" | "environment" | "folder" | "request" | "data" | "local";
+  /** The environment marks it secret; mask the value until asked. */
+  secret?: boolean;
 }
 
 export interface DynamicVar {
@@ -313,8 +315,31 @@ export interface HistoryEntry {
   url: string;
   status: number | null;
   time_ms: number | null;
+  /** Size of the response body, in bytes. */
+  size?: number | null;
   error: string | null;
   request: Request;
+}
+
+/** A history entry with the response kept with it. */
+export interface HistoryDetail extends HistoryEntry {
+  response: Response | null;
+  /** History kept only the first MiB of the body. */
+  body_cut: boolean;
+}
+
+export interface TrashItem {
+  id: string;
+  path: string;
+  kind: "request" | "folder";
+  name: string;
+  method?: string;
+  deleted_at: number;
+}
+
+export interface HeaderPreset {
+  name: string;
+  headers: KeyValue[];
 }
 
 export interface ImportReport {

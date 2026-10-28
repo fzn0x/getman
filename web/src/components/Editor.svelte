@@ -1,14 +1,17 @@
 <script lang="ts">
+  import { openSearchPanel } from "@codemirror/search";
   import { Compartment, EditorState } from "@codemirror/state";
   import { EditorView } from "@codemirror/view";
   import { onMount } from "svelte";
   import {
     baseExtensions,
     languageExtension,
+    linkMarks,
     variableMarks,
     type EditorLanguage,
+    type VariableCard,
   } from "../lib/editor";
-  import { completionNames } from "../lib/store.svelte";
+  import { completionNames, describeVariable } from "../lib/store.svelte";
 
   interface Props {
     value?: string;
@@ -24,6 +27,10 @@
     label?: string;
     onSubmit?: () => void;
     onPaste?: (text: string) => boolean;
+    /** Underline URLs and open them when clicked. */
+    links?: boolean;
+    /** Told the selected text, and the line it starts on, as it changes. */
+    onSelection?: (text: string, line: string) => void;
     class?: string;
   }
 
@@ -40,8 +47,18 @@
     label = "",
     onSubmit,
     onPaste,
+    links = false,
+    onSelection,
     class: className = "",
   }: Props = $props();
+
+  function describeCard(name: string): VariableCard {
+    const info = describeVariable(name);
+    if (!info) return null;
+    if (info.kind === "dynamic") return { scope: "dynamic", description: info.description };
+    const { scope, value, secret } = info.variable;
+    return { scope, value, secret: secret === true };
+  }
 
   let host: HTMLDivElement;
   let view: EditorView | undefined;
@@ -60,7 +77,7 @@
             singleLine,
             lineNumbers: lineNumbers && !singleLine,
             placeholder,
-            completion: { names: completionNames },
+            completion: { names: completionNames, describe: describeCard },
             onSubmit: () => onSubmit?.(),
             onPaste: (text) => onPaste?.(text) ?? false,
           }),
@@ -69,8 +86,16 @@
           variablesSlot.of(variableMarks(known)),
           wrapSlot.of(wrap ? EditorView.lineWrapping : []),
           EditorView.contentAttributes.of(label ? { "aria-label": label } : {}),
+          links ? linkMarks() : [],
           EditorView.updateListener.of((update) => {
             if (update.docChanged) value = update.state.doc.toString();
+            if (onSelection && (update.selectionSet || update.docChanged)) {
+              const range = update.state.selection.main;
+              onSelection(
+                update.state.sliceDoc(range.from, range.to),
+                update.state.doc.lineAt(range.from).text,
+              );
+            }
           }),
         ],
       }),
@@ -105,6 +130,11 @@
   $effect(() => {
     view?.dispatch({ effects: wrapSlot.reconfigure(wrap ? EditorView.lineWrapping : []) });
   });
+
+  /** Opens the find bar: next and previous, match case, whole word, regex. */
+  export function openSearch(): void {
+    if (view) openSearchPanel(view);
+  }
 
   export function focus(): void {
     view?.focus();

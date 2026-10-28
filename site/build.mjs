@@ -40,6 +40,7 @@ export const sections = [
       "examples-and-mocks",
       "mcp",
       "import-export",
+      "browser-ui",
       "terminal",
     ],
   },

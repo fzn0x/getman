@@ -49,7 +49,11 @@ A workspace is a folder you chose. Getman reads and writes only inside it:
   `GETMAN_`, so a workspace cannot read other credentials on your machine
   or in CI.
 - History, in `.getman/history.json`, is git-ignored and keeps the last 200
-  requests.
+  requests, each with its response (bodies cut to their first MiB) in
+  `.getman/history/`. Clear history in the UI to delete them.
+- Deleted requests and folders wait in `.getman/trash/` until you empty the
+  trash. `.getman/` holds its own `.gitignore`, so none of it is committed
+  even where the repository's ignore rules do not mention it.
 - Proxy user names and passwords, and the passphrase of a PKCS#12 client
   certificate, are read from variables, so their values can live in
   `*.local.yaml` files. A variable that is not defined stops the request
