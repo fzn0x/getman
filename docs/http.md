@@ -54,11 +54,12 @@ with an error that says HTTP/3 was the problem.
 The protocol a response came over shows as `HTTP/1.1`, `HTTP/2` or
 `HTTP/3`.
 
-HTTP/3 support needs reqwest's unstable `--cfg reqwest_unstable` at build
-time. Release binaries and builds from the repository have it, through
-`.cargo/config.toml`. If you set `RUSTFLAGS` yourself when building, add
-`--cfg reqwest_unstable` to it, or the build leaves HTTP/3 out and says so
-when a request asks for it.
+HTTP/3 is built in; it needs no build flags. It checks certificates, the
+extra authorities in `ca_certs`, the client certificate and `verify_tls`
+the same way HTTP/1.1 and HTTP/2 do, shares their cookie jar, follows
+redirects, decodes gzip, Brotli, deflate and zstd, and reports the
+connection's TLS details. A proxy cannot carry QUIC, so a request that
+sets one is refused with an error that says so.
 
 ### Header names
 

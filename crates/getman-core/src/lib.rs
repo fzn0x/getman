@@ -14,6 +14,7 @@ pub mod execute;
 pub mod export;
 pub mod grpc;
 pub mod http;
+mod http3;
 pub mod import;
 mod lenient;
 pub mod mock;

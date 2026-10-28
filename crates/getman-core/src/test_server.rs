@@ -218,11 +218,23 @@ pub(crate) async fn spawn_tls(require_client_cert: bool) -> TestServer {
 }
 
 /// Starts an HTTP/3 server, over QUIC only, with the [`pki`] server
-/// certificate. Every request gets a JSON echo of its method, path and
-/// protocol version.
-#[cfg(reqwest_unstable)]
+/// certificate. See [`spawn_h3_with`].
 pub(crate) fn spawn_h3() -> TestServer {
-    let mut config = server_tls(pki(), false);
+    spawn_h3_with(false)
+}
+
+/// Starts an HTTP/3 server, optionally refusing clients without a
+/// certificate from the CA. Paths answer as follows:
+///
+/// - `/redirect` is a 302 to `/echo/after` that sets the cookie `hop`.
+/// - `/cookie` sets the cookie `jar`.
+/// - `/encoded/{gzip,deflate,br,zstd}` is `hello from h3`, compressed.
+/// - `/big/{n}` is `n` bytes.
+/// - `/slow` answers after five seconds.
+/// - Anything else is a JSON echo of the method, path, protocol version,
+///   headers and body.
+pub(crate) fn spawn_h3_with(require_client_cert: bool) -> TestServer {
+    let mut config = server_tls(pki(), require_client_cert);
     config.alpn_protocols = vec![b"h3".to_vec()];
     let quic = quinn::crypto::rustls::QuicServerConfig::try_from(config).unwrap();
     let server = quinn::ServerConfig::with_crypto(Arc::new(quic));
@@ -243,25 +255,10 @@ pub(crate) fn spawn_h3() -> TestServer {
                 };
                 while let Ok(Some(resolver)) = h3.accept().await {
                     tokio::spawn(async move {
-                        let Ok((request, mut stream)) = resolver.resolve_request().await else {
+                        let Ok((request, stream)) = resolver.resolve_request().await else {
                             return;
                         };
-                        let body = json!({
-                            "method": request.method().as_str(),
-                            "path": request.uri().path(),
-                            "version": format!("{:?}", request.version()),
-                        })
-                        .to_string();
-                        let response = http::Response::builder()
-                            .status(200)
-                            .header("content-type", "application/json")
-                            .body(())
-                            .unwrap();
-                        if stream.send_response(response).await.is_ok()
-                            && stream.send_data(bytes::Bytes::from(body)).await.is_ok()
-                        {
-                            let _ = stream.finish().await;
-                        }
+                        answer_h3(request, stream).await;
                     });
                 }
             });
@@ -270,6 +267,94 @@ pub(crate) fn spawn_h3() -> TestServer {
     TestServer {
         addr,
         scheme: "https",
+    }
+}
+
+async fn answer_h3(
+    request: http::Request<()>,
+    mut stream: h3::server::RequestStream<h3_quinn::BidiStream<bytes::Bytes>, bytes::Bytes>,
+) {
+    use bytes::Buf as _;
+    use std::io::Write as _;
+
+    let mut received = Vec::new();
+    while let Ok(Some(mut chunk)) = stream.recv_data().await {
+        received.extend_from_slice(&chunk.copy_to_bytes(chunk.remaining()));
+    }
+    let path = request.uri().path().to_owned();
+    let mut response = http::Response::builder().status(200);
+    let body: Vec<u8> = match path.as_str() {
+        "/redirect" => {
+            response = response
+                .status(302)
+                .header("location", "/echo/after")
+                .header("set-cookie", "hop=1; Path=/");
+            Vec::new()
+        }
+        "/cookie" => {
+            response = response.header("set-cookie", "jar=1; Path=/");
+            b"set".to_vec()
+        }
+        "/slow" => {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            b"late".to_vec()
+        }
+        other if other.starts_with("/big/") => {
+            vec![b'x'; other["/big/".len()..].parse().unwrap_or(0)]
+        }
+        other if other.starts_with("/encoded/") => {
+            let text = b"hello from h3";
+            let name = &other["/encoded/".len()..];
+            response = response.header("content-encoding", name);
+            match name {
+                "gzip" => {
+                    let mut e =
+                        flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+                    e.write_all(text).unwrap();
+                    e.finish().unwrap()
+                }
+                "deflate" => {
+                    let mut e =
+                        flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::fast());
+                    e.write_all(text).unwrap();
+                    e.finish().unwrap()
+                }
+                "br" => {
+                    let mut out = Vec::new();
+                    {
+                        let mut e = brotli::CompressorWriter::new(&mut out, 4096, 5, 20);
+                        e.write_all(text).unwrap();
+                    }
+                    out
+                }
+                _ => zstd::encode_all(&text[..], 1).unwrap(),
+            }
+        }
+        _ => {
+            let mut headers = BTreeMap::new();
+            for (name, value) in request.headers() {
+                headers.insert(
+                    name.to_string(),
+                    value.to_str().unwrap_or_default().to_owned(),
+                );
+            }
+            response = response.header("content-type", "application/json");
+            json!({
+                "method": request.method().as_str(),
+                "path": path,
+                "version": format!("{:?}", request.version()),
+                "headers": headers,
+                "body": String::from_utf8_lossy(&received),
+            })
+            .to_string()
+            .into_bytes()
+        }
+    };
+    let response = response.body(()).unwrap();
+    if stream.send_response(response).await.is_ok()
+        && (body.is_empty() || stream.send_data(bytes::Bytes::from(body)).await.is_ok())
+    {
+        let _ = stream.finish().await;
     }
 }
 

@@ -202,3 +202,70 @@ pub(crate) fn version_name(version: reqwest::tls::Version) -> Option<&'static st
     .find(|(known, _)| *known == version)
     .map(|(_, name)| name)
 }
+
+/// The rustls configuration for connections Getman opens itself rather
+/// than through reqwest (HTTP/3 over QUIC), set up the way reqwest sets
+/// up its own: the ring provider, the operating system's verifier plus the
+/// extra authorities in `ca_certs` (PEM text), no checking at all when
+/// `verify` is false, and `identity` for servers that ask for a client
+/// certificate. `alpn` lists the protocols to offer.
+pub(crate) fn client_config(
+    verify: bool,
+    ca_certs: &[Vec<u8>],
+    identity: Option<&ClientIdentity>,
+    alpn: &[&[u8]],
+) -> Result<rustls::ClientConfig> {
+    use rustls::pki_types::pem::PemObject as _;
+    use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+    use rustls_platform_verifier::BuilderVerifierExt as _;
+
+    let provider = std::sync::Arc::new(rustls::crypto::ring::default_provider());
+    let builder = rustls::ClientConfig::builder_with_provider(std::sync::Arc::clone(&provider))
+        .with_safe_default_protocol_versions()
+        .map_err(|e| Error::Invalid(format!("Could not set up TLS: {e}")))?;
+    let builder = if !verify {
+        builder
+            .dangerous()
+            .with_custom_certificate_verifier(std::sync::Arc::new(
+                crate::realtime::tls::AcceptAnyCertificate::new(
+                    provider.signature_verification_algorithms,
+                ),
+            ))
+    } else if ca_certs.is_empty() {
+        builder
+            .with_platform_verifier()
+            .map_err(|e| Error::Invalid(format!("Could not load the system's certificates: {e}")))?
+    } else {
+        let mut roots: Vec<CertificateDer<'static>> = Vec::new();
+        for pem in ca_certs {
+            for cert in CertificateDer::pem_slice_iter(pem) {
+                roots.push(cert.map_err(|e| {
+                    Error::Invalid(format!(
+                        "a certificate authority file is not valid PEM: {e}"
+                    ))
+                })?);
+            }
+        }
+        let verifier = rustls_platform_verifier::Verifier::new_with_extra_roots(roots, provider)
+            .map_err(|e| {
+                Error::Invalid(format!("Could not load the system's certificates: {e}"))
+            })?;
+        builder
+            .dangerous()
+            .with_custom_certificate_verifier(std::sync::Arc::new(verifier))
+    };
+    let mut config = if let Some(identity) = identity {
+        let chain: Vec<CertificateDer<'static>> = CertificateDer::pem_slice_iter(identity.pem())
+            .collect::<std::result::Result<_, _>>()
+            .map_err(|e| Error::Invalid(format!("the client certificate is not valid PEM: {e}")))?;
+        let key = PrivateKeyDer::from_pem_slice(identity.pem())
+            .map_err(|e| Error::Invalid(format!("the client key is not valid PEM: {e}")))?;
+        builder
+            .with_client_auth_cert(chain, key)
+            .map_err(|e| Error::Invalid(format!("the client certificate cannot be used: {e}")))?
+    } else {
+        builder.with_no_client_auth()
+    };
+    config.alpn_protocols = alpn.iter().map(|protocol| protocol.to_vec()).collect();
+    Ok(config)
+}
