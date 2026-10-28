@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { api } from "../../lib/api";
   import { installLabel, lastChecked, percent } from "../../lib/desktop";
   import {
     checkNow,
@@ -7,11 +8,33 @@
     restartApp,
     setUpdatePreferences,
   } from "../../lib/desktop.svelte";
-  import { openDialog } from "../../lib/store.svelte";
+  import { clearSession, message, notify, openDialog } from "../../lib/store.svelte";
   import Dialog from "./Dialog.svelte";
 
   const status = $derived(desktop.status);
   const phase = $derived(status?.phase ?? { state: "idle" as const });
+  // Whether scripts are off for this workspace; unknown until it is read.
+  let scriptsOff = $state<boolean | null>(null);
+  $effect(() => {
+    api
+      .globals()
+      .then((state) => (scriptsOff = state.scripts_off === true))
+      .catch((error) => notify(message(error), "error"));
+  });
+
+  async function setScriptsOff(off: boolean): Promise<void> {
+    try {
+      // Read again: scripts may have changed variables in the same file.
+      const state = await api.globals();
+      if (off) state.scripts_off = true;
+      else delete state.scripts_off;
+      await api.writeGlobals(state);
+      scriptsOff = off;
+    } catch (error) {
+      notify(message(error), "error");
+    }
+  }
+
   // Ticks so "Checked 5 minutes ago" stays true while the dialog is open.
   let now = $state(new Date());
   $effect(() => {
@@ -23,9 +46,35 @@
 <Dialog title="Settings" width="560px">
   <div class="body">
     <h2 class="bitmap">Settings</h2>
-    <section aria-labelledby="about">
-      <h3 class="bitmap" id="about">About</h3>
-      {#if status}
+    <section aria-labelledby="scripts">
+      <h3 class="bitmap" id="scripts">Scripts</h3>
+      <label class="toggle">
+        <input
+          type="checkbox"
+          class="check"
+          checked={scriptsOff === false}
+          disabled={scriptsOff === null}
+          onchange={(event) => void setScriptsOff(!event.currentTarget.checked)}
+        />
+        <span>
+          Run scripts
+          <span class="muted hint"
+            >Turn this off to send requests without their pre-request and post-response scripts, for
+            a workspace you have not read yet. It is kept in <code>getman.local.yaml</code>, on this
+            machine only. Checks and captures still run.</span
+          >
+        </span>
+      </label>
+      <div class="row">
+        <button class="btn" onclick={() => void clearSession()}>Clear session variables</button>
+        <p class="muted">
+          Values that scripts keep with <code>gm.session</code> until Getman stops.
+        </p>
+      </div>
+    </section>
+    {#if status}
+      <section aria-labelledby="about">
+        <h3 class="bitmap" id="about">About</h3>
         <p class="version">
           <span class="bitmap">Getman {status.version}</span>
           <span class="muted">{installLabel(status.install)}</span>
@@ -115,8 +164,8 @@
             {/if}
           </div>
         {/if}
-      {/if}
-    </section>
+      </section>
+    {/if}
   </div>
 </Dialog>
 

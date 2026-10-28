@@ -907,6 +907,17 @@ export function contextPath(tab: RequestTab): string | null {
   return tab.path ?? tab.inheritPath;
 }
 
+/** Forgets the variables scripts stored for the session. */
+export async function clearSession(): Promise<void> {
+  try {
+    await api.clearSession();
+    notify("Session variables cleared");
+    void refreshVariables();
+  } catch (error) {
+    notify(message(error), "error");
+  }
+}
+
 export async function refreshVariables(): Promise<void> {
   const tab = activeTab();
   if (!tab || (tab.kind !== "request" && tab.kind !== "folder")) return;

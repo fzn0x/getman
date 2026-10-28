@@ -11,6 +11,7 @@
     activeTab,
     allFolders,
     allRequests,
+    clearSession,
     closeDialog,
     newRequest,
     openDialog,
@@ -85,6 +86,13 @@
         title: "Manage environments",
         icon: "globe",
         run: () => openEnvironments(ws.environment),
+      },
+      {
+        id: "clear-session",
+        title: "Clear session variables",
+        detail: "The values scripts keep with gm.session until Getman stops",
+        icon: "close",
+        run: () => void clearSession(),
       },
       {
         id: "cookies",
