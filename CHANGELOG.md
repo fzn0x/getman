@@ -21,6 +21,29 @@ All notable changes to Getman are listed here. The format follows
   JWT and the others) as metadata.
 - The terminal UI connects to WebSocket, SSE and Socket.IO requests,
   calls gRPC methods and signs in with OAuth 2.0.
+- WebSocket, SSE and Socket.IO requests run pre-request and
+  post-response scripts and checks, which read the messages received
+  (`gm.messages`, the `messages` check target), and `getman run` and
+  `getman send` run them instead of skipping them. A request's `until`
+  says when to stop listening.
+- Socket.IO speaks HTTP long polling and upgrades to WebSocket as the
+  official client does (`socketio.transport`), and WebSocket and
+  Socket.IO handshakes go through proxies and use the cookie jar.
+- Redirects keep the method and the `Authorization` header when asked
+  (`follow_original_method`, `follow_authorization`), and every hop is
+  shown with its status and time.
+- Multipart bodies can be signed with AWS Signature Version 4, OAuth 1.0,
+  Hawk and Akamai EdgeGrid.
+- Scripts: the rest of Postman's dynamic variables, editable form bodies in
+  `pm.request.body`, `pm.request.id`, `pm.execution.stopExecution()`,
+  Bruno's `bru`, `req` and `res`, and `require` of `.js` files in the
+  workspace.
+- Session variables (`gm.session`), kept while the UI server or a run
+  lasts and never written to a file.
+- Checks: `in`, `not in`, `between`, `is empty`, `is not empty`,
+  `is truthy` and `is falsy`.
+- Scripts can be turned off for a workspace on your machine, or for one
+  command with `--no-scripts`.
 - Each release carries manifests for package managers, written from the
   release's own files: a Homebrew formula, a Scoop manifest, winget
   manifests and a Flatpak manifest for the desktop app. They are release
@@ -33,11 +56,22 @@ All notable changes to Getman are listed here. The format follows
 
 ### Changed
 
+- HTTP/3 runs on quinn and h3 with the same crypto library as the rest of
+  Getman, so the binary is smaller and builds need no extra flag.
+- `getman mcp` masks secrets of any length, also percent-encoded, in hex
+  and in Base64, including inside a longer Base64 text such as a Basic
+  `Authorization` header.
+
 - The setup steps in [AI agents (MCP)](docs/mcp.md) follow the current
   Claude Code and Claude Desktop documentation, with the location of
   Claude Desktop's configuration file.
 
 ### Fixed
+
+- A browser sign-in exchanged its code without the folder's proxy and
+  certificate settings.
+- Switching workspace in the desktop app left live connections and gRPC
+  calls of the old workspace running.
 
 - Python snippets for a multipart form with no file sent it URL-encoded;
   they now send every part as multipart, in order, with each part's type.
