@@ -18,7 +18,7 @@
   import { whenSignedOut } from "./lib/api";
   import { consoleView, failedCount, toggleConsole } from "./lib/console.svelte";
   import { startDesktop } from "./lib/desktop.svelte";
-  import { keyLabel, matches, typing } from "./lib/keys";
+  import { isMac, keyLabel, matches, typing } from "./lib/keys";
   import {
     activeTab,
     cancelSend,
@@ -32,6 +32,7 @@
     newRequest,
     openDialog,
     prefs,
+    redoLast,
     reopenClosedTab,
     runNoticeAction,
     save,
@@ -41,6 +42,7 @@
     signals,
     store,
     tabs,
+    undoLast,
     ws,
   } from "./lib/store.svelte";
 
@@ -130,8 +132,16 @@
     } else if (matches(event, "mod+j")) {
       handle(() => toggleConsole());
     } else if (matches(event, "mod+z") && !typing(event)) {
-      // Undoes what a notice offers to undo, such as a delete.
-      if (runNoticeAction()) event.preventDefault();
+      // Undoes what a notice offers to undo, such as a delete, or else
+      // the latest rename or move.
+      event.preventDefault();
+      if (!runNoticeAction()) void undoLast();
+    } else if (
+      (matches(event, "mod+shift+z") || (!isMac && matches(event, "mod+y"))) &&
+      !typing(event)
+    ) {
+      event.preventDefault();
+      void redoLast();
     } else if (event.key === "?" && !typing(event)) {
       handle(() => openDialog({ kind: "shortcuts" }));
     } else if (event.key === "/" && !typing(event)) {

@@ -16,6 +16,7 @@ import {
   type SavedTab,
 } from "./session";
 import { logExecution } from "./console.svelte";
+import { UndoStack } from "./undo";
 import { isLive } from "./realtime";
 import { primary, type LiveState } from "./realtime.svelte";
 import type { ImportFile } from "./importing";
@@ -1309,6 +1310,56 @@ export function itemKey(path: string): string {
   return last.replace(/\.ya?ml$/, "");
 }
 
+// What was renamed and moved in the sidebar, for Ctrl+Z and Ctrl+Shift+Z.
+// It lives in this page's memory: reloading the page, or Getman serving
+// another workspace, starts it empty.
+const undoStack = new UndoStack();
+
+const undoNotice = { label: "Undo", run: () => void undoLast() };
+
+/** Undoes the latest rename or move. Returns whether there was one. */
+export async function undoLast(): Promise<boolean> {
+  try {
+    const done = await undoStack.undo();
+    if (done) notify(`Undid the ${done.label}`);
+    return done !== null;
+  } catch (error) {
+    notify(`Could not undo: ${message(error)}`, "error");
+    return true;
+  }
+}
+
+/** Makes the rename or move undone last again. Returns whether there was one. */
+export async function redoLast(): Promise<boolean> {
+  try {
+    const done = await undoStack.redo();
+    if (done) notify(`Redid the ${done.label}`);
+    return done !== null;
+  } catch (error) {
+    notify(`Could not redo: ${message(error)}`, "error");
+    return true;
+  }
+}
+
+/** Renames an item and brings the tabs and the tree along. Returns its new path. */
+async function applyRename(path: string, name: string): Promise<string> {
+  const renamed = await api.rename(path, name);
+  retargetTabs(path, renamed.path);
+  for (const tab of tabs.list) {
+    if (tab.kind === "request" && tab.path === renamed.path) {
+      const clean = !isDirty(tab);
+      tab.draft.name = name;
+      if (clean) tab.saved = fingerprint(tab.draft);
+    } else if (tab.kind === "folder" && tab.path === renamed.path) {
+      const clean = !isDirty(tab);
+      tab.draft.name = name;
+      if (clean) tab.saved = JSON.stringify(tab.draft);
+    }
+  }
+  await refreshTree();
+  return renamed.path;
+}
+
 export function renameItem(path: string, kind: "request" | "folder", current: string): void {
   promptDialog({
     title: kind === "folder" ? "Rename folder" : "Rename request",
@@ -1317,23 +1368,48 @@ export function renameItem(path: string, kind: "request" | "folder", current: st
     confirm: "Rename",
     onSubmit: async (name) => {
       try {
-        const renamed = await api.rename(path, name);
-        retargetTabs(path, renamed.path);
-        for (const tab of tabs.list) {
-          if (tab.kind === "request" && tab.path === renamed.path) {
-            const clean = !isDirty(tab);
-            tab.draft.name = name;
-            if (clean) tab.saved = fingerprint(tab.draft);
-          } else if (tab.kind === "folder" && tab.path === renamed.path) {
-            const clean = !isDirty(tab);
-            tab.draft.name = name;
-            if (clean) tab.saved = JSON.stringify(tab.draft);
-          }
-        }
-        await refreshTree();
+        let at = await applyRename(path, name);
+        if (name === current) return;
+        undoStack.record({
+          label: `rename of ${current} to ${name}`,
+          undo: async () => {
+            at = await applyRename(at, current);
+          },
+          redo: async () => {
+            at = await applyRename(at, name);
+          },
+        });
+        notify(`Renamed to ${name}`, "ok", undoNotice);
       } catch (error) {
         notify(message(error), "error");
       }
+    },
+  });
+}
+
+/** Notes moves that were made, so they can be undone and redone. */
+function recordMoves(moves: { from: string; at: string }[], to: string): void {
+  const first = moves[0];
+  const label = `move of ${
+    moves.length === 1 && first ? (findNode(first.at)?.name ?? first.at) : `${moves.length} items`
+  }`;
+  const carry = async (target: (move: { from: string }) => string) => {
+    for (const move of [...moves].reverse()) {
+      const result = await api.move(move.at, target(move));
+      retargetTabs(move.at, result.path);
+      move.at = result.path;
+    }
+    await refreshTree();
+  };
+  undoStack.record({
+    label,
+    undo: async () => {
+      await carry((move) => parentOf(move.from));
+      for (const move of moves) if (parentOf(move.from)) setExpanded(parentOf(move.from), true);
+    },
+    redo: async () => {
+      await carry(() => to);
+      if (to) setExpanded(to, true);
     },
   });
 }
@@ -1470,22 +1546,27 @@ export async function duplicateItems(paths: string[]): Promise<void> {
 /** Moves several items into one folder. */
 export async function moveItems(paths: string[], to: string): Promise<void> {
   clearSelection();
-  let moved = 0;
+  const moves: { from: string; at: string }[] = [];
   for (const path of outermost(paths)) {
     if (parentOf(path) === to || to === path || to.startsWith(`${path}/`)) continue;
     try {
       const result = await api.move(path, to);
       retargetTabs(path, result.path);
-      moved++;
+      moves.push({ from: path, at: result.path });
     } catch (error) {
       notify(message(error), "error");
     }
   }
   if (to) setExpanded(to, true);
   await refreshTree();
-  if (moved > 0) {
+  if (moves.length > 0) {
+    recordMoves(moves, to);
     const where = to === "" ? ws.name : (findNode(to)?.name ?? to);
-    notify(moved === 1 ? `Moved to ${where}` : `Moved ${moved} items to ${where}`, "ok");
+    notify(
+      moves.length === 1 ? `Moved to ${where}` : `Moved ${moves.length} items to ${where}`,
+      "ok",
+      undoNotice,
+    );
   }
 }
 
@@ -1496,6 +1577,7 @@ export async function moveItem(path: string, to: string): Promise<void> {
     retargetTabs(path, moved.path);
     if (to) setExpanded(to, true);
     await refreshTree();
+    recordMoves([{ from: path, at: moved.path }], to);
   } catch (error) {
     notify(message(error), "error");
   }
