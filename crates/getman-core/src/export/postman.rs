@@ -901,6 +901,23 @@ fn check_line(check: &Check) -> Option<String> {
         "!matches" => format!("pm.expect(String({actual})).to.not.match(new RegExp({text}))"),
         "exists" => format!("pm.expect({actual}).to.not.be.undefined"),
         "!exists" => format!("pm.expect({actual}).to.be.undefined"),
+        "in" | "not in" => {
+            let list = serde_json::to_string(&crate::checks::list_items(value)).ok()?;
+            let negate = if check.operator == "in" { "" } else { ".not" };
+            format!("pm.expect({list}).to{negate}.deep.include({actual})")
+        }
+        "between" => {
+            let (low, high) = crate::checks::between_bounds(value)?;
+            format!("pm.expect(Number({actual})).to.be.within({low}, {high})")
+        }
+        "is empty" => format!(
+            "pm.expect({actual} === null || (typeof {actual} === \"object\" ? Object.keys({actual}).length === 0 : {actual} === \"\")).to.be.true"
+        ),
+        "is not empty" => format!(
+            "pm.expect({actual} === null || (typeof {actual} === \"object\" ? Object.keys({actual}).length === 0 : {actual} === \"\")).to.be.false"
+        ),
+        "is truthy" => format!("pm.expect(Boolean({actual})).to.be.true"),
+        "is falsy" => format!("pm.expect(Boolean({actual})).to.be.false"),
         "is" => match value.to_ascii_lowercase().as_str() {
             "integer" => format!("pm.expect(Number.isInteger({actual})).to.be.true"),
             "array" => format!("pm.expect({actual}).to.be.an(\"array\")"),
@@ -1072,6 +1089,28 @@ mod tests {
         )
         .unwrap();
         (dir, ws)
+    }
+
+    #[test]
+    fn lists_ranges_and_emptiness_checks_become_assertions() {
+        let line = |text: &str| check_line(&Check::parse(text).unwrap()).unwrap();
+        assert_eq!(
+            line("status in 200, 201"),
+            "pm.expect([200,201]).to.deep.include(pm.response.code)"
+        );
+        assert_eq!(
+            line("json.role not in [\"a\", \"b\"]"),
+            "pm.expect([\"a\",\"b\"]).to.not.deep.include(pm.response.json().role)"
+        );
+        assert_eq!(
+            line("time between 1 and 9"),
+            "pm.expect(Number(pm.response.responseTime)).to.be.within(1, 9)"
+        );
+        assert_eq!(
+            line("json.ok is truthy"),
+            "pm.expect(Boolean(pm.response.json().ok)).to.be.true"
+        );
+        assert!(line("json.items is not empty").ends_with(".to.be.false"));
     }
 
     #[test]

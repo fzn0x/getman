@@ -19,9 +19,11 @@
 //! end), `["quoted name"]` and `.length`.
 //!
 //! Operators: `==` `!=` `<` `<=` `>` `>=` `contains` `!contains`
-//! `startsWith` `endsWith` `matches` `!matches` `exists` `!exists` `is`.
-//! A value that parses as JSON is compared as JSON, so `== 42` is a
-//! number and `== "42"` a string; anything else is text.
+//! `startsWith` `endsWith` `matches` `!matches` `exists` `!exists` `is`,
+//! `in` and `not in` (a value in a JSON array or a comma list),
+//! `between A and B`, `is empty` and `is not empty`, `is truthy` and
+//! `is falsy`. A value that parses as JSON is compared as JSON, so `== 42`
+//! is a number and `== "42"` a string; anything else is text.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -79,6 +81,23 @@ const OPERATORS: &[&str] = &[
     "exists",
     "!exists",
     "is",
+    "in",
+    "not in",
+    "between",
+    "is empty",
+    "is not empty",
+    "is truthy",
+    "is falsy",
+];
+
+/// The operators that take no value.
+const UNARY: &[&str] = &[
+    "exists",
+    "!exists",
+    "is empty",
+    "is not empty",
+    "is truthy",
+    "is falsy",
 ];
 
 /// A parsed check.
@@ -109,7 +128,7 @@ impl Check {
                 });
             }
         }
-        let (operator, value) = split_token(rest);
+        let (operator, value) = split_operator(rest);
         if target.is_empty() || operator.is_empty() {
             return Err(format!(
                 "{line:?} is not a check; write it as `target operator value`"
@@ -124,7 +143,11 @@ impl Check {
         Ok(Self {
             target: target.to_owned(),
             operator: operator.to_owned(),
-            value: value.trim().to_owned(),
+            value: if UNARY.contains(&operator) {
+                String::new()
+            } else {
+                value.trim().to_owned()
+            },
         })
     }
 }
@@ -154,6 +177,34 @@ fn split_token(text: &str) -> (&str, &str) {
         Some(at) => (&text[..at], text[at..].trim_start()),
         None => (text, ""),
     }
+}
+
+/// Splits off the operator, which is several words for `not in`,
+/// `is empty`, `is not empty`, `is truthy` and `is falsy`.
+fn split_operator(text: &str) -> (&str, &str) {
+    let text = text.trim_start();
+    for operator in [
+        "not in",
+        "is not empty",
+        "is empty",
+        "is truthy",
+        "is falsy",
+    ] {
+        let mut remaining = text;
+        let mut matched = true;
+        for word in operator.split(' ') {
+            let (token, after) = split_token(remaining);
+            if token != word {
+                matched = false;
+                break;
+            }
+            remaining = after;
+        }
+        if matched {
+            return (operator, remaining);
+        }
+    }
+    split_token(text)
 }
 
 /// Runs every check against a response.
@@ -214,6 +265,44 @@ fn run_check(line: &str, response: &Response) -> TestResult {
                 == (check.operator == "matches")),
             Err(e) => Err(format!("invalid pattern: {e}")),
         },
+        "in" | "not in" => {
+            if check.value.is_empty() {
+                return TestResult::fail(
+                    line,
+                    format!(
+                        "`{}` needs a list, such as [200, 201] or 200, 201",
+                        check.operator
+                    ),
+                );
+            }
+            let value = actual.as_ref().unwrap();
+            let found = list_items(&check.value)
+                .iter()
+                .any(|item| loose_eq(value, item));
+            Ok(found == (check.operator == "in"))
+        }
+        "between" => {
+            let Some((low, high)) = between_bounds(&check.value) else {
+                return TestResult::fail(
+                    line,
+                    "`between` needs two numbers, as in `between 1 and 10`",
+                );
+            };
+            let Some(number) = as_number(actual.as_ref().unwrap()) else {
+                return TestResult::fail(
+                    line,
+                    format!(
+                        "cannot compare {} with {low} and {high} as numbers",
+                        shown(&actual)
+                    ),
+                );
+            };
+            Ok(number >= low && number <= high)
+        }
+        "is empty" => Ok(is_empty(actual.as_ref().unwrap())),
+        "is not empty" => Ok(!is_empty(actual.as_ref().unwrap())),
+        "is truthy" => Ok(is_truthy(actual.as_ref().unwrap())),
+        "is falsy" => Ok(!is_truthy(actual.as_ref().unwrap())),
         "is" => {
             let kind = type_name(actual.as_ref().unwrap());
             let wanted = check.value.to_ascii_lowercase();
@@ -239,6 +328,27 @@ fn run_check(line: &str, response: &Response) -> TestResult {
                     type_name(actual.as_ref().unwrap()),
                     check.value
                 ),
+                "in" | "not in" => format!(
+                    "{} is {}; expected {} {}",
+                    check.target,
+                    shown(&actual),
+                    if check.operator == "in" {
+                        "one of"
+                    } else {
+                        "none of"
+                    },
+                    display(&Value::Array(list_items(&check.value)))
+                ),
+                "between" => format!(
+                    "{} is {}; expected between {}",
+                    check.target,
+                    shown(&actual),
+                    check.value
+                ),
+                "is empty" => format!("{} is {}, not empty", check.target, shown(&actual)),
+                "is not empty" => format!("{} is empty", check.target),
+                "is truthy" => format!("{} is {}, not truthy", check.target, shown(&actual)),
+                "is falsy" => format!("{} is {}, not falsy", check.target, shown(&actual)),
                 _ => format!(
                     "{} is {}; expected {} {}",
                     check.target,
@@ -414,6 +524,53 @@ fn loose_eq(actual: &Value, expected: &Value) -> bool {
     }
 }
 
+/// The values of a list written in a check: a JSON array, or items
+/// separated by commas, each read as a check value.
+pub fn list_items(text: &str) -> Vec<Value> {
+    match serde_json::from_str(text) {
+        Ok(Value::Array(items)) => items,
+        _ => text
+            .split(',')
+            .map(|item| parse_value(item.trim()))
+            .collect(),
+    }
+}
+
+/// The two numbers of `A and B`.
+pub fn between_bounds(text: &str) -> Option<(f64, f64)> {
+    let mut words = text.split_whitespace();
+    let low = words.next()?.parse().ok()?;
+    if !words.next()?.eq_ignore_ascii_case("and") {
+        return None;
+    }
+    let high = words.next()?.parse().ok()?;
+    words.next().is_none().then_some((low, high))
+}
+
+/// Whether a value is nothing, or a string, array or object with nothing
+/// in it. Numbers and booleans are never empty.
+fn is_empty(value: &Value) -> bool {
+    match value {
+        Value::Null => true,
+        Value::String(text) => text.is_empty(),
+        Value::Array(items) => items.is_empty(),
+        Value::Object(map) => map.is_empty(),
+        Value::Bool(_) | Value::Number(_) => false,
+    }
+}
+
+/// Truthiness as in JavaScript: `null`, `false`, `0` and `""` are falsy;
+/// everything else is truthy, empty arrays and objects included.
+fn is_truthy(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::Bool(flag) => *flag,
+        Value::Number(number) => number.as_f64().is_some_and(|n| n != 0.0 && !n.is_nan()),
+        Value::String(text) => !text.is_empty(),
+        Value::Array(_) | Value::Object(_) => true,
+    }
+}
+
 fn contains(haystack: &Value, needle: &Value) -> bool {
     match haystack {
         Value::Array(items) => items.iter().any(|item| loose_eq(item, needle)),
@@ -543,6 +700,22 @@ mod tests {
             "json.meta contains total",
             "body contains Grace",
             "body !contains Linus",
+            "status in 200, 201, 204",
+            "status in [200, 201]",
+            "status not in 400, 404",
+            "json.role in admin, editor",
+            "json.role in [\"admin\", \"editor\"]",
+            "json.count in 3, 4",
+            "json.role not in user, guest",
+            "json.score between 9 and 10",
+            "status between 200 and 299",
+            "json.count between 1 AND 5",
+            "json.data is not empty",
+            "json.meta.next is empty",
+            "json.data[0].name is not empty",
+            "json.role is truthy",
+            "json[\"with space\"] is truthy",
+            "json.meta.next is falsy",
             "# comments are skipped",
         ];
         for (name, passed, message) in outcomes(&lines) {
@@ -577,6 +750,68 @@ mod tests {
         assert!(messages[5].contains("is not a target"));
         assert!(messages[6].contains("is not an operator"));
         assert!(messages[7].contains("is not a check"));
+    }
+
+    #[test]
+    fn multi_word_operators_parse() {
+        let parse = |line: &str| {
+            let check = Check::parse(line).unwrap();
+            (check.target, check.operator, check.value)
+        };
+        let t = |a: &str, b: &str, c: &str| (a.to_owned(), b.to_owned(), c.to_owned());
+        assert_eq!(
+            parse("status not in 400, 404"),
+            t("status", "not in", "400, 404")
+        );
+        assert_eq!(parse("status   in   [1, 2]"), t("status", "in", "[1, 2]"));
+        assert_eq!(
+            parse("time between 1 and 9"),
+            t("time", "between", "1 and 9")
+        );
+        assert_eq!(parse("json.a is empty"), t("json.a", "is empty", ""));
+        assert_eq!(
+            parse("json.a is not empty"),
+            t("json.a", "is not empty", "")
+        );
+        assert_eq!(parse("json.a is truthy"), t("json.a", "is truthy", ""));
+        assert_eq!(parse("json.a is falsy"), t("json.a", "is falsy", ""));
+        assert_eq!(parse("json.a is string"), t("json.a", "is", "string"));
+        assert!(Check::parse("json.a is nothing").is_ok());
+    }
+
+    #[test]
+    fn the_new_operators_fail_with_a_reason() {
+        let results = outcomes(&[
+            "status in 200, 204",
+            "status not in 200, 201",
+            "json.score between 1 and 5",
+            "json.role between 1 and 5",
+            "json.role between 1",
+            "json.role in",
+            "json.data is empty",
+            "json.meta.total is falsy",
+            "json.meta.next is not empty",
+            "json.nope is empty",
+            "json.score is empty",
+        ]);
+        let messages: Vec<String> = results
+            .iter()
+            .map(|(name, passed, message)| {
+                assert!(!passed, "{name}");
+                message.clone().unwrap()
+            })
+            .collect();
+        assert_eq!(messages[0], "status is 201; expected one of [200,204]");
+        assert_eq!(messages[1], "status is 201; expected none of [200,201]");
+        assert_eq!(messages[2], "json.score is 9.5; expected between 1 and 5");
+        assert!(messages[3].starts_with("cannot compare"), "{}", messages[3]);
+        assert!(messages[4].contains("between 1 and 10"), "{}", messages[4]);
+        assert!(messages[5].contains("needs a list"), "{}", messages[5]);
+        assert!(messages[6].ends_with(", not empty"), "{}", messages[6]);
+        assert_eq!(messages[7], "json.meta.total is 2, not falsy");
+        assert_eq!(messages[8], "json.meta.next is empty");
+        assert_eq!(messages[9], "json.nope does not exist");
+        assert_eq!(messages[10], "json.score is 9.5, not empty");
     }
 
     #[test]
