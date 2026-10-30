@@ -27,6 +27,8 @@ All notable changes to Getman are listed here. The format follows
   body's buttons out of view.
 - A long file name or item name in the import, export and other dialogs
   widened their contents past the edge instead of wrapping.
+- Opening a request twice before it had loaded, as a double-click on a
+  large one can, stopped the tabs from updating until a reload.
 
 ## [0.3.0] - 2026-10-28
 

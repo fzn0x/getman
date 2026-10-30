@@ -395,6 +395,11 @@ function focusTab(id: string): void {
 }
 
 function addTab(tab: Tab): void {
+  // Two clicks can both start reading a file before either opens it.
+  if (tabs.list.some((t) => t.id === tab.id)) {
+    focusTab(tab.id);
+    return;
+  }
   const at = tabs.list.findIndex((t) => t.id === tabs.active);
   tabs.list.splice(at < 0 ? tabs.list.length : at + 1, 0, tab);
   focusTab(tab.id);
