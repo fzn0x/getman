@@ -1,6 +1,6 @@
 //! Masking of secret values in everything the tools return.
 //!
-//! A value counts as secret when it is
+//! A value counts as secret ([`secret_values`]) when it is
 //!
 //! - a value in `getman.local.yaml` (variables and globals),
 //! - a value in an environment's `*.local.yaml`,
@@ -66,11 +66,6 @@ pub(crate) struct Masker {
 }
 
 impl Masker {
-    /// The secrets of a workspace, as they are now.
-    pub(crate) fn load(workspace: &Workspace) -> Self {
-        Self::new(secret_values(workspace))
-    }
-
     /// A masker for these secret values.
     pub(crate) fn new(secrets: impl IntoIterator<Item = String>) -> Self {
         let mut needles = BTreeSet::new();
@@ -134,8 +129,9 @@ impl Masker {
     }
 }
 
-/// The values that must not leave the machine.
-fn secret_values(workspace: &Workspace) -> Vec<String> {
+/// The values of a workspace that must not leave the machine, as they are
+/// now.
+pub(crate) fn secret_values(workspace: &Workspace) -> Vec<String> {
     let mut secrets = Vec::new();
     if let Ok(local) = workspace.read_local_state() {
         secrets.extend(local.variables.into_values());

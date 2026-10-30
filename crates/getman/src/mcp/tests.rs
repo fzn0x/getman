@@ -392,7 +392,7 @@ async fn secrets_never_reach_the_results() {
 }
 
 #[tokio::test]
-async fn the_request_as_sent_is_returned_with_its_secrets_masked() {
+async fn the_request_as_sent_is_returned_and_a_secret_replaced_meanwhile_stays_masked() {
     let (_dir, ws) = workspace();
     ws.create_request(
         "",
@@ -406,6 +406,11 @@ async fn the_request_as_sent_is_returned_with_its_secrets_masked() {
             )],
             body: getman_core::model::Body::Json {
                 content: r#"{"refresh": "{{token}}"}"#.into(),
+            },
+            scripts: getman_core::model::Scripts {
+                pre_request: String::new(),
+                // The token that went out is replaced once the answer is in.
+                post_response: "gm.environment.set('token', 'rotated-token');".into(),
             },
             examples: vec![Example {
                 name: "Ok".into(),
@@ -438,10 +443,14 @@ async fn the_request_as_sent_is_returned_with_its_secrets_masked() {
     let sent = tool(
         &mut server,
         "send_request",
-        json!({ "path": "login.yaml", "environment": "dev" }),
+        json!({ "path": "login.yaml", "environment": "dev", "keep_variables": true }),
     )
     .await;
     assert_eq!(sent["status"], 200, "{sent}");
+    assert_eq!(
+        ws.read_environment(&id).unwrap().local["token"],
+        "rotated-token"
+    );
     let request = &sent["request"];
     assert_eq!(request["method"], "POST");
     let authorization = request["headers"]

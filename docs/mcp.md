@@ -141,6 +141,10 @@ Every result is scrubbed before it reaches the agent. A value is
 - the value of a variable an environment lists under `secrets`;
 - the value of an environment variable of the process named `GETMAN_*`.
 
+The values are read before each tool runs and again after it, so a token
+that a script replaces during the call stays masked where the old value
+was sent.
+
 Nothing else is treated as secret. In particular, a value you typed
 straight into a request file, or a token a script keeps in memory with
 `gm.session`, is not known to be secret: keep such values in a

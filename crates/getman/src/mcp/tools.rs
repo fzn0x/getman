@@ -12,7 +12,7 @@ use getman_core::runner::{self, RunEvent, RunOptions};
 use getman_core::workspace::Node;
 use serde_json::{Map, Value, json};
 
-use crate::mask::{MASK, Masker};
+use crate::mask::{MASK, Masker, secret_values};
 use crate::report::{failures, outcome};
 use crate::workspaces;
 
@@ -173,6 +173,9 @@ impl Tools {
 
     /// Calls a tool and returns its result, with secret values masked.
     pub(super) async fn call(&mut self, name: &str, arguments: &Arguments) -> Value {
+        // Read before the tool runs too: a script may replace a secret, such
+        // as a token, after the old value went out.
+        let before = secret_values(self.workspace());
         let outcome = match name {
             "list_requests" => self.list_requests(arguments),
             "read_request" => self.read_request(arguments),
@@ -183,7 +186,7 @@ impl Tools {
             "import_curl" => self.import_curl(arguments),
             other => Err(format!("there is no tool {other}")),
         };
-        let masker = Masker::load(self.workspace());
+        let masker = Masker::new(before.into_iter().chain(secret_values(self.workspace())));
         match outcome {
             Ok(mut value) => {
                 masker.mask_value(&mut value);
