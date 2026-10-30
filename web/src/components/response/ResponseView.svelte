@@ -2,9 +2,9 @@
   import { overflowFade } from "../../lib/actions";
   import { copyText } from "../../lib/clipboard";
   import { api } from "../../lib/api";
-  import { exampleFrom, exampleName } from "../../lib/example";
+  import { exampleFrom, exampleName, payloadSize } from "../../lib/example";
   import { examples } from "../../lib/examples.svelte";
-  import { ago, payloadText } from "../../lib/format";
+  import { ago } from "../../lib/format";
   import { watchAsStream } from "../../lib/realtime.svelte";
   import {
     message,
@@ -111,11 +111,28 @@
     });
   }
 
+  let showSecrets = $state(false);
+  const sent = $derived(
+    showSecrets ? execution?.request : (execution?.request_masked ?? execution?.request),
+  );
+  /** A body of bytes, for the same viewer as a response's. */
   const sentBody = $derived.by(() => {
-    const body = execution?.request?.body;
-    if (!body || body.type === "none") return "";
-    if (body.type === "bytes") return payloadText(body.data);
-    if (body.type === "file") return `The contents of ${body.path}`;
+    const body = sent?.body;
+    if (!sent || body?.type !== "bytes") return null;
+    // The size of what went out, also while the secrets in it are masked.
+    const real = execution?.request?.body;
+    return {
+      headers: sent.headers,
+      body: body.data,
+      truncated: false,
+      size: { headers: 0, body: payloadSize(real?.type === "bytes" ? real.data : body.data) },
+    };
+  });
+  /** A file or multipart body, described. */
+  const sentParts = $derived.by(() => {
+    const body = sent?.body;
+    if (body?.type === "file") return `The contents of ${body.path}`;
+    if (body?.type !== "multipart") return "";
     return body.parts
       .map((part) => `${part.name}: ${part.file ? `file ${part.file}` : (part.value ?? "")}`)
       .join("\n");
@@ -212,7 +229,10 @@
         </div>
       {/if}
     </div>
-    <div class="pane" class:fill={tab.responsePane === "body"}>
+    <div
+      class="pane"
+      class:fill={tab.responsePane === "body" || (tab.responsePane === "sent" && sentBody)}
+    >
       {#if tab.responsePane === "body"}
         {#if response}
           <BodyViewer {response} {tab} />
@@ -331,24 +351,51 @@
           <p class="none">Nothing logged. <code>console.log</code> in a script writes here.</p>
         {/if}
       {:else if tab.responsePane === "sent"}
-        {#if execution?.request}
-          <p class="line mono">
-            <strong>{execution.request.method}</strong>
-            {execution.request.url}
-          </p>
-          <dl class="pairs">
-            {#each execution.request.headers as header, i (i)}
-              <dt class="mono">{header.name}</dt>
-              <dd class="mono">{header.value}</dd>
-            {/each}
-          </dl>
-          {#if sentBody}
-            <pre class="sent-body">{sentBody}</pre>
-          {/if}
-          <p class="meta muted">
-            Exactly what went out, after variables, folders and authentication. Cookies and
-            Content-Length are added on the wire.
-          </p>
+        {#if sent}
+          <div class="sent" class:split={sentBody}>
+            <div class="sent-head">
+              <div class="sent-line">
+                <p class="line mono">
+                  <strong>{sent.method}</strong>
+                  {sent.url}
+                </p>
+                {#if execution?.request_masked}
+                  <button
+                    class="btn quiet"
+                    aria-pressed={showSecrets}
+                    onclick={() => (showSecrets = !showSecrets)}
+                    >{showSecrets ? "Hide secrets" : "Show secrets"}</button
+                  >
+                {/if}
+              </div>
+              <dl class="pairs">
+                {#each sent.headers as header, i (i)}
+                  <dt class="mono">{header.name}</dt>
+                  <dd class="mono">
+                    <button
+                      class="value"
+                      title="Copy"
+                      onclick={() => void copyText(header.value, `${header.name} copied`)}
+                      >{header.value}</button
+                    >
+                  </dd>
+                {/each}
+              </dl>
+              {#if sentParts}
+                <pre class="sent-body">{sentParts}</pre>
+              {/if}
+              <p class="meta muted">
+                Exactly what went out, after variables, folders, authentication and pre-request
+                scripts. Cookies and Content-Length are added on the wire.
+                {#if execution?.request_masked && !showSecrets}
+                  The values of the environment's secret variables are hidden.
+                {/if}
+              </p>
+            </div>
+            {#if sentBody}
+              <BodyViewer response={sentBody} {tab} noun="request" />
+            {/if}
+          </div>
         {:else}
           <p class="none">The request was not sent.</p>
         {/if}
@@ -615,6 +662,36 @@
   .line {
     margin: 0 0 var(--s2);
     word-break: break-all;
+  }
+
+  .sent.split {
+    display: grid;
+    grid-template-rows: minmax(0, max-content) minmax(160px, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    height: 100%;
+  }
+
+  .sent.split .sent-head {
+    overflow: auto;
+    padding: var(--s3) var(--s4);
+    border-bottom: 1px solid var(--rule-2);
+  }
+
+  .sent-line {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--s3);
+  }
+
+  .sent-line .line {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .sent-line .btn {
+    flex: none;
+    height: 26px;
+    white-space: nowrap;
   }
 
   .sent-body {

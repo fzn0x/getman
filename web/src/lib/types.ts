@@ -470,6 +470,8 @@ export interface Execution {
   path: string | null;
   name: string;
   request: Outgoing | null;
+  /** The request as sent with the environment's secret values masked, when it held any. */
+  request_masked?: Outgoing;
   response: Response | null;
   error: string | null;
   tests: TestResult[];

@@ -147,6 +147,22 @@ deletes them.
   git-ignored local files, where a script's `gm.environment.set`,
   `gm.collectionVariables.set` and `gm.globals.set` would put them.
 
+## The request as sent
+
+The response's **Sent** tab shows the request exactly as it went out:
+the method, URL and headers after variables, folder settings,
+authentication and pre-request scripts, and the body in the same viewer
+as a response's, with Pretty, Raw, Hex, Find, Copy and Save. Click a
+header's value to copy it. The client adds cookies and `Content-Length`
+on the wire, so they are not listed.
+
+Values of the variables the selected environment lists under `secrets`
+show as `[secret]` there and in the console, also in their Base64 and
+percent-encoded forms, such as inside a Basic `Authorization` header,
+and also when a script set them while the request ran. **Show secrets**
+shows them in the Sent tab. Only the display is masked: the request went
+out with the real values.
+
 ## Environments
 
 **Duplicate**, next to Rename, copies an environment with its local

@@ -10,7 +10,17 @@
   import Icon from "../Icon.svelte";
   import HexView from "./HexView.svelte";
 
-  let { response, tab = null }: { response: Response; tab?: RequestTab | null } = $props();
+  let {
+    response,
+    tab = null,
+    noun = "response",
+  }: {
+    response: Pick<Response, "headers" | "body" | "truncated" | "size">;
+    tab?: RequestTab | null;
+    /** What the body belongs to, for labels and the name of a saved file. */
+    noun?: "response" | "request";
+  } = $props();
+  const label = $derived(noun === "request" ? "Request body" : "Response body");
 
   const contentType = $derived(
     response.headers.find((h) => h.name.toLowerCase() === "content-type")?.value,
@@ -111,7 +121,7 @@
               : kind === "pdf"
                 ? "pdf"
                 : "txt";
-    link.download = `response.${extension}`;
+    link.download = `${noun}.${extension}`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   }
@@ -223,7 +233,7 @@
     {#if mode === "preview" && kind === "html"}
       <iframe title="HTML preview" sandbox="" srcdoc={text}></iframe>
     {:else if mode === "preview" && kind === "image" && blobUrl}
-      <div class="image"><img src={blobUrl} alt="Response body" /></div>
+      <div class="image"><img src={blobUrl} alt={label} /></div>
     {:else if mode === "preview" && kind === "pdf" && blobUrl}
       <iframe title="PDF preview" src={blobUrl}></iframe>
     {:else if mode === "hex"}
@@ -237,7 +247,7 @@
     {:else if text === ""}
       <div class="binary">
         <p class="bitmap big">Empty</p>
-        <p>The response has no body.</p>
+        <p>The {noun} has no body.</p>
       </div>
     {:else}
       <Editor
@@ -247,7 +257,7 @@
         {language}
         {wrap}
         links
-        label="Response body"
+        {label}
         onSelection={(text, line) => (selected = { text, line })}
       />
     {/if}

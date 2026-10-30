@@ -73,6 +73,22 @@ describe("rows", () => {
     expect(rowFromExecution(execution(), true).kind).toBe("graphql");
   });
 
+  it("show the request with its secrets masked", () => {
+    const sent = execution().request!;
+    const row = rowFromExecution(
+      execution({
+        request_masked: {
+          ...sent,
+          url: "https://api.test/users?key=[secret]",
+          headers: [{ name: "Authorization", value: "Bearer [secret]" }],
+        },
+      }),
+      false,
+    );
+    expect(row.url).toBe("https://api.test/users?key=[secret]");
+    expect(row.requestHeaders).toEqual([{ name: "Authorization", value: "Bearer [secret]" }]);
+  });
+
   it("fail on errors, bad statuses, scripts and checks", () => {
     const base = execution();
     const response = base.response!;

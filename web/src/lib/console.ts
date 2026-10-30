@@ -119,7 +119,9 @@ function problemsOf(execution: Execution): string[] {
 /** The row for an HTTP or GraphQL request that was sent. */
 export function rowFromExecution(execution: Execution, graphql: boolean): Fresh {
   const row = empty(graphql ? "graphql" : "http", execution.name);
-  const { request, response } = execution;
+  // Secret values stay hidden here; the response's Sent tab shows them on request.
+  const request = execution.request_masked ?? execution.request;
+  const { response } = execution;
   row.method = request?.method ?? "";
   row.url = request?.url ?? "";
   row.requestHeaders = request?.headers ?? [];

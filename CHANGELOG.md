@@ -8,6 +8,12 @@ All notable changes to Getman are listed here. The format follows
 
 ### Added
 
+- The response's Sent tab shows the request body in the viewer response
+  bodies use, with Pretty, Raw, Hex, Find, Copy and Save, and lets you
+  copy a header by clicking it.
+- The Sent tab and the console hide the values of the environment's
+  secret variables, also Base64 and percent-encoded, until you choose
+  **Show secrets**.
 - `send_request` in `getman mcp` returns the headers and body of the
   request as it went out, with secrets masked.
 
