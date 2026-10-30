@@ -488,12 +488,10 @@ impl Call {
     pub(crate) async fn wait_head(&mut self) -> Result<&Head> {
         if let Stage::Waiting(response) = &mut self.stage {
             let response = response.await.map_err(|e| {
-                // The refusal shows as a closed connection, or on some
-                // systems as the TLS alert the server sent.
                 let reason = describe(&e);
-                let hint = self.closed_hint.filter(|_| {
-                    e.is_canceled() || e.is_closed() || reason.contains("received fatal alert")
-                });
+                let hint = self
+                    .closed_hint
+                    .filter(|_| broke_off(e.is_canceled() || e.is_closed(), &reason));
                 Error::Http(match hint {
                     Some(hint) => format!("{reason}; {hint}"),
                     None => reason,
@@ -696,6 +694,19 @@ pub(crate) fn header_list(headers: &HeaderMap) -> Vec<Header> {
 }
 
 /// Explains a connection error in one line.
+/// Whether the connection broke off under a call, as it does when a TLS
+/// 1.3 server refuses the client's certificate after the handshake.
+/// Depending on the system and the timing, the client sees the connection
+/// close, the alert the server sent, or a broken pipe or a reset while it
+/// is still writing.
+fn broke_off(closed: bool, reason: &str) -> bool {
+    let reason = reason.to_ascii_lowercase();
+    closed
+        || ["received fatal alert", "broken pipe", "connection reset"]
+            .iter()
+            .any(|sign| reason.contains(sign))
+}
+
 fn describe(error: &hyper::Error) -> String {
     let mut message = error.to_string();
     let mut source = std::error::Error::source(error);
@@ -713,6 +724,22 @@ fn describe(error: &hyper::Error) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_refused_client_certificate_is_recognised_however_it_shows() {
+        assert!(broke_off(
+            true,
+            "connection closed before message completed"
+        ));
+        for reason in [
+            "connection error: received fatal alert: CertificateRequired",
+            "connection error: stream closed because of a broken pipe",
+            "connection error: Connection reset by peer (os error 54)",
+        ] {
+            assert!(broke_off(false, reason), "{reason}");
+        }
+        assert!(!broke_off(false, "invalid HTTP status-code parsed"));
+    }
 
     #[test]
     fn addresses_take_a_scheme_a_host_and_a_port() {

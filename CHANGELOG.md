@@ -45,6 +45,9 @@ All notable changes to Getman are listed here. The format follows
   error. Now the other files are imported, and the report lists the
   failed files with their reasons and the files passed over for being
   in no format Getman reads.
+- A gRPC call to a server that requires a client certificate could fail
+  with only "broken pipe" or "connection reset", as it can on macOS,
+  without the hint to set a certificate.
 
 ## [0.3.0] - 2026-10-28
 
