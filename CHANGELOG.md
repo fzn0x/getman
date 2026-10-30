@@ -6,6 +6,8 @@ All notable changes to Getman are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-30
+
 ### Added
 
 - The response's Sent tab shows the request body in the viewer response
@@ -193,7 +195,8 @@ browser UI on `127.0.0.1`, in a terminal UI or run in CI with
 files; checks and captures; JavaScript scripts with the `gm` API (and a
 `pm` alias); import from Postman and cURL, and export as code.
 
-[Unreleased]: https://github.com/fzn0x/getman/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/fzn0x/getman/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/fzn0x/getman/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/fzn0x/getman/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/fzn0x/getman/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/fzn0x/getman/releases/tag/v0.1.0
