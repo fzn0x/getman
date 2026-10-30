@@ -392,6 +392,71 @@ async fn secrets_never_reach_the_results() {
 }
 
 #[tokio::test]
+async fn the_request_as_sent_is_returned_with_its_secrets_masked() {
+    let (_dir, ws) = workspace();
+    ws.create_request(
+        "",
+        "Login",
+        &Request {
+            method: "POST".into(),
+            url: "{{baseUrl}}/login".into(),
+            headers: vec![getman_core::KeyValue::new(
+                "Authorization",
+                "Bearer {{token}}",
+            )],
+            body: getman_core::model::Body::Json {
+                content: r#"{"refresh": "{{token}}"}"#.into(),
+            },
+            examples: vec![Example {
+                name: "Ok".into(),
+                body: "{}".into(),
+                ..Example::default()
+            }],
+            ..Request::default()
+        },
+    )
+    .unwrap();
+    let listener = crate::mock::bind(Some(0)).await.unwrap();
+    let mock =
+        crate::mock::start(ws.clone(), "", listener, Duration::ZERO, Box::new(|_| {})).unwrap();
+    let id = ws.create_environment("Dev").unwrap();
+    ws.write_environment(
+        &id,
+        &EnvironmentFiles {
+            shared: Environment {
+                variables: [("baseUrl".to_owned(), mock.url())].into_iter().collect(),
+                ..Environment::default()
+            },
+            local: [("token".to_owned(), "first-token".to_owned())]
+                .into_iter()
+                .collect(),
+        },
+    )
+    .unwrap();
+    let mut server = Server::new(ws.clone());
+
+    let sent = tool(
+        &mut server,
+        "send_request",
+        json!({ "path": "login.yaml", "environment": "dev" }),
+    )
+    .await;
+    assert_eq!(sent["status"], 200, "{sent}");
+    let request = &sent["request"];
+    assert_eq!(request["method"], "POST");
+    let authorization = request["headers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|h| h["name"] == "Authorization")
+        .unwrap();
+    assert_eq!(authorization["value"], "Bearer [secret]");
+    assert_eq!(request["body"], r#"{"refresh": "[secret]"}"#);
+    assert!(!sent.to_string().contains("first-token"), "{sent}");
+    mock.stop();
+}
+
+#[tokio::test]
 async fn secrets_of_any_length_are_masked_in_their_encodings_too() {
     use base64::Engine as _;
     let (_dir, ws) = workspace();

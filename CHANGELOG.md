@@ -6,6 +6,11 @@ All notable changes to Getman are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `send_request` in `getman mcp` returns the headers and body of the
+  request as it went out, with secrets masked.
+
 ### Fixed
 
 - The browser UI could not send or save a request whose body was over

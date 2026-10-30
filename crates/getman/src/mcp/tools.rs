@@ -5,6 +5,7 @@ use std::sync::atomic::AtomicBool;
 
 use getman_core::Workspace;
 use getman_core::execute::{Context, Executor, Overlay, persist_changes};
+use getman_core::http::OutgoingBody;
 use getman_core::import::curl;
 use getman_core::model::{Request, Vars};
 use getman_core::runner::{self, RunEvent, RunOptions};
@@ -75,7 +76,7 @@ pub(super) fn list() -> Vec<Value> {
         json!({
             "name": "send_request",
             "title": "Send a request",
-            "description": "Sends a saved request with its scripts, checks and captures, and returns the status, headers, body (cut to a limit), timing and check and test results.",
+            "description": "Sends a saved request with its scripts, checks and captures, and returns the request as it went out (method, URL, headers and body, after variables, auth and pre-request scripts), the status, headers, body (cut to a limit), timing and check and test results.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -83,7 +84,7 @@ pub(super) fn list() -> Vec<Value> {
                     "environment": environment,
                     "variables": variables,
                     "keep_variables": { "type": "boolean", "description": "Save variables that the request's scripts and captures set, such as a token, to the git-ignored local files so later requests see them. Default false." },
-                    "max_body_chars": { "type": "integer", "minimum": 0, "maximum": MAX_BODY_CHARS, "description": "Most body characters to return. Default 20000." }
+                    "max_body_chars": { "type": "integer", "minimum": 0, "maximum": MAX_BODY_CHARS, "description": "Most body characters to return, for the response and the request each. Default 20000." }
                 },
                 "required": ["path"],
                 "additionalProperties": false
@@ -268,7 +269,18 @@ impl Tools {
             "passed": !execution.failed(),
         });
         if let Some(sent) = &execution.request {
-            result["request"] = json!({ "method": sent.method, "url": sent.url });
+            let mut request = json!({
+                "method": sent.method,
+                "url": sent.url,
+                "headers": sent.headers,
+            });
+            match &sent.body {
+                OutgoingBody::None => {}
+                OutgoingBody::Bytes { data } => put_body(&mut request, &data.0, limit),
+                OutgoingBody::File { path } => request["body_file"] = json!(path),
+                OutgoingBody::Multipart { parts } => request["parts"] = json!(parts),
+            }
+            result["request"] = request;
         }
         if let Some(error) = &execution.error {
             result["error"] = json!(error);
@@ -279,22 +291,7 @@ impl Tools {
             result["time_ms"] = json!(response.time_ms);
             result["size_bytes"] = json!(response.size.body);
             result["headers"] = json!(response.headers);
-            match std::str::from_utf8(&response.body.0) {
-                Ok(text) => {
-                    let total = text.chars().count();
-                    result["body"] = json!(text.chars().take(limit).collect::<String>());
-                    if total > limit {
-                        result["body_truncated"] = json!(true);
-                        result["body_chars"] = json!(total);
-                    }
-                }
-                Err(_) => {
-                    result["body"] = json!(format!(
-                        "A binary body of {} bytes, not shown.",
-                        response.body.0.len()
-                    ));
-                }
-            }
+            put_body(&mut result, &response.body.0, limit);
         }
         result["checks"] = json!(execution.checks);
         result["tests"] = json!(execution.tests);
@@ -450,6 +447,27 @@ impl Tools {
     fn environment(&self, arguments: &Arguments) -> Result<Option<String>, String> {
         let given = string_arg(arguments, "environment")?;
         workspaces::environment(self.workspace(), given.as_deref())
+    }
+}
+
+/// Sets `body` in `into` to the text of `bytes` cut to `limit` characters,
+/// with `body_truncated` and `body_chars` when it was cut.
+fn put_body(into: &mut Value, bytes: &[u8], limit: usize) {
+    match std::str::from_utf8(bytes) {
+        Ok(text) => {
+            let total = text.chars().count();
+            into["body"] = json!(text.chars().take(limit).collect::<String>());
+            if total > limit {
+                into["body_truncated"] = json!(true);
+                into["body_chars"] = json!(total);
+            }
+        }
+        Err(_) => {
+            into["body"] = json!(format!(
+                "A binary body of {} bytes, not shown.",
+                bytes.len()
+            ));
+        }
     }
 }
 
