@@ -13,6 +13,7 @@
 mod cli;
 mod commands;
 mod examples;
+mod mask;
 mod mcp;
 mod mock;
 mod report;

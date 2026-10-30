@@ -1,5 +1,5 @@
 //! The tools `getman mcp` offers. Everything they return is masked first
-//! (see [`super::mask`]).
+//! (see [`crate::mask`]).
 
 use std::sync::atomic::AtomicBool;
 
@@ -11,7 +11,7 @@ use getman_core::runner::{self, RunEvent, RunOptions};
 use getman_core::workspace::Node;
 use serde_json::{Map, Value, json};
 
-use super::mask::{MASK, Masker};
+use crate::mask::{MASK, Masker};
 use crate::report::{failures, outcome};
 use crate::workspaces;
 

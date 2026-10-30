@@ -7,7 +7,6 @@
 //! to 2025-11-25. Nothing but protocol messages goes to standard output;
 //! notes go to standard error.
 
-mod mask;
 mod tools;
 
 use getman_core::Workspace;

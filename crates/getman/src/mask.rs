@@ -26,7 +26,7 @@ use regex::{Regex, RegexBuilder};
 use serde_json::Value;
 
 /// What replaces a secret value in results.
-pub(super) const MASK: &str = "[secret]";
+pub(crate) const MASK: &str = "[secret]";
 
 /// `GETMAN_*` variables that set an option of Getman or its install
 /// scripts rather than hold a value for requests.
@@ -60,19 +60,19 @@ const URI_COMPONENT: &AsciiSet = &NON_ALPHANUMERIC
     .remove(b')');
 
 /// Replaces secret values and their encodings in text.
-pub(super) struct Masker {
+pub(crate) struct Masker {
     /// Matches any of them, longest first; `None` when nothing is secret.
     pattern: Option<Regex>,
 }
 
 impl Masker {
     /// The secrets of a workspace, as they are now.
-    pub(super) fn load(workspace: &Workspace) -> Self {
+    pub(crate) fn load(workspace: &Workspace) -> Self {
         Self::new(secret_values(workspace))
     }
 
     /// A masker for these secret values.
-    pub(super) fn new(secrets: impl IntoIterator<Item = String>) -> Self {
+    pub(crate) fn new(secrets: impl IntoIterator<Item = String>) -> Self {
         let mut needles = BTreeSet::new();
         for secret in secrets {
             // A value read from a file or a variable may carry a line break
@@ -103,7 +103,7 @@ impl Masker {
     }
 
     /// The text with every secret replaced.
-    pub(super) fn mask(&self, text: &str) -> String {
+    pub(crate) fn mask(&self, text: &str) -> String {
         match &self.pattern {
             Some(pattern) => pattern.replace_all(text, MASK).into_owned(),
             None => text.to_owned(),
@@ -111,7 +111,7 @@ impl Masker {
     }
 
     /// Masks every string in a JSON value, and the names of its fields.
-    pub(super) fn mask_value(&self, value: &mut Value) {
+    pub(crate) fn mask_value(&self, value: &mut Value) {
         if self.pattern.is_none() {
             return;
         }
