@@ -11,6 +11,7 @@ use getman_core::script::{ChangeScope, VarChange};
 
 use super::Outcome;
 use crate::cli::{ReporterKind, RunArgs};
+use crate::mask::Secrets;
 use crate::report::{self, Pretty, Recorded};
 use crate::workspaces;
 
@@ -50,6 +51,16 @@ pub(crate) async fn run(args: RunArgs) -> Outcome {
         ..RunOptions::default()
     };
     let executor = Executor::new(workspace.clone());
+    // What the run prints, reports and keeps hides the environment's
+    // secrets, also the values given to them for this run.
+    let mut secrets = Secrets::of(&workspace, environment.as_deref());
+    secrets.learn(
+        options
+            .vars
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str())),
+    );
+    secrets.learn_rows(&options.data);
     let environment_name = environment.as_ref().map(|id| {
         workspace
             .read_environment(id)
@@ -79,7 +90,8 @@ pub(crate) async fn run(args: RunArgs) -> Outcome {
         });
     }
 
-    let report = runner::run(&executor, &options, &cancel, |event| {
+    let report = runner::run(&executor, &options, &cancel, |mut event| {
+        secrets.mask_event(&mut event);
         if show_cli {
             pretty.event(&event);
         }

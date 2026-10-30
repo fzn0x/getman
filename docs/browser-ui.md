@@ -159,7 +159,8 @@ on the wire, so they are not listed.
 Values of the variables the selected environment lists under `secrets`
 show as `[secret]` there and in the console, also in their Base64 and
 percent-encoded forms, such as inside a Basic `Authorization` header,
-and also when a script set them while the request ran. **Show secrets**
+also when a script set them while the request ran, and also what a value
+such as `{{$env.GETMAN_TOKEN}}` stands for. **Show secrets**
 shows them in the Sent tab. Only the display is masked: the request went
 out with the real values.
 

@@ -35,6 +35,7 @@ use axum::response::{IntoResponse, Response};
 use getman_core::Workspace;
 use getman_core::execute::{Cancel, Executor};
 
+use crate::mask::Secrets;
 use crate::style;
 
 /// Port the UI is served on unless another is asked for or it is taken.
@@ -60,6 +61,20 @@ pub(crate) struct AppState {
 impl AppState {
     pub(crate) fn workspace(&self) -> &Workspace {
         &self.executor.workspace
+    }
+
+    /// The environment's secrets with the values the files and the
+    /// session hold now. Read before sending: a script may replace a
+    /// secret, such as a token, after the old value went out.
+    pub(crate) fn secrets(&self, environment: Option<&str>) -> Secrets {
+        let mut secrets = Secrets::of(self.workspace(), environment);
+        let session = self.executor.session();
+        secrets.learn(
+            session
+                .iter()
+                .map(|(name, value)| (name.as_str(), value.as_str())),
+        );
+        secrets
     }
 
     /// Ends what this state has under way, for when the server stops or
@@ -957,5 +972,94 @@ mod tests {
         let plain = call_json(&app, "/api/send", serde_json::json!({ "request": request })).await;
         assert!(plain["request"].is_object(), "{plain}");
         assert!(plain.get("request_masked").is_none(), "{plain}");
+    }
+
+    #[tokio::test]
+    async fn a_run_hides_the_environments_secrets_in_what_it_streams_keeps_and_reports() {
+        use getman_core::model::{Request, Scripts};
+        let (dir, app) = app();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        // The answer repeats the URL, secrets and all.
+        let echo = Router::new().fallback(|uri: axum::http::Uri| async move { uri.to_string() });
+        tokio::spawn(async move { axum::serve(listener, echo).await });
+        call(&app, "/api/environment/create", r#"{"name":"Dev"}"#).await;
+        let files = serde_json::json!({
+            "id": "dev",
+            "environment": {
+                "shared": {
+                    "variables": { "token": "", "key": "{{base_key}}", "base_key": "k3y-value" },
+                    "secrets": ["token", "key"],
+                },
+                "local": { "token": "s3cr3t-value" },
+            },
+        });
+        call_json(&app, "/api/environment/write", files).await;
+        let workspace = Workspace::open(dir.path()).unwrap();
+        let request = Request {
+            url: format!("http://{address}/me?token={{{{token}}}}&key={{{{key}}}}"),
+            scripts: Scripts {
+                pre_request: "console.log('sending ' + gm.environment.get('token'));".into(),
+                // The token that went out is replaced, and the next
+                // iteration sends the new one.
+                post_response: "gm.test('got ' + gm.response.text(), () => { throw new Error(gm.response.text()); });\
+                     gm.environment.set('token', 'rotated-value');"
+                    .into(),
+            },
+            ..Request::default()
+        };
+        workspace.create_request("", "Me", &request).unwrap();
+
+        let secrets = ["s3cr3t-value", "rotated-value", "k3y-value"];
+        let response = app
+            .clone()
+            .oneshot(api(
+                "/api/run",
+                Some(serde_json::json!({
+                    "targets": ["me.yaml"],
+                    "environment": "dev",
+                    "iterations": 2,
+                })),
+            ))
+            .await
+            .unwrap();
+        let id = response.headers()["x-run-id"].to_str().unwrap().to_owned();
+        let lines = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let streamed = String::from_utf8_lossy(&lines);
+        assert!(
+            streamed.contains("/me?token=[secret]&key=[secret]"),
+            "{streamed}"
+        );
+        assert!(streamed.contains("sending [secret]"), "{streamed}");
+        let (_, run) = read(
+            app.clone()
+                .oneshot(api("/api/runs/read", Some(serde_json::json!({ "id": id }))))
+                .await
+                .unwrap(),
+        )
+        .await;
+        let mut seen = vec![streamed.into_owned(), run.to_string()];
+        for format in ["json", "html", "junit", "csv"] {
+            let response = app
+                .clone()
+                .oneshot(api(
+                    "/api/runs/report",
+                    Some(serde_json::json!({ "id": id, "format": format })),
+                ))
+                .await
+                .unwrap();
+            let report = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            seen.push(String::from_utf8_lossy(&report).into_owned());
+        }
+        for text in &seen {
+            assert!(text.contains("[secret]"), "{text}");
+            for secret in secrets {
+                assert!(!text.contains(secret), "{secret} in {text}");
+            }
+        }
     }
 }

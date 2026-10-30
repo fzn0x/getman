@@ -16,6 +16,9 @@ All notable changes to Getman are listed here. The format follows
   **Show secrets**.
 - `send_request` in `getman mcp` returns the headers and body of the
   request as it went out, with secrets masked.
+- `getman run`, its reports, kept runs and the browser's Runner hide the
+  values of the environment's secret variables, also in URLs, test names
+  and console output.
 
 ### Fixed
 

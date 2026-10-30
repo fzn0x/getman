@@ -115,7 +115,11 @@ with `=`, `+`, `-` or `@` gets a leading `'`, so a spreadsheet does not
 run it as a formula.
 
 Reports leave out bodies and headers, so tokens in them stay out of CI
-artifacts. URLs are kept: put secrets in headers, not in query strings.
+artifacts. The values of the variables the environment lists under
+`secrets` show as `[secret]` wherever a run shows them: in the terminal,
+in every report, in kept runs and in the browser's Runner, also inside a
+URL, a test's name or a script's console output. So do the values
+`--var`, a data file or a script gives those variables during the run.
 
 ## In the browser
 
@@ -138,6 +142,11 @@ Pass secrets as environment variables named `GETMAN_*`, and refer to them
 as `{{$env.GETMAN_NAME}}`. Only that prefix can be read, so a workspace
 cannot pick up other credentials the CI job has. See
 [Variables](variables.md#secrets-from-the-environment).
+
+A value read this way is hidden in what the run shows only when it is the
+value of a variable the environment lists under `secrets`. Used straight
+in a request, it is not known to be secret, so send it in a header, which
+reports leave out, rather than in the URL.
 
 ## GitHub Actions
 

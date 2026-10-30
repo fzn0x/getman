@@ -1,5 +1,5 @@
-//! Masking of secret values: in everything the MCP tools return, and in
-//! the request as sent that the browser UI shows.
+//! Masking of secret values: in everything the MCP tools return, in the
+//! request as sent that the browser UI shows, and in what runs report.
 //!
 //! For the tools ([`secret_values`]), a value counts as secret when it is
 //!
@@ -9,8 +9,8 @@
 //! - the value of an environment variable of the process named `GETMAN_*`,
 //!   except the ones that set Getman's own options ([`OPTIONS`]).
 //!
-//! The UI masks only the variables its environment lists under `secrets`,
-//! the ones its editors hide too, and passes them to [`Masker::new`].
+//! The UI and runs mask only the variables the environment lists under
+//! `secrets`, the ones the UI's editors hide too ([`Secrets`]).
 //!
 //! Whatever its length, such a value is replaced by [`MASK`] wherever it
 //! appears in text, also inside a longer string. So are its encodings: the
@@ -24,7 +24,13 @@ use std::collections::BTreeSet;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD};
-use getman_core::Workspace;
+use getman_core::data::Row;
+use getman_core::execute::Execution;
+use getman_core::http::{Header, Outgoing, OutgoingBody, Payload};
+use getman_core::runner::RunEvent;
+use getman_core::script::VarChange;
+use getman_core::vars::VarStack;
+use getman_core::{Scope, Workspace};
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use regex::{Regex, RegexBuilder};
 use serde_json::Value;
@@ -115,11 +121,7 @@ impl Masker {
             return;
         }
         match value {
-            Value::String(text) => {
-                if self.pattern.as_ref().is_some_and(|p| p.is_match(text)) {
-                    *text = self.mask(text);
-                }
-            }
+            Value::String(text) => self.mask_text(text),
             Value::Array(list) => list.iter_mut().for_each(|v| self.mask_value(v)),
             Value::Object(map) => {
                 let fields = std::mem::take(map);
@@ -129,6 +131,222 @@ impl Masker {
                 }
             }
             _ => {}
+        }
+    }
+
+    /// Masks the text in place, leaving it alone when nothing in it is
+    /// secret.
+    fn mask_text(&self, text: &mut String) {
+        if self.pattern.as_ref().is_some_and(|p| p.is_match(text)) {
+            *text = self.mask(text);
+        }
+    }
+
+    fn mask_headers(&self, headers: &mut [Header]) {
+        for header in headers {
+            self.mask_text(&mut header.value);
+        }
+    }
+
+    /// Masks a body that is text; one that is not stays as it is.
+    fn mask_payload(&self, payload: &mut Payload) {
+        if let Ok(text) = std::str::from_utf8(&payload.0) {
+            let mut text = text.to_owned();
+            self.mask_text(&mut text);
+            payload.0 = text.into_bytes();
+        }
+    }
+
+    /// Masks a request as sent: its URL, headers and body.
+    pub(crate) fn mask_outgoing(&self, outgoing: &mut Outgoing) {
+        if self.pattern.is_none() {
+            return;
+        }
+        self.mask_text(&mut outgoing.url);
+        self.mask_headers(&mut outgoing.headers);
+        match &mut outgoing.body {
+            OutgoingBody::Bytes { data } => self.mask_payload(data),
+            OutgoingBody::Multipart { parts } => {
+                for part in parts {
+                    self.mask_text(&mut part.name);
+                    self.mask_text(&mut part.value);
+                }
+            }
+            OutgoingBody::None | OutgoingBody::File { .. } => {}
+        }
+    }
+
+    /// Masks everything a run reports of a request: the request as sent,
+    /// the response, the messages of a connection or call, what the
+    /// scripts logged and set, and every error and result. Binary data
+    /// stays as it is.
+    pub(crate) fn mask_execution(&self, execution: &mut Execution) {
+        if self.pattern.is_none() {
+            return;
+        }
+        if let Some(request) = &mut execution.request {
+            self.mask_outgoing(request);
+        }
+        if let Some(response) = &mut execution.response {
+            self.mask_text(&mut response.url);
+            self.mask_headers(&mut response.headers);
+            self.mask_payload(&mut response.body);
+            for hop in &mut response.hops {
+                self.mask_text(&mut hop.url);
+            }
+        }
+        for text in execution.error.iter_mut().chain(&mut execution.warnings) {
+            self.mask_text(text);
+        }
+        for log in &mut execution.logs {
+            self.mask_text(&mut log.message);
+        }
+        for error in &mut execution.script_errors {
+            self.mask_text(&mut error.message);
+        }
+        for result in execution.tests.iter_mut().chain(&mut execution.checks) {
+            self.mask_text(&mut result.name);
+            if let Some(message) = &mut result.message {
+                self.mask_text(message);
+            }
+        }
+        for change in &mut execution.changes {
+            if let Some(value) = &mut change.value {
+                self.mask_text(value);
+            }
+        }
+        if let Some(call) = &mut execution.grpc {
+            self.mask_headers(&mut call.headers);
+            self.mask_headers(&mut call.trailers);
+            if let Some(status) = &mut call.status {
+                self.mask_text(&mut status.message);
+            }
+            for message in &mut call.messages {
+                self.mask_value(&mut message.message);
+                if let Some(error) = &mut message.error {
+                    self.mask_text(error);
+                }
+            }
+        }
+        if let Some(call) = &mut execution.realtime {
+            self.mask_text(&mut call.url);
+            self.mask_headers(&mut call.request_headers);
+            self.mask_headers(&mut call.headers);
+            for message in call.messages.iter_mut().filter(|m| !m.binary) {
+                self.mask_text(&mut message.data);
+            }
+            for text in call.notes.iter_mut().chain(&mut call.warnings) {
+                self.mask_text(text);
+            }
+        }
+    }
+}
+
+/// The values of the variables an environment lists under `secrets`, the
+/// ones the UI's editors hide: what the UI hides in the request as sent
+/// until asked, and what runs leave out of what they report.
+pub(crate) struct Secrets {
+    names: Vec<String>,
+    values: Vec<String>,
+    masker: Masker,
+}
+
+impl Secrets {
+    /// The secrets of an environment, with the values its files hold now.
+    pub(crate) fn of(workspace: &Workspace, environment: Option<&str>) -> Self {
+        let Some(files) = environment.and_then(|id| workspace.read_environment(id).ok()) else {
+            return Self::new(Vec::new(), Vec::new());
+        };
+        let mut stack = VarStack::new();
+        stack.push(Scope::Environment, files.effective());
+        let mut values = Vec::new();
+        for name in &files.shared.secrets {
+            for value in [files.shared.variables.get(name), files.local.get(name)]
+                .into_iter()
+                .flatten()
+            {
+                values.push(value.clone());
+                // A value such as `{{$env.GETMAN_TOKEN}}` goes out as the
+                // value it names.
+                let rendered = stack.render(value);
+                if rendered != *value {
+                    values.push(rendered);
+                }
+            }
+        }
+        Self::new(files.shared.secrets, values)
+    }
+
+    fn new(names: Vec<String>, values: Vec<String>) -> Self {
+        let masker = Masker::new(values.clone());
+        Self {
+            names,
+            values,
+            masker,
+        }
+    }
+
+    /// Takes in values given to variables some other way, such as by
+    /// scripts or on the command line, keeping the ones of secrets.
+    pub(crate) fn learn<'a>(&mut self, values: impl IntoIterator<Item = (&'a str, &'a str)>) {
+        let before = self.values.len();
+        for (name, value) in values {
+            if self.names.iter().any(|n| n == name)
+                && !value.trim().is_empty()
+                && !self.values.iter().any(|v| v == value)
+            {
+                self.values.push(value.to_owned());
+            }
+        }
+        if self.values.len() > before {
+            self.masker = Masker::new(self.values.clone());
+        }
+    }
+
+    /// Takes in the values scripts and captures gave secrets.
+    pub(crate) fn learn_changes(&mut self, changes: &[VarChange]) {
+        self.learn(
+            changes
+                .iter()
+                .filter_map(|c| Some((c.name.as_str(), c.value.as_deref()?))),
+        );
+    }
+
+    /// Takes in the values of a run's data file, which name their
+    /// variables by column.
+    pub(crate) fn learn_rows(&mut self, rows: &[Row]) {
+        let values: Vec<(&str, String)> = rows
+            .iter()
+            .flatten()
+            .map(|(name, value)| {
+                let text = match value {
+                    Value::String(text) => text.clone(),
+                    other => other.to_string(),
+                };
+                (name.as_str(), text)
+            })
+            .collect();
+        self.learn(values.iter().map(|(name, value)| (*name, value.as_str())));
+    }
+
+    pub(crate) fn masker(&self) -> &Masker {
+        &self.masker
+    }
+
+    /// Masks what an event of a run reports, after taking in the values
+    /// the request's scripts gave secrets.
+    pub(crate) fn mask_event(&mut self, event: &mut RunEvent) {
+        match event {
+            RunEvent::Request { execution, .. } => {
+                self.learn_changes(&execution.changes);
+                self.masker.mask_execution(execution);
+            }
+            RunEvent::Finish { summary } => {
+                for text in summary.warnings.iter_mut().chain(&mut summary.stopped) {
+                    self.masker.mask_text(text);
+                }
+            }
+            RunEvent::Start { .. } | RunEvent::Iteration { .. } => {}
         }
     }
 }
@@ -350,5 +568,113 @@ mod tests {
                 "[secret]": "field name",
             })
         );
+    }
+
+    #[test]
+    fn a_run_reports_text_masked_and_binary_data_as_it_is() {
+        use getman_core::checks::TestResult;
+        use getman_core::realtime::{Direction, Entry, RealtimeCall};
+        use getman_core::script::LogEntry;
+
+        let masker = masking(&["s3cr3t"]);
+        let binary = Payload(vec![0xff, b's', b'3', b'c', b'r', b'3', b't']);
+        let mut response = crate::report::sample().requests[0]
+            .1
+            .response
+            .clone()
+            .unwrap();
+        response.body = binary.clone();
+        let mut execution = Execution {
+            request: Some(Outgoing {
+                method: "GET".into(),
+                url: "https://x.test/?key=s3cr3t".into(),
+                headers: vec![Header::new("Authorization", "Bearer s3cr3t")],
+                body: OutgoingBody::Bytes {
+                    data: Payload(b"{\"key\": \"s3cr3t\"}".to_vec()),
+                },
+            }),
+            response: Some(response),
+            logs: vec![LogEntry {
+                level: "log".into(),
+                message: "key s3cr3t".into(),
+                origin: "request".into(),
+            }],
+            tests: vec![TestResult {
+                name: "has s3cr3t".into(),
+                passed: false,
+                message: Some("expected s3cr3t".into()),
+                skipped: false,
+            }],
+            realtime: Some(RealtimeCall {
+                messages: vec![
+                    Entry {
+                        direction: Direction::Sent,
+                        data: "s3cr3t".into(),
+                        time: 0.0,
+                        size: 6,
+                        binary: false,
+                        name: None,
+                        event: None,
+                        id: None,
+                        ack: None,
+                    },
+                    Entry {
+                        direction: Direction::Received,
+                        // Base64 that happens to hold the value.
+                        data: "AAs3cr3tAA==".into(),
+                        time: 0.0,
+                        size: 8,
+                        binary: true,
+                        name: None,
+                        event: None,
+                        id: None,
+                        ack: None,
+                    },
+                ],
+                ..RealtimeCall::default()
+            }),
+            ..Execution::default()
+        };
+        masker.mask_execution(&mut execution);
+        let text = serde_json::to_string(&execution).unwrap();
+        assert!(text.contains("https://x.test/?key=[secret]"), "{text}");
+        assert!(text.contains("Bearer [secret]"), "{text}");
+        assert!(text.contains(r#"{\"key\": \"[secret]\"}"#), "{text}");
+        assert!(text.contains("key [secret]"), "{text}");
+        assert!(text.contains("has [secret]") && text.contains("expected [secret]"));
+        assert_eq!(execution.response.unwrap().body, binary);
+        let call = execution.realtime.unwrap();
+        assert_eq!(call.messages[0].data, "[secret]");
+        assert_eq!(call.messages[1].data, "AAs3cr3tAA==");
+    }
+
+    #[test]
+    fn only_the_values_given_to_secrets_are_learned() {
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = Workspace::init(dir.path(), "Test").unwrap();
+        let id = workspace.create_environment("Dev").unwrap();
+        let mut files = workspace.read_environment(&id).unwrap();
+        files.shared.secrets = vec!["token".into()];
+        files.local.insert("token".into(), "first-token".into());
+        workspace.write_environment(&id, &files).unwrap();
+
+        let mut secrets = Secrets::of(&workspace, Some(&id));
+        secrets.learn([("token", "second-token"), ("user", "ada-lovelace")]);
+        secrets.learn_changes(&[VarChange {
+            scope: getman_core::script::ChangeScope::Environment,
+            name: "token".into(),
+            value: Some("third-token".into()),
+        }]);
+        let mut row = Row::new();
+        row.insert("token".into(), json!(4_242_424));
+        secrets.learn_rows(&[row]);
+        assert_eq!(
+            secrets
+                .masker()
+                .mask("first-token second-token third-token 4242424 ada-lovelace"),
+            "[secret] [secret] [secret] [secret] ada-lovelace"
+        );
+        let none = Secrets::of(&workspace, None);
+        assert_eq!(none.masker().mask("first-token"), "first-token");
     }
 }
