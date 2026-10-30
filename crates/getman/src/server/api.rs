@@ -8,7 +8,7 @@ use std::time::Duration;
 use axum::Json;
 use axum::Router;
 use axum::body::{Body, Bytes};
-use axum::extract::{DefaultBodyLimit, State};
+use axum::extract::State;
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -73,14 +73,8 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/runs/read", post(read_run))
         .route("/runs/report", post(run_report))
         .route("/runs/delete", post(delete_run))
-        .route(
-            "/import",
-            post(import).layer(DefaultBodyLimit::max(IMPORT_LIMIT)),
-        )
-        .route(
-            "/import/files",
-            post(import_files).layer(DefaultBodyLimit::max(IMPORT_LIMIT)),
-        )
+        .route("/import", post(import))
+        .route("/import/files", post(import_files))
         .route("/parse-curl", post(parse_curl))
         .route("/cookies", get(cookies))
         .route("/cookies/set", post(set_cookie))
@@ -1108,9 +1102,6 @@ async fn stop_mock(State(state): Shared, Json(arg): Json<FolderArg>) -> ApiResul
 }
 
 // ---- Import -------------------------------------------------------------------
-
-/// Largest import accepted: big API specs run to tens of megabytes.
-const IMPORT_LIMIT: usize = 64 * 1024 * 1024;
 
 #[derive(Deserialize)]
 struct ImportArg {

@@ -6,6 +6,11 @@ All notable changes to Getman are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The browser UI could not send or save a request whose body was over
+  2 MB, and said Getman was not answering.
+
 ## [0.3.0] - 2026-10-28
 
 ### Added

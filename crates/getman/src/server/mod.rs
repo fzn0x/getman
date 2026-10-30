@@ -28,7 +28,7 @@ use std::sync::{Arc, Mutex};
 
 use axum::Router;
 use axum::body::Body;
-use axum::extract::{Request, State};
+use axum::extract::{DefaultBodyLimit, Request, State};
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -159,6 +159,11 @@ async fn bind(port: Option<u16>) -> Result<tokio::net::TcpListener, String> {
         .map_err(|e| format!("cannot listen on 127.0.0.1: {e}"))
 }
 
+/// Largest request the API reads. The UI sends a request with its whole
+/// body to send or save it, and imports can be API specs of tens of
+/// megabytes, so axum's default of 2 MB is far too small.
+const BODY_LIMIT: usize = 64 * 1024 * 1024;
+
 pub(crate) fn router(state: Arc<AppState>) -> Router {
     router_with(state, None)
 }
@@ -171,7 +176,8 @@ fn router_with(state: Arc<AppState>, app: Option<&Router>) -> Router {
         api::routes()
             .merge(realtime::routes())
             .merge(grpc::routes())
-            .merge(graphql::routes()),
+            .merge(graphql::routes())
+            .layer(DefaultBodyLimit::max(BODY_LIMIT)),
     );
     if let Some(app) = app {
         router = router.nest_service("/api/app", app.clone());
@@ -861,5 +867,21 @@ mod tests {
             "Scripts are turned off in this workspace's settings on this machine, so 1 script did not run."
         );
         request_with_state(false).await;
+    }
+
+    #[tokio::test]
+    async fn requests_with_bodies_over_two_megabytes_are_saved() {
+        let (dir, app) = app();
+        let request = serde_json::json!({
+            "name": "Upload",
+            "request": {
+                "method": "POST",
+                "url": "http://127.0.0.1:9/",
+                "body": { "type": "text", "content": "x".repeat(3 * 1024 * 1024) },
+            },
+        });
+        let created = call_json(&app, "/api/request/create", request).await;
+        assert_eq!(created["path"], "upload.yaml", "{created}");
+        assert!(dir.path().join("upload.yaml").metadata().unwrap().len() > 3 * 1024 * 1024);
     }
 }
