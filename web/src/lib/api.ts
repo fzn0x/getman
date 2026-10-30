@@ -17,6 +17,7 @@ import type {
   GrpcService,
   HistoryEntry,
   Exported,
+  FilesImport,
   ImportReport,
   Language,
   LocalState,
@@ -227,7 +228,7 @@ export const api = {
   importText: (text: string, folder = "", root = false, name = "") =>
     post<ImportReport>("/import", { text, folder, root, name }),
   importFiles: (files: ImportFile[], folder = "", root = false) =>
-    post<ImportReport[]>("/import/files", { files, folder, root }),
+    post<FilesImport>("/import/files", { files, folder, root }),
   parseCurl: (text: string) => post<Request>("/parse-curl", { text }),
 
   cookies: () => call<Cookie[]>("GET", "/cookies"),

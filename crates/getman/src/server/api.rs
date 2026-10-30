@@ -1163,8 +1163,8 @@ struct ImportFilesArg {
 
 /// Imports dropped files, or a folder such as a Bruno collection.
 async fn import_files(State(state): Shared, Json(arg): Json<ImportFilesArg>) -> ApiResult {
-    let reports = import::import_files(state.workspace(), &arg.folder, &arg.files, arg.root)?;
-    Ok(Json(json!(reports)))
+    let done = import::import_files(state.workspace(), &arg.folder, &arg.files, arg.root)?;
+    Ok(Json(json!(done)))
 }
 
 #[derive(Deserialize)]

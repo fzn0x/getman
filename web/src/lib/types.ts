@@ -596,6 +596,15 @@ export interface ImportReport {
   environments?: string[];
 }
 
+/** What importing several files did. */
+export interface FilesImport {
+  reports: ImportReport[];
+  /** Files in no format Getman reads, such as a README, left alone. */
+  passed_over: string[];
+  /** Files in a format Getman reads that could not be imported. */
+  failed: { path: string; error: string }[];
+}
+
 /** A file written by an export, to download. */
 export interface Exported {
   file_name: string;

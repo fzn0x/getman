@@ -247,15 +247,36 @@ pub fn import_text(
     save(workspace, parent, import, into_root, format)
 }
 
+/// What importing several files did.
+#[derive(Debug, Default, Serialize)]
+pub struct FilesImport {
+    /// What each imported file created.
+    pub reports: Vec<ImportReport>,
+    /// Files in no format Getman reads, such as a README, left alone.
+    pub passed_over: Vec<String>,
+    /// Files in a format Getman reads that could not be imported.
+    pub failed: Vec<FailedFile>,
+}
+
+/// A file that could not be imported, and why.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FailedFile {
+    /// Path of the file, as given.
+    pub path: String,
+    /// Why it could not be imported.
+    pub error: String,
+}
+
 /// Imports several files at once, such as a folder. A folder holding
 /// `.bru` files or a `bruno.json` is one Bruno collection; otherwise each
-/// file in a known format is imported on its own.
+/// file in a known format is imported on its own, and one that cannot be
+/// does not stop the others.
 pub fn import_files(
     workspace: &Workspace,
     parent: &str,
     files: &[SourceFile],
     into_root: bool,
-) -> Result<Vec<ImportReport>> {
+) -> Result<FilesImport> {
     let files: Vec<SourceFile> = strip_common_folder(files);
     let is_bruno = files.iter().any(|f| {
         let lower = f.path.to_ascii_lowercase();
@@ -263,32 +284,49 @@ pub fn import_files(
     });
     if is_bruno {
         let import = bruno::parse(&files)?;
-        return Ok(vec![save(
-            workspace,
-            parent,
-            import,
-            into_root,
-            Format::Bruno,
-        )?]);
+        let report = save(workspace, parent, import, into_root, Format::Bruno)?;
+        return Ok(FilesImport {
+            reports: vec![report],
+            ..FilesImport::default()
+        });
     }
-    // Files of no known format, such as a README, are passed over, unless
-    // there is only one.
-    let known: Vec<&SourceFile> = files
-        .iter()
-        .filter(|f| files.len() == 1 || detect(&f.path, &f.text).is_some())
-        .collect();
-    if known.is_empty() {
-        return Err(Error::Invalid(
-            "none of the files is in a format Getman imports".into(),
-        ));
-    }
-    let mut reports = Vec::new();
-    for file in known {
+    // A single file is tried whatever it holds, for the error saying why
+    // it is not a format Getman reads.
+    if let [file] = files.as_slice() {
         let report = import_text(workspace, parent, &file.path, &file.text, into_root)
             .map_err(|e| Error::Invalid(format!("{}: {e}", file.path)))?;
-        reports.push(report);
+        return Ok(FilesImport {
+            reports: vec![report],
+            ..FilesImport::default()
+        });
     }
-    Ok(reports)
+    let mut done = FilesImport::default();
+    for file in &files {
+        if detect(&file.path, &file.text).is_none() {
+            done.passed_over.push(file.path.clone());
+            continue;
+        }
+        match import_text(workspace, parent, &file.path, &file.text, into_root) {
+            Ok(report) => done.reports.push(report),
+            Err(e) => done.failed.push(FailedFile {
+                path: file.path.clone(),
+                error: e.to_string(),
+            }),
+        }
+    }
+    if done.reports.is_empty() {
+        let failed: Vec<String> = done
+            .failed
+            .iter()
+            .map(|f| format!("{}: {}", f.path, f.error))
+            .collect();
+        return Err(Error::Invalid(if failed.is_empty() {
+            "none of the files is in a format Getman imports".into()
+        } else {
+            format!("none of the files could be imported. {}", failed.join("; "))
+        }));
+    }
+    Ok(done)
 }
 
 /// Drops the folder every path starts with, as a browser's folder upload
@@ -859,10 +897,39 @@ mod tests {
                 text: include_str!("../../tests/fixtures/import/browser.har").into(),
             },
         ];
-        let reports = import_files(&ws, "", &files, false).unwrap();
-        let kinds: Vec<&str> = reports.iter().map(|r| r.kind.as_str()).collect();
+        let done = import_files(&ws, "", &files, false).unwrap();
+        let kinds: Vec<&str> = done.reports.iter().map(|r| r.kind.as_str()).collect();
         assert_eq!(kinds, ["environment", "collection"]);
+        assert_eq!(done.passed_over, ["README.md"]);
+        assert_eq!(done.failed, []);
         assert!(import_files(&ws, "", &files[..1], false).is_err());
+    }
+
+    #[test]
+    fn a_file_that_cannot_be_imported_does_not_stop_the_others() {
+        let (_dir, ws) = workspace();
+        let broken = SourceFile {
+            path: "broken.har".into(),
+            // A recording with no requests in it.
+            text: r#"{"log": {"version": "1.2", "entries": []}}"#.into(),
+        };
+        let fine = SourceFile {
+            path: "staging.json".into(),
+            text: r#"{"name": "Staging", "values": [{"key": "a", "value": "1"}]}"#.into(),
+        };
+        let done = import_files(&ws, "", &[broken.clone(), fine], false).unwrap();
+        assert_eq!(done.reports.len(), 1);
+        assert_eq!(done.reports[0].kind, "environment");
+        assert_eq!(done.failed.len(), 1);
+        assert_eq!(done.failed[0].path, "broken.har");
+        assert!(!done.failed[0].error.is_empty());
+
+        let notes = SourceFile {
+            path: "notes.txt".into(),
+            text: "just notes".into(),
+        };
+        let error = import_files(&ws, "", &[broken, notes], false).unwrap_err();
+        assert!(error.to_string().contains("broken.har: "), "{error}");
     }
 
     #[test]

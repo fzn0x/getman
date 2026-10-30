@@ -15,6 +15,12 @@ The format is told from the file's content, so there is nothing to
 choose. Each import reports what it could not carry over exactly,
 rather than dropping it quietly.
 
+Several files or a folder that is not a Bruno collection import file by
+file. A file that cannot be imported does not stop the others: the
+report lists it with the reason, and `getman import` then exits with
+status 1. Files in no format Getman reads, such as a README, are passed
+over and listed too.
+
 | Format | What is read |
 | --- | --- |
 | Postman | Collections (v2.0, v2.1), environments and globals |

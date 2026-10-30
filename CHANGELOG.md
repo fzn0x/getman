@@ -38,6 +38,11 @@ All notable changes to Getman are listed here. The format follows
   large one can, stopped the tabs from updating until a reload.
 - Shortcut hints on the new request and close tab buttons, and the note
   in the shortcuts list, named Alt and Ctrl on a Mac.
+- Importing several files stopped at the first one that failed, after
+  the ones before it were already imported, and reported only the
+  error. Now the other files are imported, and the report lists the
+  failed files with their reasons and the files passed over for being
+  in no format Getman reads.
 
 ## [0.3.0] - 2026-10-28
 

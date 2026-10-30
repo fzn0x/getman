@@ -5,7 +5,7 @@ use std::io::Read as _;
 use std::path::Path;
 use std::process::ExitCode;
 
-use getman_core::import::{self, ImportReport, SourceFile, curl};
+use getman_core::import::{self, FilesImport, ImportReport, SourceFile, curl};
 
 use super::Outcome;
 use crate::cli::ImportArgs;
@@ -25,29 +25,33 @@ pub(crate) fn import(args: &ImportArgs) -> Outcome {
         workspaces::item_path(&workspace, &args.folder)?
     };
 
-    let reports = match (&args.curl, &args.file) {
+    let one = |report: ImportReport| FilesImport {
+        reports: vec![report],
+        ..FilesImport::default()
+    };
+    let done = match (&args.curl, &args.file) {
         (Some(command), _) => {
             let request = curl::parse(command).map_err(|e| e.to_string())?;
             let path = workspace
                 .create_request(&folder, &request.name, &request)
                 .map_err(|e| e.to_string())?;
-            vec![ImportReport {
+            one(ImportReport {
                 kind: "request".into(),
                 name: request.name,
                 path,
                 requests: 1,
                 ..ImportReport::default()
-            }]
+            })
         }
         (None, Some(path)) if path.as_os_str() == "-" => {
             let mut text = String::new();
             std::io::stdin()
                 .read_to_string(&mut text)
                 .map_err(|e| format!("cannot read standard input: {e}"))?;
-            vec![
+            one(
                 import::import_text(&workspace, &folder, "", &text, args.root)
                     .map_err(|e| e.to_string())?,
-            ]
+            )
         }
         (None, Some(path)) if path.is_dir() => {
             let files = read_folder(path)?;
@@ -61,15 +65,15 @@ pub(crate) fn import(args: &ImportArgs) -> Outcome {
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            vec![
+            one(
                 import::import_text(&workspace, &folder, &name, &text, args.root)
                     .map_err(|e| format!("{}: {e}", path.display()))?,
-            ]
+            )
         }
         (None, None) => return Err("give a file or folder to import, or --curl".into()),
     };
 
-    for report in &reports {
+    for report in &done.reports {
         anstream::println!(
             "{} {}",
             style::paint(style::GREEN.bold(), "Imported"),
@@ -79,7 +83,21 @@ pub(crate) fn import(args: &ImportArgs) -> Outcome {
             style::warn(warning);
         }
     }
-    Ok(ExitCode::SUCCESS)
+    if !done.passed_over.is_empty() {
+        style::note(&format!(
+            "Passed over {} in no format Getman imports: {}",
+            count(done.passed_over.len(), "file", "files"),
+            done.passed_over.join(", ")
+        ));
+    }
+    for file in &done.failed {
+        style::warn(&format!("{} was not imported: {}", file.path, file.error));
+    }
+    Ok(if done.failed.is_empty() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
 }
 
 /// One line saying what an import created.

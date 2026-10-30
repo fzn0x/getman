@@ -19,7 +19,7 @@
     setExpanded,
     ws,
   } from "../../lib/store.svelte";
-  import type { ImportReport } from "../../lib/types";
+  import type { FilesImport, ImportReport } from "../../lib/types";
   import { untrack } from "svelte";
   import Icon from "../Icon.svelte";
   import Dialog from "./Dialog.svelte";
@@ -34,6 +34,9 @@
   let busy = $state(false);
   let error = $state("");
   let reports = $state<ImportReport[] | null>(null);
+  /** Files of several that were not imported. */
+  let passedOver = $state<string[]>([]);
+  let failed = $state<FilesImport["failed"]>([]);
   let dragging = $state(false);
 
   const kind = $derived(files.length ? describeFiles(files) : describeText(text));
@@ -63,8 +66,12 @@
     error = "";
     const intoRoot = root && isCollection;
     try {
-      if (files.length > 1) reports = await api.importFiles(files, folder, intoRoot);
-      else if (files[0])
+      if (files.length > 1) {
+        const done = await api.importFiles(files, folder, intoRoot);
+        reports = done.reports;
+        passedOver = done.passed_over;
+        failed = done.failed;
+      } else if (files[0])
         reports = [await api.importText(files[0].text, folder, intoRoot, files[0].path)];
       else reports = [await api.importText(text, folder, intoRoot)];
       for (const report of reports)
@@ -90,6 +97,8 @@
 
   function reset(): void {
     reports = null;
+    passedOver = [];
+    failed = [];
     text = "";
     files = [];
   }
@@ -138,6 +147,24 @@
             </div>
           {/if}
         {/each}
+        {#if failed.length}
+          <div class="failed" role="alert">
+            <p class="bitmap">Not imported</p>
+            <ul>
+              {#each failed as file (file.path)}
+                <li><code>{file.path}</code>: {file.error}</li>
+              {/each}
+            </ul>
+          </div>
+        {/if}
+        {#if passedOver.length}
+          <p class="muted">
+            Passed over {plural(passedOver.length, "file", "files")} in no format Getman imports:
+            {passedOver.slice(0, 8).join(", ")}{passedOver.length > 8
+              ? ` and ${passedOver.length - 8} more`
+              : ""}.
+          </p>
+        {/if}
       </div>
     {:else}
       <p class="muted">
@@ -337,8 +364,19 @@
     background: var(--warn-wash);
   }
 
-  .warnings ul {
+  .warnings ul,
+  .failed ul {
     margin: var(--s2) 0 0;
     padding-left: 1.2em;
+  }
+
+  .failed {
+    padding: var(--s3);
+    border-left: 2px solid var(--error);
+    background: var(--field);
+  }
+
+  .failed .bitmap {
+    color: var(--error);
   }
 </style>
