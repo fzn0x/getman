@@ -414,6 +414,11 @@ export interface Response {
   http3_available?: boolean;
   /** The body is an event stream that was still open when the request timed out. */
   stream_open?: boolean;
+  /**
+   * Headers the client added to the request on its own, such as cookies and
+   * Content-Length, which the request as sent does not list.
+   */
+  added_headers?: Header[];
 }
 
 /** A redirect followed on the way to a response. */
@@ -470,8 +475,11 @@ export interface Execution {
   path: string | null;
   name: string;
   request: Outgoing | null;
-  /** The request as sent with the environment's secret values masked, when it held any. */
-  request_masked?: Outgoing;
+  /**
+   * The request as sent with the environment's secret values masked, and the
+   * headers the client added, when it held any.
+   */
+  request_masked?: Outgoing & { added_headers: Header[] };
   response: Response | null;
   error: string | null;
   tests: TestResult[];

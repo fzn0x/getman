@@ -124,7 +124,10 @@ export function rowFromExecution(execution: Execution, graphql: boolean): Fresh 
   const { response } = execution;
   row.method = request?.method ?? "";
   row.url = request?.url ?? "";
-  row.requestHeaders = request?.headers ?? [];
+  row.requestHeaders = [
+    ...(request?.headers ?? []),
+    ...(execution.request_masked?.added_headers ?? response?.added_headers ?? []),
+  ];
   const sent = capBody(outgoingBody(request));
   row.requestBody = sent.text;
   row.requestBodyCut = sent.cut;

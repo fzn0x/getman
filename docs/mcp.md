@@ -120,7 +120,7 @@ npx @modelcontextprotocol/inspector --cli getman mcp . \
 | --- | --- |
 | `list_requests` | The folders and requests as a tree, in run order, with paths and methods. Takes an optional `folder` |
 | `read_request` | One request as stored, variables unresolved, plus the names of its [examples](examples-and-mocks.md) |
-| `send_request` | Sends a request with its scripts, checks and captures. Takes `path`, an optional `environment` and `variables` that override every other value. Returns the request as it went out (method, URL, headers and body, after variables, auth and pre-request scripts), the status, headers, the body cut to `max_body_chars` (20 000 unless set, for each body), the time, and check and test results |
+| `send_request` | Sends a request with its scripts, checks and captures. Takes `path`, an optional `environment` and `variables` that override every other value. Returns the request as it went out (method, URL, headers and body, after variables, auth and pre-request scripts, and as `added_headers` the ones the HTTP client added, such as cookies), the status, headers, the body cut to `max_body_chars` (20 000 unless set, for each body), the time, and check and test results |
 | `run_folder` | Runs a folder, a request or the whole workspace, with `environment`, `variables`, `iterations` and `bail`. Returns the totals and each request's status, time and failures |
 | `list_environments` | The environments and their variables |
 | `save_request` | Writes a request from JSON in the shape `read_request` returns: `path` to replace one, or `folder` and `name` to create one. Examples are kept unless the JSON has `examples` |

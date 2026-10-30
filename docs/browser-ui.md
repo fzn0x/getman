@@ -153,8 +153,11 @@ The response's **Sent** tab shows the request exactly as it went out:
 the method, URL and headers after variables, folder settings,
 authentication and pre-request scripts, and the body in the same viewer
 as a response's, with Pretty, Raw, Hex, Find, Copy and Save. Click a
-header's value to copy it. The client adds cookies and `Content-Length`
-on the wire, so they are not listed.
+header's value to copy it. Below the request's own headers, **Added by
+Getman when sending** lists the ones the HTTP client added because the
+request did not set them: `Host` over HTTP/1, `Accept`,
+`Accept-Encoding`, the cookie jar's `Cookie` and `Content-Length`. The
+console lists them too.
 
 Values of the variables the selected environment lists under `secrets`
 show as `[secret]` there and in the console, also in their Base64 and

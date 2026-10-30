@@ -115,6 +115,12 @@
   const sent = $derived(
     showSecrets ? execution?.request : (execution?.request_masked ?? execution?.request),
   );
+  /** Headers the client added on its own; known once a response came. */
+  const sentAdded = $derived(
+    (showSecrets ? undefined : execution?.request_masked?.added_headers) ??
+      execution?.response?.added_headers ??
+      [],
+  );
   /** A body of bytes, for the same viewer as a response's. */
   const sentBody = $derived.by(() => {
     const body = sent?.body;
@@ -368,25 +374,46 @@
                   >
                 {/if}
               </div>
-              <dl class="pairs">
-                {#each sent.headers as header, i (i)}
-                  <dt class="mono">{header.name}</dt>
-                  <dd class="mono">
-                    <button
-                      class="value"
-                      title="Copy"
-                      onclick={() => void copyText(header.value, `${header.name} copied`)}
-                      >{header.value}</button
-                    >
-                  </dd>
-                {/each}
-              </dl>
+              <div class="sent-headers">
+                <dl class="pairs">
+                  {#each sent.headers as header, i (i)}
+                    <dt class="mono">{header.name}</dt>
+                    <dd class="mono">
+                      <button
+                        class="value"
+                        title="Copy"
+                        onclick={() => void copyText(header.value, `${header.name} copied`)}
+                        >{header.value}</button
+                      >
+                    </dd>
+                  {/each}
+                </dl>
+                {#if sentAdded.length}
+                  <p class="added-title muted">Added by Getman when sending</p>
+                  <dl class="pairs added">
+                    {#each sentAdded as header, i (i)}
+                      <dt class="mono">{header.name}</dt>
+                      <dd class="mono">
+                        <button
+                          class="value"
+                          title="Copy"
+                          onclick={() => void copyText(header.value, `${header.name} copied`)}
+                          >{header.value}</button
+                        >
+                      </dd>
+                    {/each}
+                  </dl>
+                {/if}
+              </div>
               {#if sentParts}
                 <pre class="sent-body">{sentParts}</pre>
               {/if}
               <p class="meta muted">
                 Exactly what went out, after variables, folders, authentication and pre-request
-                scripts. Cookies and Content-Length are added on the wire.
+                scripts.
+                {#if !execution?.response}
+                  Getman adds cookies and Content-Length on the wire.
+                {/if}
                 {#if execution?.request_masked && !showSecrets}
                   The values of the environment's secret variables are hidden.
                 {/if}
@@ -542,6 +569,29 @@
 
   .value:hover {
     text-decoration: underline;
+  }
+
+  /* Both lists share their columns, so the values line up. */
+  .sent-headers {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+
+  .sent-headers > * {
+    grid-column: 1 / -1;
+  }
+
+  .sent-headers .pairs {
+    grid-template-columns: subgrid;
+  }
+
+  .added-title {
+    margin: var(--s3) 0 var(--s1);
+    font-size: var(--fs-meta);
+  }
+
+  .pairs.added dt {
+    color: var(--ink-3);
   }
 
   .meta {

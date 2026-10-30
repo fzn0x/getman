@@ -74,19 +74,35 @@ describe("rows", () => {
   });
 
   it("show the request with its secrets masked", () => {
-    const sent = execution().request!;
+    const base = execution();
+    const sent = base.request!;
     const row = rowFromExecution(
       execution({
         request_masked: {
           ...sent,
           url: "https://api.test/users?key=[secret]",
           headers: [{ name: "Authorization", value: "Bearer [secret]" }],
+          added_headers: [{ name: "Cookie", value: "sid=[secret]" }],
         },
+        response: { ...base.response!, added_headers: [{ name: "Cookie", value: "sid=s3cr3t" }] },
       }),
       false,
     );
     expect(row.url).toBe("https://api.test/users?key=[secret]");
-    expect(row.requestHeaders).toEqual([{ name: "Authorization", value: "Bearer [secret]" }]);
+    expect(row.requestHeaders).toEqual([
+      { name: "Authorization", value: "Bearer [secret]" },
+      { name: "Cookie", value: "sid=[secret]" },
+    ]);
+  });
+
+  it("list the headers the client added after the request's own", () => {
+    const base = execution();
+    const added = [{ name: "Content-Length", value: "7" }];
+    const row = rowFromExecution(
+      execution({ response: { ...base.response!, added_headers: added } }),
+      false,
+    );
+    expect(row.requestHeaders).toEqual([...base.request!.headers, ...added]);
   });
 
   it("fail on errors, bad statuses, scripts and checks", () => {
