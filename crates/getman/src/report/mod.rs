@@ -290,6 +290,7 @@ pub(crate) fn sample() -> Recorded {
         hops: Vec::new(),
         http3_available: false,
         stream_open: false,
+        added_headers: Vec::new(),
     };
     let pass = |name: &str| TestResult {
         name: name.into(),

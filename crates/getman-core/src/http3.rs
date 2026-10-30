@@ -34,6 +34,9 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 /// How long the first address gets before the next one is tried alongside.
 const STAGGER: Duration = Duration::from_millis(250);
 
+/// The `Accept-Encoding` a request gets when it does not set its own.
+pub(crate) const ACCEPT_ENCODINGS: &str = "zstd, br, gzip, deflate";
+
 type Sender = h3::client::SendRequest<h3_quinn::OpenStreams, Bytes>;
 type Stream = h3::client::RequestStream<h3_quinn::BidiStream<Bytes>, Bytes>;
 
@@ -202,7 +205,7 @@ impl Client {
         if !map.contains_key(ACCEPT_ENCODING) {
             map.insert(
                 ACCEPT_ENCODING,
-                http::HeaderValue::from_static("zstd, br, gzip, deflate"),
+                http::HeaderValue::from_static(ACCEPT_ENCODINGS),
             );
         }
         if !map.contains_key(COOKIE)

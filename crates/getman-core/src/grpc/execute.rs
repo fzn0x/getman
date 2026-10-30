@@ -931,6 +931,7 @@ fn response_view(call: &GrpcCall, target: &Target) -> Response {
         hops: Vec::new(),
         http3_available: false,
         stream_open: false,
+        added_headers: Vec::new(),
     }
 }
 

@@ -302,6 +302,12 @@ pub struct Response {
     /// request timed out. The body holds what arrived until then.
     #[serde(default)]
     pub stream_open: bool,
+    /// Headers the client added on its own to the request it sent first,
+    /// which the request does not list: `Host`, `Accept`,
+    /// `Accept-Encoding`, the cookie jar's `Cookie` and `Content-Length`,
+    /// as far as the request did not set them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub added_headers: Vec<Header>,
 }
 
 /// A redirect Getman followed on the way to a response.
@@ -552,6 +558,17 @@ impl HttpClient {
         check_route(outgoing, &transport)?;
         let client = self.client(&transport)?;
         let wire = wire(outgoing).await?;
+        // Before sending: the response may set cookies.
+        let cookie = (transport.cookies && !wire.headers.contains_key(http::header::COOKIE))
+            .then(|| self.cookie_header(&wire.url))
+            .flatten();
+        let additions = Additions {
+            method: wire.method.clone(),
+            url: wire.url.clone(),
+            headers: wire.headers.clone(),
+            length: wire.body.as_ref().map_or(0, bytes::Bytes::len),
+            cookie,
+        };
         let probe = Arc::new(Probe::default());
         let exchange = timing::measure(Arc::clone(&probe), exchange(&client, wire, &transport));
         let result = exchange.await;
@@ -586,6 +603,7 @@ impl HttpClient {
         response.http3_available = transport.http_version == HttpVersion::Auto
             && !over_quic
             && advertises_http3(&response.headers);
+        response.added_headers = additions.headers(&response.http_version);
         Ok(response)
     }
 
@@ -848,6 +866,73 @@ struct Wire {
     url: url::Url,
     headers: http::HeaderMap,
     body: Option<bytes::Bytes>,
+}
+
+/// What the client adds to a request on its own, noted before it is sent.
+/// Which headers it adds depends on the HTTP version the request goes out
+/// with, known once it is answered.
+struct Additions {
+    method: http::Method,
+    url: url::Url,
+    headers: http::HeaderMap,
+    /// Length of the body.
+    length: usize,
+    /// What the cookie jar sends, unless the request has its own cookies.
+    cookie: Option<String>,
+}
+
+impl Additions {
+    /// The headers added to the request when it went out with `version`.
+    /// reqwest adds `Accept` and `Accept-Encoding`, and its cookie jar
+    /// `Cookie`; hyper adds `Host` over HTTP/1 and `Content-Length`, over
+    /// HTTP/1 for a body and over HTTP/2 also for an empty one when the
+    /// method has a meaning for one. The HTTP/3 client adds its own
+    /// `Accept-Encoding`, `Cookie` and `Content-Length`.
+    fn headers(&self, version: &str) -> Vec<Header> {
+        use http::header::{
+            ACCEPT, ACCEPT_ENCODING, CONTENT_LENGTH, HOST, HeaderName, TRANSFER_ENCODING,
+        };
+        let missing = |name: HeaderName| !self.headers.contains_key(name);
+        let http1 = version.starts_with("HTTP/1");
+        let http3 = version == "HTTP/3";
+        let mut added = Vec::new();
+        if http1
+            && missing(HOST)
+            && let Some(host) = self.url.host_str()
+        {
+            let host = match self.url.port() {
+                Some(port) => format!("{host}:{port}"),
+                None => host.to_owned(),
+            };
+            added.push(Header::new("Host", host));
+        }
+        if !http3 && missing(ACCEPT) {
+            added.push(Header::new("Accept", "*/*"));
+        }
+        if missing(ACCEPT_ENCODING) {
+            let encodings = if http3 {
+                crate::http3::ACCEPT_ENCODINGS
+            } else {
+                "zstd,gzip,deflate,br"
+            };
+            added.push(Header::new("Accept-Encoding", encodings));
+        }
+        if let Some(cookie) = &self.cookie {
+            added.push(Header::new("Cookie", cookie.clone()));
+        }
+        let method = self.method.as_str();
+        let sized = if http1 {
+            self.length > 0 && missing(TRANSFER_ENCODING)
+        } else if http3 {
+            self.length > 0 || matches!(method, "POST" | "PUT" | "PATCH")
+        } else {
+            self.length > 0 || !matches!(method, "GET" | "HEAD" | "DELETE" | "CONNECT")
+        };
+        if sized && missing(CONTENT_LENGTH) {
+            added.push(Header::new("Content-Length", self.length.to_string()));
+        }
+        added
+    }
 }
 
 impl Wire {
@@ -1155,6 +1240,7 @@ async fn exchange(client: &Session, wire: Wire, transport: &Transport) -> Result
         tls,
         http3_available: false,
         stream_open,
+        added_headers: Vec::new(),
     })
 }
 
@@ -1330,6 +1416,93 @@ mod tests {
         assert_eq!(echo["body"], "hello");
         assert!(response.size.body > 0);
         assert!(response.time_ms >= response.headers_ms);
+    }
+
+    #[tokio::test]
+    async fn the_headers_the_client_adds_are_listed_as_the_server_got_them() {
+        let server = test_server::spawn().await;
+        let client = HttpClient::new();
+        let set = client
+            .send(
+                &get(server.url("/cookies/set?sid=abc")),
+                Transport::default(),
+            )
+            .await
+            .unwrap();
+        // Set by the answer, so not sent with the request that got it.
+        assert!(set.added_headers.iter().all(|h| h.name != "Cookie"));
+
+        let outgoing = Outgoing {
+            method: "PATCH".into(),
+            url: server.url("/echo"),
+            headers: vec![Header::new("X-Test", "yes")],
+            body: OutgoingBody::Bytes {
+                data: Payload(b"hello".to_vec()),
+            },
+        };
+        let response = client.send(&outgoing, Transport::default()).await.unwrap();
+        let echo = response.json().unwrap();
+        let got = echo["headers"].as_object().unwrap();
+        let mut listed: Vec<String> = outgoing
+            .headers
+            .iter()
+            .chain(&response.added_headers)
+            .map(|h| h.name.to_ascii_lowercase())
+            .collect();
+        listed.sort();
+        assert_eq!(listed, got.keys().cloned().collect::<Vec<_>>());
+        for header in &response.added_headers {
+            assert_eq!(
+                got[&header.name.to_ascii_lowercase()],
+                header.value.as_str()
+            );
+        }
+        assert!(
+            response
+                .added_headers
+                .contains(&Header::new("Cookie", "sid=abc"))
+        );
+
+        // HTTP/2 has no Host header, and gives a POST without a body a
+        // length.
+        let post = Outgoing {
+            method: "POST".into(),
+            ..get(server.url("/echo"))
+        };
+        let response = client
+            .send(&post, with_version(HttpVersion::Http2))
+            .await
+            .unwrap();
+        assert_eq!(response.http_version, "HTTP/2");
+        let names: Vec<&str> = response
+            .added_headers
+            .iter()
+            .map(|h| h.name.as_str())
+            .collect();
+        assert_eq!(
+            names,
+            ["Accept", "Accept-Encoding", "Cookie", "Content-Length"]
+        );
+        let echo = response.json().unwrap();
+        let got = echo["headers"].as_object().unwrap();
+        assert_eq!(got.len(), 4, "{got:?}");
+        assert_eq!(got["content-length"], "0");
+
+        // Nothing is added that the request sets itself, nor a length
+        // without a body.
+        let own = Outgoing {
+            headers: vec![
+                Header::new("Accept", "text/plain"),
+                Header::new("Accept-Encoding", "identity"),
+                Header::new("Cookie", "mine=1"),
+                Header::new("Host", "example.test"),
+            ],
+            ..get(server.url("/echo"))
+        };
+        let response = client.send(&own, Transport::default()).await.unwrap();
+        assert_eq!(response.added_headers, []);
+        let echo = response.json().unwrap();
+        assert_eq!(echo["headers"].as_object().unwrap().len(), 4);
     }
 
     #[tokio::test]
@@ -1805,6 +1978,28 @@ mod tests {
             assert_eq!(echo["path"], "/echo/quic");
             assert_eq!(response.timings.unwrap().connect_ms, None);
         }
+    }
+
+    #[tokio::test]
+    async fn http3_lists_the_headers_its_client_adds() {
+        let server = test_server::spawn_h3();
+        let post = Outgoing {
+            method: "POST".into(),
+            ..get(server.url("/echo"))
+        };
+        let response = HttpClient::new().send(&post, h3(trusting())).await.unwrap();
+        assert_eq!(
+            response.added_headers,
+            [
+                Header::new("Accept-Encoding", crate::http3::ACCEPT_ENCODINGS),
+                Header::new("Content-Length", "0"),
+            ]
+        );
+        let echo = response.json().unwrap();
+        let got = echo["headers"].as_object().unwrap();
+        assert_eq!(got.len(), 2, "{got:?}");
+        assert_eq!(got["accept-encoding"], crate::http3::ACCEPT_ENCODINGS);
+        assert_eq!(got["content-length"], "0");
     }
 
     #[tokio::test]

@@ -721,6 +721,7 @@ mod tests {
             hops: Vec::new(),
             http3_available: false,
             stream_open: false,
+            added_headers: Vec::new(),
         }
     }
 
