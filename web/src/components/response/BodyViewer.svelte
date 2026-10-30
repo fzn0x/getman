@@ -258,6 +258,8 @@
   .viewer {
     display: grid;
     grid-template-rows: auto auto auto minmax(0, 1fr);
+    /* A long line, as in minified code, scrolls instead of widening the bar. */
+    grid-template-columns: minmax(0, 1fr);
     height: 100%;
     min-height: 0;
   }

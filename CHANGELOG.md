@@ -17,6 +17,8 @@ All notable changes to Getman are listed here. The format follows
   2 MB, and said Getman was not answering.
 - `getman mcp` left a secret unmasked in its result when a script
   replaced it during the call, such as an old token that was sent.
+- A response with a very long line, such as minified code, pushed the
+  body's buttons out of view.
 
 ## [0.3.0] - 2026-10-28
 
