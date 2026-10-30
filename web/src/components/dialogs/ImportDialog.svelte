@@ -235,9 +235,12 @@
 <style>
   .body {
     display: grid;
+    /* A long file name or path wraps instead of widening every row. */
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--s3);
     padding: var(--s4);
     overflow: auto;
+    overflow-wrap: anywhere;
   }
 
   h2 {

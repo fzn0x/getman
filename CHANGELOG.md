@@ -25,6 +25,8 @@ All notable changes to Getman are listed here. The format follows
   replaced it during the call, such as an old token that was sent.
 - A response with a very long line, such as minified code, pushed the
   body's buttons out of view.
+- A long file name or item name in the import, export and other dialogs
+  widened their contents past the edge instead of wrapping.
 
 ## [0.3.0] - 2026-10-28
 

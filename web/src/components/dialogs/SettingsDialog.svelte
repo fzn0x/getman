@@ -172,9 +172,11 @@
 <style>
   .body {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--s4);
     padding: var(--s4);
     overflow: auto;
+    overflow-wrap: anywhere;
   }
 
   h2 {

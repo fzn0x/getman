@@ -37,8 +37,10 @@
 <style>
   .body {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--s3);
     padding: var(--s4);
+    overflow-wrap: anywhere;
   }
 
   h2 {
