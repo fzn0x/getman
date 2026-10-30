@@ -461,6 +461,14 @@ async fn the_request_as_sent_is_returned_and_a_secret_replaced_meanwhile_stays_m
         .unwrap();
     assert_eq!(authorization["value"], "Bearer [secret]");
     assert_eq!(request["body"], r#"{"refresh": "[secret]"}"#);
+    assert!(
+        request["added_headers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|h| h["name"] == "Content-Length"),
+        "{request}"
+    );
     assert!(!sent.to_string().contains("first-token"), "{sent}");
     mock.stop();
 }

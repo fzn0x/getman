@@ -918,6 +918,15 @@ mod tests {
             },
         });
         call_json(&app, "/api/environment/write", files).await;
+        // The client adds the jar's cookies, which can hold a secret too.
+        let cookie =
+            serde_json::json!({ "domain": "127.0.0.1", "name": "sid", "value": "s3cr3t-value" });
+        call_json(
+            &app,
+            "/api/cookies/set",
+            serde_json::json!({ "cookie": cookie }),
+        )
+        .await;
         let request = serde_json::json!({
             "method": "POST",
             "url": format!("http://{address}/me?key={{{{token}}}}&user={{{{user}}}}"),
@@ -941,6 +950,8 @@ mod tests {
         for value in ["s3cr3t-value", "fresh-session", basic.as_str()] {
             assert!(real.contains(value), "{value} in {real}");
         }
+        let added = &sent["response"]["added_headers"];
+        assert!(added.to_string().contains("sid=s3cr3t-value"), "{added}");
 
         let masked = &sent["request_masked"];
         assert!(
@@ -951,6 +962,13 @@ mod tests {
             "{masked}"
         );
         assert_eq!(masked["body"]["data"]["text"], r#"{"token": "[secret]"}"#);
+        assert!(
+            masked["added_headers"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!({ "name": "Cookie", "value": "sid=[secret]" })),
+            "{masked}"
+        );
         let text = masked.to_string();
         for value in ["s3cr3t-value", "fresh-session", basic.as_str()] {
             assert!(!text.contains(value), "{value} in {text}");

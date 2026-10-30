@@ -119,6 +119,7 @@ fn slim(execution: &Execution) -> Execution {
     }
     if let Some(response) = &mut execution.response {
         response.headers.clear();
+        response.added_headers.clear();
         response.body = Payload::default();
     }
     execution.changes.clear();

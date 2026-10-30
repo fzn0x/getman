@@ -142,7 +142,7 @@ impl Masker {
         }
     }
 
-    fn mask_headers(&self, headers: &mut [Header]) {
+    pub(crate) fn mask_headers(&self, headers: &mut [Header]) {
         for header in headers {
             self.mask_text(&mut header.value);
         }
@@ -190,6 +190,7 @@ impl Masker {
         if let Some(response) = &mut execution.response {
             self.mask_text(&mut response.url);
             self.mask_headers(&mut response.headers);
+            self.mask_headers(&mut response.added_headers);
             self.mask_payload(&mut response.body);
             for hop in &mut response.hops {
                 self.mask_text(&mut hop.url);

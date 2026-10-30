@@ -453,13 +453,22 @@ async fn send(State(state): Shared, Json(arg): Json<SendArg>) -> ApiResult {
         list.extend(warnings.into_iter().map(Value::from));
     }
     // The UI hides the secrets in the request as sent until asked, also the
-    // values scripts gave them while it ran.
+    // values scripts gave them while it ran, and in the headers the client
+    // added to it.
     secrets.learn_changes(&execution.changes);
     if let Some(sent) = &execution.request {
+        let added = execution
+            .response
+            .as_ref()
+            .map(|response| response.added_headers.as_slice())
+            .unwrap_or_default();
         let mut shown = sent.clone();
         secrets.masker().mask_outgoing(&mut shown);
-        if shown != *sent {
+        let mut shown_added = added.to_vec();
+        secrets.masker().mask_headers(&mut shown_added);
+        if shown != *sent || shown_added != added {
             value["request_masked"] = json!(shown);
+            value["request_masked"]["added_headers"] = json!(shown_added);
         }
     }
     Ok(Json(value))

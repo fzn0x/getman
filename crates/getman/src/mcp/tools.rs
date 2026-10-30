@@ -76,7 +76,7 @@ pub(super) fn list() -> Vec<Value> {
         json!({
             "name": "send_request",
             "title": "Send a request",
-            "description": "Sends a saved request with its scripts, checks and captures, and returns the request as it went out (method, URL, headers and body, after variables, auth and pre-request scripts), the status, headers, body (cut to a limit), timing and check and test results.",
+            "description": "Sends a saved request with its scripts, checks and captures, and returns the request as it went out (method, URL, headers and body, after variables, auth and pre-request scripts, and the headers the HTTP client added, such as cookies), the status, headers, body (cut to a limit), timing and check and test results.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -282,6 +282,11 @@ impl Tools {
                 OutgoingBody::Bytes { data } => put_body(&mut request, &data.0, limit),
                 OutgoingBody::File { path } => request["body_file"] = json!(path),
                 OutgoingBody::Multipart { parts } => request["parts"] = json!(parts),
+            }
+            if let Some(response) = &execution.response
+                && !response.added_headers.is_empty()
+            {
+                request["added_headers"] = json!(response.added_headers);
             }
             result["request"] = request;
         }
