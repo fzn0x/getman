@@ -211,7 +211,7 @@
           aria-label={dirty
             ? `Close ${tabTitle(tab)}, which has unsaved changes`
             : `Close ${tabTitle(tab)}`}
-          title={dirty ? "Unsaved changes" : "Close (Alt W)"}
+          title={dirty ? "Unsaved changes" : `Close (${keyLabel("alt+w").join(" ")})`}
           onclick={() => closeTab(tab.id)}
         >
           <span class="mark"><Icon name={dirty ? "dot" : "close"} size={7} /></span>
@@ -230,7 +230,7 @@
   <button
     class="icon-btn add"
     aria-label="New request"
-    title="New request (Alt N)"
+    title="New request ({keyLabel('alt+n').join(' ')})"
     onclick={() => newRequest()}
   >
     <Icon name="plus" />

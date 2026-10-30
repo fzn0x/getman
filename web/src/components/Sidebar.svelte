@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { api } from "../lib/api";
+  import { keyLabel } from "../lib/keys";
   import { methodClass } from "../lib/format";
   import { kindMark } from "../lib/realtime";
   import { rank } from "../lib/fuzzy";
@@ -233,7 +234,11 @@
 
   <div class="foot">
     {#if view === "requests"}
-      <button class="btn quiet" onclick={() => newRequest()} title="New request (Alt N)">
+      <button
+        class="btn quiet"
+        onclick={() => newRequest()}
+        title="New request ({keyLabel('alt+n').join(' ')})"
+      >
         <Icon name="plus" /> Request
       </button>
       <button class="btn quiet" onclick={() => newFolder()}>

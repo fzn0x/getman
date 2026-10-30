@@ -1,5 +1,7 @@
 <script lang="ts">
   import { keyLabel, SHORTCUTS } from "../../lib/keys";
+
+  const kept = ["mod+n", "mod+w"].map((combo) => keyLabel(combo).join("+"));
   import Dialog from "./Dialog.svelte";
 </script>
 
@@ -23,7 +25,8 @@
       <dd><kbd>F2</kbd> <kbd>Del</kbd></dd>
     </dl>
     <p class="muted">
-      Tab and window keys use Alt because the browser keeps Ctrl+N, Ctrl+W and Ctrl+Tab.
+      Tab and window keys use {keyLabel("alt")[0]} because the browser keeps {kept[0]},
+      {kept[1]} and Ctrl+Tab.
     </p>
   </div>
 </Dialog>
