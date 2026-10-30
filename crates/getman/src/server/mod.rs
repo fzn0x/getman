@@ -884,4 +884,78 @@ mod tests {
         assert_eq!(created["path"], "upload.yaml", "{created}");
         assert!(dir.path().join("upload.yaml").metadata().unwrap().len() > 3 * 1024 * 1024);
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_request_as_sent_also_comes_with_the_environments_secrets_masked() {
+        use base64::Engine as _;
+        let (_dir, app) = app();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, Router::new().fallback(|| async { "ok" })).await
+        });
+        call(&app, "/api/environment/create", r#"{"name":"Dev"}"#).await;
+        let files = serde_json::json!({
+            "id": "dev",
+            "environment": {
+                "shared": { "variables": { "token": "", "session": "" }, "secrets": ["token", "session"] },
+                "local": { "token": "s3cr3t-value", "user": "ada" },
+            },
+        });
+        call_json(&app, "/api/environment/write", files).await;
+        let request = serde_json::json!({
+            "method": "POST",
+            "url": format!("http://{address}/me?key={{{{token}}}}&user={{{{user}}}}"),
+            "headers": [{ "name": "X-Session", "value": "{{session}}" }],
+            "auth": { "type": "basic", "username": "{{user}}", "password": "{{token}}" },
+            "body": { "type": "json", "content": "{\"token\": \"{{token}}\"}" },
+            "scripts": {
+                "pre_request": "gm.environment.set('session', 'fresh-session');",
+                // The token that went out is replaced once the answer is in.
+                "post_response": "gm.environment.set('token', 'rotated-value');",
+            },
+        });
+        let sent = call_json(
+            &app,
+            "/api/send",
+            serde_json::json!({ "request": request, "environment": "dev" }),
+        )
+        .await;
+        let real = sent["request"].to_string();
+        let basic = base64::engine::general_purpose::STANDARD.encode("ada:s3cr3t-value");
+        for value in ["s3cr3t-value", "fresh-session", basic.as_str()] {
+            assert!(real.contains(value), "{value} in {real}");
+        }
+
+        let masked = &sent["request_masked"];
+        assert!(
+            masked["url"]
+                .as_str()
+                .unwrap()
+                .ends_with("/me?key=[secret]&user=ada"),
+            "{masked}"
+        );
+        assert_eq!(masked["body"]["data"]["text"], r#"{"token": "[secret]"}"#);
+        let text = masked.to_string();
+        for value in ["s3cr3t-value", "fresh-session", basic.as_str()] {
+            assert!(!text.contains(value), "{value} in {text}");
+        }
+
+        let again = call_json(
+            &app,
+            "/api/send",
+            serde_json::json!({ "request": request, "environment": "dev" }),
+        )
+        .await;
+        assert!(again["request"].to_string().contains("rotated-value"));
+        assert!(
+            !again["request_masked"]
+                .to_string()
+                .contains("rotated-value")
+        );
+
+        let plain = call_json(&app, "/api/send", serde_json::json!({ "request": request })).await;
+        assert!(plain["request"].is_object(), "{plain}");
+        assert!(plain.get("request_masked").is_none(), "{plain}");
+    }
 }

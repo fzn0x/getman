@@ -26,6 +26,7 @@ use serde_json::{Value, json};
 
 use super::AppState;
 use super::presets::{self, Preset};
+use crate::mask::Masker;
 use crate::report::{About, Format};
 use crate::runs::{self, StoredRun};
 
@@ -430,6 +431,9 @@ async fn send(State(state): Shared, Json(arg): Json<SendArg>) -> ApiResult {
     }
     let _guard = SendGuard { state: &state, id };
     let path = arg.path.as_deref().filter(|p| !p.is_empty());
+    // Read before sending: a script may replace a secret, such as a token,
+    // after the old value went out.
+    let secrets = Secrets::of(&state, context.environment.as_deref());
     let execution = state
         .executor
         .execute(path, &arg.request, &mut context)
@@ -451,7 +455,65 @@ async fn send(State(state): Shared, Json(arg): Json<SendArg>) -> ApiResult {
     if let Some(list) = value["warnings"].as_array_mut() {
         list.extend(warnings.into_iter().map(Value::from));
     }
+    if let Some(masked) = secrets.mask(&value["request"], &execution.changes) {
+        value["request_masked"] = masked;
+    }
     Ok(Json(value))
+}
+
+/// What the UI hides in the request as sent until asked: the values of the
+/// variables the environment lists under `secrets`, which its editors hide
+/// too.
+struct Secrets {
+    names: Vec<String>,
+    values: Vec<String>,
+}
+
+impl Secrets {
+    fn of(state: &AppState, environment: Option<&str>) -> Self {
+        let Some(files) = environment.and_then(|id| state.workspace().read_environment(id).ok())
+        else {
+            return Self {
+                names: Vec::new(),
+                values: Vec::new(),
+            };
+        };
+        let values = files
+            .shared
+            .secrets
+            .iter()
+            .flat_map(|name| [files.shared.variables.get(name), files.local.get(name)])
+            .flatten()
+            .cloned()
+            .collect();
+        Self {
+            names: files.shared.secrets,
+            values,
+        }
+    }
+
+    /// The request as sent with the secrets masked, also the values scripts
+    /// gave them while it ran; `None` when there was nothing to mask.
+    fn mask(mut self, sent: &Value, changes: &[VarChange]) -> Option<Value> {
+        self.values.extend(
+            changes
+                .iter()
+                .filter(|change| self.names.contains(&change.name))
+                .filter_map(|change| change.value.clone()),
+        );
+        if self.values.iter().all(|value| value.trim().is_empty()) {
+            return None;
+        }
+        let masker = Masker::new(self.values);
+        let mut shown = sent.clone();
+        // A binary body travels as Base64, which a mask would break.
+        for pointer in ["/url", "/headers", "/body/data/text", "/body/parts"] {
+            if let Some(part) = shown.pointer_mut(pointer) {
+                masker.mask_value(part);
+            }
+        }
+        (shown != *sent).then_some(shown)
+    }
 }
 
 #[derive(Deserialize)]

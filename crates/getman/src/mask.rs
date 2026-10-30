@@ -1,12 +1,16 @@
-//! Masking of secret values in everything the tools return.
+//! Masking of secret values: in everything the MCP tools return, and in
+//! the request as sent that the browser UI shows.
 //!
-//! A value counts as secret ([`secret_values`]) when it is
+//! For the tools ([`secret_values`]), a value counts as secret when it is
 //!
 //! - a value in `getman.local.yaml` (variables and globals),
 //! - a value in an environment's `*.local.yaml`,
 //! - the value of a variable an environment lists under `secrets`, or
 //! - the value of an environment variable of the process named `GETMAN_*`,
 //!   except the ones that set Getman's own options ([`OPTIONS`]).
+//!
+//! The UI masks only the variables its environment lists under `secrets`,
+//! the ones its editors hide too, and passes them to [`Masker::new`].
 //!
 //! Whatever its length, such a value is replaced by [`MASK`] wherever it
 //! appears in text, also inside a longer string. So are its encodings: the
