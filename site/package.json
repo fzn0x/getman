@@ -13,7 +13,7 @@
     "node": ">=22.12"
   },
   "devDependencies": {
-    "marked": "18.1.1",
+    "marked": "18.1.2",
     "prettier": "^3.9.10",
     "shiki": "4.5.0"
   }
