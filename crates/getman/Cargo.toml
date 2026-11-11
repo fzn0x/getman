@@ -29,7 +29,7 @@ percent-encoding = "2"
 ratatui = "0.30"
 regex = "1"
 rust-embed = "8"
-rust_xlsxwriter = "0.101"
+rust_xlsxwriter = "0.102"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml_ng = "0.10"
@@ -42,4 +42,4 @@ workspace = true
 [dev-dependencies]
 tempfile = "3"
 # A WebSocket server for the terminal UI's tests to connect to.
-tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }
+tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
