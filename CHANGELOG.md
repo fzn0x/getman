@@ -14,6 +14,10 @@ All notable changes to Getman are listed here. The format follows
   has `csrfToken` left later requests sending the environment's value,
   even an empty one. The request now gets a warning that names the scope
   that wins and how to set the value there.
+- `getman run` and the browser's Runner left out request files they
+  could not read, such as one with headers written as a map, so a run of
+  only such files said "0 requests" and passed. Each one now fails with
+  the reason it cannot be read.
 
 ## [0.3.1] - 2026-10-30
 
