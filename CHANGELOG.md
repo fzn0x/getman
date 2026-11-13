@@ -8,6 +8,9 @@ All notable changes to Getman are listed here. The format follows
 
 ### Fixed
 
+- Reading a gRPC server's schema through reflection could fail with
+  "the server closed the stream" when the server offers only the older
+  v1alpha reflection, instead of falling back to it.
 - A script or capture that set a variable a stronger scope also defines
   changed nothing, with no sign of it. For example,
   `gm.collectionVariables.set("csrfToken", ...)` while the environment
