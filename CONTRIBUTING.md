@@ -190,6 +190,11 @@ node packaging/render.mjs --tag v0.2.0 --dist downloads --out manifests
 | `web/src/` | The browser UI |
 | `docs/`, `site/` | Documentation and the website built from it |
 
+A new page in `docs/` also goes in the sidebar list in `site/build.mjs`.
+A translation of a guide is named after it with the language's code, such
+as `docs/getting-started-ID.md`; the site builds it as a page of its own
+and keeps it out of the English sidebar.
+
 ## Commits
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org):
