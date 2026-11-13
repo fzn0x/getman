@@ -30,7 +30,7 @@ getman run              # atau jalankan semua request, untuk CI
 
 - **Tanpa akun, selamanya.** Menyimpan request, environment, variable, script, runner, dan history semuanya jalan offline. Postman mengharuskan kamu login ke sebuah workspace untuk menyimpan ke collection atau memakai environment.
 - **Request kamu tinggal bersama kode kamu.** Satu file YAML pendek per request, bisa di-review di pull request dan ikut ter-versioning bersama API yang dipanggilnya. Token dan nilai pribadi masuk ke file `*.local.yaml` yang diabaikan git, jadi sisanya selalu aman untuk di-commit.
-- **Gratis untuk tim sebesar apa pun.** Kamu berbagi workspace dengan cara me-commit-nya. Tidak ada kursi berbayar, tidak ada paket berbayar untuk kolaborasi tim.
+- **Gratis untuk tim sebesar apa pun.** Kamu berbagi workspace dengan cara me-commit-nya. Tidak ada biaya per pengguna, dan tidak ada paket berbayar untuk kolaborasi tim.
 - **Desktop, browser, terminal, dan CI.** Aplikasi desktop native yang memperbarui dirinya sendiri dari rilis yang ditandatangani, UI browser, UI terminal untuk sesi SSH, dan runner CI, semuanya dari kode yang sama. Command line-nya adalah satu file kecil tanpa runtime yang perlu di-install, lihat [Cepat](#cepat).
 - **Semua protokol yang kamu uji.** HTTP/1.1, HTTP/2 dan HTTP/3 (QUIC), gRPC dari file `.proto` atau server reflection, WebSocket, Server-Sent Events dan Socket.IO, berdampingan dalam satu workspace.
 - **Tes tanpa kode.** Check seperti `status == 200` dan `json.data[0].id exists` hanyalah baris di dalam file request. Script tersedia kalau kamu membutuhkannya.
