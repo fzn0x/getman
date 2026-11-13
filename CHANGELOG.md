@@ -6,6 +6,15 @@ All notable changes to Getman are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A script or capture that set a variable a stronger scope also defines
+  changed nothing, with no sign of it. For example,
+  `gm.collectionVariables.set("csrfToken", ...)` while the environment
+  has `csrfToken` left later requests sending the environment's value,
+  even an empty one. The request now gets a warning that names the scope
+  that wins and how to set the value there.
+
 ## [0.3.1] - 2026-10-30
 
 ### Added
