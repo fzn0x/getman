@@ -6,6 +6,12 @@ All notable changes to Getman are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A gRPC call to a server that requires a client certificate could still
+  fail with only "channel closed", when the server closed the connection
+  before the call started, without the hint to set a certificate.
+
 ## [0.3.2] - 2026-11-14
 
 ### Fixed

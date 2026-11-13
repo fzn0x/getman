@@ -318,10 +318,15 @@ impl Connection {
         deadline: Option<Duration>,
     ) -> Result<Call> {
         self.sender.ready().await.map_err(|e| {
-            Error::Http(format!(
+            let reason = format!(
                 "The connection to {} closed: {}",
                 self.target.authority(),
                 describe(&e)
+            );
+            Error::Http(hinted(
+                reason,
+                e.is_canceled() || e.is_closed(),
+                self.closed_hint,
             ))
         })?;
         let (sender, receiver) = mpsc::unbounded_channel();
@@ -488,14 +493,11 @@ impl Call {
     pub(crate) async fn wait_head(&mut self) -> Result<&Head> {
         if let Stage::Waiting(response) = &mut self.stage {
             let response = response.await.map_err(|e| {
-                let reason = describe(&e);
-                let hint = self
-                    .closed_hint
-                    .filter(|_| broke_off(e.is_canceled() || e.is_closed(), &reason));
-                Error::Http(match hint {
-                    Some(hint) => format!("{reason}; {hint}"),
-                    None => reason,
-                })
+                Error::Http(hinted(
+                    describe(&e),
+                    e.is_canceled() || e.is_closed(),
+                    self.closed_hint,
+                ))
             })?;
             let (parts, body) = response.into_parts();
             self.head = Some(Head {
@@ -693,12 +695,11 @@ pub(crate) fn header_list(headers: &HeaderMap) -> Vec<Header> {
         .collect()
 }
 
-/// Explains a connection error in one line.
 /// Whether the connection broke off under a call, as it does when a TLS
 /// 1.3 server refuses the client's certificate after the handshake.
 /// Depending on the system and the timing, the client sees the connection
-/// close, the alert the server sent, or a broken pipe or a reset while it
-/// is still writing.
+/// close, before or during the call, the alert the server sent, or a
+/// broken pipe or a reset while it is still writing.
 fn broke_off(closed: bool, reason: &str) -> bool {
     let reason = reason.to_ascii_lowercase();
     closed
@@ -707,6 +708,15 @@ fn broke_off(closed: bool, reason: &str) -> bool {
             .any(|sign| reason.contains(sign))
 }
 
+/// `reason`, followed by `hint` when the connection broke off.
+fn hinted(reason: String, closed: bool, hint: Option<&'static str>) -> String {
+    match hint.filter(|_| broke_off(closed, &reason)) {
+        Some(hint) => format!("{reason}; {hint}"),
+        None => reason,
+    }
+}
+
+/// Explains a connection error in one line.
 fn describe(error: &hyper::Error) -> String {
     let mut message = error.to_string();
     let mut source = std::error::Error::source(error);
@@ -760,6 +770,19 @@ mod tests {
             assert!(broke_off(false, reason), "{reason}");
         }
         assert!(!broke_off(false, "invalid HTTP status-code parsed"));
+    }
+
+    #[test]
+    fn a_connection_closed_before_the_call_gets_the_hint_too() {
+        let hint = Some("set a client certificate");
+        let closed = "The connection to localhost:1 closed: channel closed".to_owned();
+        assert_eq!(
+            hinted(closed.clone(), true, hint),
+            format!("{closed}; set a client certificate")
+        );
+        assert_eq!(hinted(closed.clone(), true, None), closed);
+        let other = "invalid HTTP status-code parsed".to_owned();
+        assert_eq!(hinted(other.clone(), false, hint), other);
     }
 
     #[test]
