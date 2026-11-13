@@ -29,11 +29,14 @@ ignore = [
   # The desktop app only. `zip` 4 comes with `tauri-plugin-updater`, which
   # checks an update's signature against the public key in tauri.conf.json
   # before it extracts anything, so the attacker-controlled archive these
-  # advisories need cannot get that far. Gone when the plugin moves to
-  # `zip` 9.
+  # advisories need cannot get that far. The plugin opens zip archives
+  # only on Windows, where Getman builds it without the `zip` feature; on
+  # macOS the feature brings tar and flate2 for the .app.tar.gz, and zip
+  # is linked but never called. Gone when the plugin moves to `zip` 9.
   { id = "RUSTSEC-2026-0367", reason = "zip extraction; archives are signature-checked first" },
   { id = "RUSTSEC-2026-0368", reason = "zip extraction; archives are signature-checked first" },
   { id = "RUSTSEC-2026-0369", reason = "zip extraction; archives are signature-checked first" },
+  { id = "RUSTSEC-2026-0429", reason = "zip extraction; archives are signature-checked first" },
 
   # The desktop app only, on Linux: GTK 3 bindings, through Tauri and wry,
   # use `proc-macro-error`, which runs at build time. Gone when Tauri moves
