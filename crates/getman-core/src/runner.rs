@@ -149,27 +149,21 @@ pub struct RunReport {
     pub overlay: Overlay,
 }
 
-/// The requests a target covers, in order.
+/// The requests a target covers, in order. Request files that cannot be
+/// read are listed too: running one fails with the reason, rather than
+/// leaving it out of a run that then passes.
 pub fn requests_in(tree: &[Node], target: &str) -> Result<Vec<RunItem>> {
     fn collect(nodes: &[Node], out: &mut Vec<RunItem>) {
         for node in nodes {
             match node {
                 Node::Folder { children, .. } => collect(children, out),
                 Node::Request {
-                    path,
-                    name,
-                    method,
-                    error,
-                    ..
-                } => {
-                    if error.is_none() {
-                        out.push(RunItem {
-                            path: path.clone(),
-                            name: name.clone(),
-                            method: method.clone(),
-                        });
-                    }
-                }
+                    path, name, method, ..
+                } => out.push(RunItem {
+                    path: path.clone(),
+                    name: name.clone(),
+                    method: method.clone(),
+                }),
             }
         }
     }
@@ -633,6 +627,46 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn a_request_file_that_cannot_be_read_fails_the_run() {
+        let server = test_server::spawn().await;
+        let (dir, executor) = setup(&server.url(""));
+        let ws = &executor.workspace;
+        ws.create_request("", "Good", &request("{{base}}/echo", &[], ""))
+            .unwrap();
+        // Headers written as a map, not a list.
+        std::fs::write(
+            dir.path().join("broken.yaml"),
+            "method: POST\nurl: '{{base}}/echo'\nheaders:\n  X-Token: abc\n",
+        )
+        .unwrap();
+
+        for options in [
+            RunOptions::default(),
+            RunOptions {
+                targets: vec!["broken.yaml".into()],
+                ..RunOptions::default()
+            },
+        ] {
+            let mut errors = Vec::new();
+            let report = run(&executor, &options, &AtomicBool::new(false), |e| {
+                if let RunEvent::Request { execution, .. } = e {
+                    errors.extend(execution.error.clone());
+                }
+            })
+            .await
+            .unwrap();
+            assert_eq!(report.summary.failed_requests, 1, "{options:?}");
+            assert!(!report.summary.passed(), "{options:?}");
+            assert_eq!(errors.len(), 1, "{errors:?}");
+            assert!(
+                errors[0].contains("broken.yaml") && errors[0].contains("headers"),
+                "{}",
+                errors[0]
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn cancelling_stops_before_the_next_request() {
         let server = test_server::spawn().await;
         let (_dir, executor) = setup(&server.url(""));
@@ -669,6 +703,13 @@ mod tests {
                 request_kind: crate::model::RequestKind::Http,
                 error: None,
             },
+            Node::Request {
+                path: "z.yaml".into(),
+                name: "z".into(),
+                method: String::new(),
+                request_kind: crate::model::RequestKind::Http,
+                error: Some("headers: invalid type".into()),
+            },
         ];
         let names = |target: &str| -> Vec<String> {
             requests_in(&tree, target)
@@ -677,9 +718,10 @@ mod tests {
                 .map(|i| i.name)
                 .collect()
         };
-        assert_eq!(names(""), ["X", "Y"]);
+        assert_eq!(names(""), ["X", "Y", "z"]);
         assert_eq!(names("a"), ["X"]);
         assert_eq!(names("y.yaml"), ["Y"]);
+        assert_eq!(names("z.yaml"), ["z"]);
         assert!(requests_in(&tree, "nope").is_err());
 
         let all = |targets: &[&str]| -> Vec<String> {
