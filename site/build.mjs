@@ -200,19 +200,31 @@ const assets = {
 // Documentation pages.
 const order = sections.flatMap((section) => section.pages);
 const files = readdirSync(docsDir).filter((name) => name.endsWith(".md"));
+
+// A guide translated into another language, named after the guide with
+// the language's code, such as getting-started-ID.md for getting-started
+// in Indonesian. It is built as a page of its own, linked from the
+// translated README, and stays out of the sidebar, previous and next, and
+// search, which follow the English guides.
+const translationOf = (name) => {
+  const match = name.match(/^(.+)-([A-Z]{2})$/);
+  return match && order.includes(match[1]) ? { of: match[1], lang: match[2].toLowerCase() } : null;
+};
+const translations = files.map((file) => file.replace(/\.md$/, "")).filter(translationOf);
+
 for (const name of order) {
   if (!files.includes(`${name}.md`))
     throw new Error(`docs/${name}.md is in the sidebar but does not exist`);
 }
 for (const file of files) {
   const name = file.replace(/\.md$/, "");
-  if (name !== "README" && !order.includes(name))
+  if (name !== "README" && !order.includes(name) && !translationOf(name))
     throw new Error(`docs/${file} is missing from the sidebar`);
 }
 
 const index = [];
 const docs = {};
-for (const name of ["README", ...order]) {
+for (const name of ["README", ...order, ...translations]) {
   const markdown = readFileSync(join(docsDir, `${name}.md`), "utf8");
   const title = (markdown.match(/^# (.+)$/m)?.[1] ?? name).trim();
   const { html, headings } = render(markdown);
@@ -220,6 +232,16 @@ for (const name of ["README", ...order]) {
 }
 
 const titleOf = (name) => (name === "README" ? "Documentation" : docs[name].title);
+// The sidebar, with `current` marked as the page being read.
+const nav = (current) =>
+  sections.map((section) => ({
+    title: section.title,
+    pages: section.pages.map((p) => ({
+      href: `${p}.html`,
+      title: titleOf(p),
+      current: p === current,
+    })),
+  }));
 for (const name of ["README", ...order]) {
   const doc = docs[name];
   const at = order.indexOf(name);
@@ -231,14 +253,7 @@ for (const name of ["README", ...order]) {
     root: "../",
     assets,
     site,
-    sections: sections.map((section) => ({
-      title: section.title,
-      pages: section.pages.map((p) => ({
-        href: `${p}.html`,
-        title: titleOf(p),
-        current: p === name,
-      })),
-    })),
+    sections: nav(name),
     title: titleOf(name),
     description: doc.description,
     canonical: `${site}docs/${file === "index.html" ? "" : file}`,
@@ -254,6 +269,26 @@ for (const name of ["README", ...order]) {
     index.push({ title: heading.text, url: `docs/${file}#${heading.id}`, kind: titleOf(name) });
   }
 }
+for (const name of translations) {
+  const doc = docs[name];
+  const { of, lang } = translationOf(name);
+  const html = page({
+    root: "../",
+    assets,
+    site,
+    lang,
+    sections: nav(of),
+    title: doc.title,
+    description: doc.description,
+    canonical: `${site}docs/${name}.html`,
+    body: doc.html,
+    headings: doc.headings.filter((h) => h.depth === 2),
+    previous: null,
+    next: null,
+    edit: `${repo}/edit/main/docs/${name}.md`,
+  });
+  writeFileSync(join(out, "docs", `${name}.html`), html);
+}
 
 // The landing page and the rest.
 writeFileSync(join(out, "index.html"), landing({ root: "./", assets, site, repo, pages: order }));
@@ -264,7 +299,7 @@ writeFileSync(
   `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${[
     site,
     `${site}docs/`,
-    ...order.map((name) => `${site}docs/${name}.html`),
+    ...[...order, ...translations].map((name) => `${site}docs/${name}.html`),
   ]
     .map((url) => `  <url><loc>${url}</loc></url>`)
     .join("\n")}\n</urlset>\n`,
@@ -307,4 +342,4 @@ if (broken.length) {
   process.exit(1);
 }
 
-console.log(`Built ${order.length + 2} pages into ${out}`);
+console.log(`Built ${order.length + translations.length + 2} pages into ${out}`);
