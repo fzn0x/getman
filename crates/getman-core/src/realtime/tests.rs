@@ -1219,6 +1219,44 @@ async fn connections_keep_session_variables_and_obey_the_scripts_switch() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn connections_warn_about_values_a_stronger_scope_hides() {
+    let addr = test_servers::websocket().await;
+    let (_dir, executor) = setup();
+    let request = Request {
+        kind: RequestKind::Websocket,
+        url: format!("ws://{addr}/"),
+        variables: [("room".to_owned(), "lobby".to_owned())]
+            .into_iter()
+            .collect(),
+        scripts: Scripts {
+            pre_request: String::new(),
+            post_response: "gm.collectionVariables.set('room', 'kitchen');".into(),
+        },
+        until: Until {
+            messages: Some(1),
+            time_ms: None,
+        },
+        ..Request::default()
+    };
+    let execution = executor
+        .execute_realtime(
+            None,
+            &request,
+            &mut Context::default(),
+            Plan::of(&request),
+            &mut |_| true,
+        )
+        .await;
+    assert!(!execution.failed(), "{execution:#?}");
+    assert_eq!(
+        execution.warnings,
+        [
+            "room was set in the workspace variables, but it is also in the request's variables, whose value wins, so {{room}} does not give the new value. Remove it from the request's variables, or use another name."
+        ]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn event_streams_and_socket_io_run_too() {
     let server = test_server::spawn().await;
     let (_dir, executor) = setup();

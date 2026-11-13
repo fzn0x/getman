@@ -310,6 +310,7 @@ impl Executor {
         {
             execution.error = Some(e.to_string());
         }
+        self.warn_shadowed(path, request, context, &mut execution);
         execution
     }
 
@@ -402,6 +403,7 @@ impl Executor {
             execution.error.get_or_insert_with(|| e.to_string());
         }
         self.keep_session(&execution.changes);
+        self.warn_shadowed(path, request, context, execution);
     }
 
     async fn finish_connection(

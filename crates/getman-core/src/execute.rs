@@ -414,7 +414,37 @@ impl Executor {
             execution.error = Some(e.to_string());
         }
         self.keep_session(&execution.changes);
+        self.warn_shadowed(path, request, context, &mut execution);
         execution
+    }
+
+    /// Warns about each variable the request's scripts and captures set
+    /// that a stronger scope also defines with another value: `{{name}}`
+    /// keeps giving the stronger value, and the request that uses it fails
+    /// with no sign of why.
+    pub(crate) fn warn_shadowed(
+        &self,
+        path: Option<&str>,
+        request: &Request,
+        context: &Context,
+        execution: &mut Execution,
+    ) {
+        if execution.changes.is_empty() {
+            return;
+        }
+        let chain = match path {
+            Some(path) => self.workspace.folder_chain(path),
+            None => self.workspace.read_folder("").map(|folder| vec![folder]),
+        };
+        let (Ok(chain), Ok(files)) = (chain, self.file_vars(context.environment.as_deref())) else {
+            return;
+        };
+        let vars = var_stack(&files, &chain, request, context);
+        for warning in shadowed(&vars, &execution.changes) {
+            if !execution.warnings.contains(&warning) {
+                execution.warnings.push(warning);
+            }
+        }
     }
 
     async fn execute_inner(
@@ -664,6 +694,82 @@ pub(crate) fn absorb(
     let failed = output.error.is_some();
     execution.script_errors.extend(output.error);
     failed
+}
+
+/// Warnings for the variables in `changes` that a stronger scope in `vars`
+/// defines with another value. One per variable and scope it was set in,
+/// for the last value set there.
+fn shadowed(vars: &VarStack, changes: &[VarChange]) -> Vec<String> {
+    let mut last: IndexMap<(ChangeScope, &str), &str> = IndexMap::new();
+    for change in changes {
+        let key = (change.scope, change.name.as_str());
+        match &change.value {
+            Some(value) => {
+                last.insert(key, value);
+            }
+            None => {
+                last.shift_remove(&key);
+            }
+        }
+    }
+    last.into_iter()
+        .filter_map(|((scope, name), value)| {
+            let set_in = scope_of(scope);
+            let (winner, winning) = vars.lookup(name)?;
+            (winner > set_in && winning != value).then(|| {
+                format!(
+                    "{name} was set in {}, but it is also in {}, whose value wins, so {{{{{name}}}}} does not give the new value. {}",
+                    scope_name(set_in),
+                    scope_name(winner),
+                    shadow_advice(winner),
+                )
+                .trim_end()
+                .to_owned()
+            })
+        })
+        .collect()
+}
+
+/// The variable scope a script's change goes to.
+fn scope_of(scope: ChangeScope) -> Scope {
+    match scope {
+        ChangeScope::Global => Scope::Global,
+        ChangeScope::Collection => Scope::Workspace,
+        ChangeScope::Environment => Scope::Environment,
+        ChangeScope::Session => Scope::Session,
+        ChangeScope::Local => Scope::Local,
+    }
+}
+
+/// A scope as a warning names it.
+fn scope_name(scope: Scope) -> &'static str {
+    match scope {
+        Scope::Global => "the globals",
+        Scope::Workspace => "the workspace variables",
+        Scope::Environment => "the environment",
+        Scope::Folder => "a folder's variables",
+        Scope::Request => "the request's variables",
+        Scope::Data => "the data row",
+        Scope::Session => "the session variables",
+        Scope::Local => "the local variables",
+    }
+}
+
+/// How to make a value set in a weaker scope count, when `winner` holds
+/// another.
+fn shadow_advice(winner: Scope) -> &'static str {
+    match winner {
+        Scope::Global => "",
+        Scope::Workspace => {
+            "Set it with gm.collectionVariables.set, or remove it from the workspace variables."
+        }
+        Scope::Environment => "Set it with gm.environment.set, or remove it from the environment.",
+        Scope::Folder => "Remove it from the folder's variables, or use another name.",
+        Scope::Request => "Remove it from the request's variables, or use another name.",
+        Scope::Data => "Use another name, or remove the column from the data file.",
+        Scope::Session => "Set it with gm.session.set.",
+        Scope::Local => "Set it with gm.variables.set, or leave it out of --var.",
+    }
 }
 
 /// Values from the workspace's files, before anything set while running.
@@ -1047,6 +1153,142 @@ mod tests {
         let files = ws.read_environment(&env).unwrap();
         assert_eq!(files.local["lastMethod"], "POST");
         assert!(!files.shared.variables.contains_key("lastMethod"));
+    }
+
+    fn change(scope: ChangeScope, name: &str, value: Option<&str>) -> VarChange {
+        VarChange {
+            scope,
+            name: name.into(),
+            value: value.map(str::to_owned),
+        }
+    }
+
+    const HIDDEN_TOKEN: &str = "token was set in the workspace variables, but it is also in the environment, whose value wins, so {{token}} does not give the new value. Set it with gm.environment.set, or remove it from the environment.";
+
+    #[test]
+    fn values_a_stronger_scope_hides_are_found() {
+        let mut vars = VarStack::new();
+        vars.push(
+            Scope::Workspace,
+            [("token".to_owned(), "fresh".to_owned())]
+                .into_iter()
+                .collect(),
+        );
+        vars.push(
+            Scope::Environment,
+            [
+                ("token".to_owned(), String::new()),
+                ("id".to_owned(), "7".to_owned()),
+            ]
+            .into_iter()
+            .collect(),
+        );
+        vars.push(
+            Scope::Local,
+            [("run".to_owned(), "cli".to_owned())].into_iter().collect(),
+        );
+
+        let hidden = shadowed(
+            &vars,
+            &[change(ChangeScope::Collection, "token", Some("fresh"))],
+        );
+        assert_eq!(hidden, [HIDDEN_TOKEN]);
+        // One warning for a variable set twice.
+        let twice = [
+            change(ChangeScope::Collection, "token", Some("a")),
+            change(ChangeScope::Collection, "token", Some("b")),
+        ];
+        assert_eq!(shadowed(&vars, &twice).len(), 1);
+        let hidden = shadowed(&vars, &[change(ChangeScope::Session, "run", Some("ui"))]);
+        assert_eq!(
+            hidden,
+            [
+                "run was set in the session variables, but it is also in the local variables, whose value wins, so {{run}} does not give the new value. Set it with gm.variables.set, or leave it out of --var."
+            ]
+        );
+
+        // Set where it wins, set to the value that wins anyway, removed, or
+        // defined nowhere else: nothing to say.
+        let quiet = [
+            vec![change(ChangeScope::Environment, "token", Some("fresh"))],
+            vec![change(ChangeScope::Collection, "id", Some("7"))],
+            vec![
+                change(ChangeScope::Collection, "token", Some("fresh")),
+                change(ChangeScope::Collection, "token", None),
+            ],
+            vec![change(ChangeScope::Global, "other", Some("1"))],
+        ];
+        for changes in quiet {
+            assert_eq!(
+                shadowed(&vars, &changes),
+                Vec::<String>::new(),
+                "{changes:?}"
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_script_value_a_stronger_scope_hides_is_warned_about() {
+        let server = test_server::spawn().await;
+        let (_dir, executor) = setup();
+        let ws = &executor.workspace;
+        let env = ws.create_environment("Dev").unwrap();
+        ws.write_environment(
+            &env,
+            &EnvironmentFiles {
+                shared: crate::model::Environment {
+                    variables: [("token".to_owned(), String::new())].into_iter().collect(),
+                    ..crate::model::Environment::default()
+                },
+                local: Vars::new(),
+            },
+        )
+        .unwrap();
+        let mut context = Context {
+            environment: Some(env),
+            ..Context::default()
+        };
+        let fetch = |script: &str| Request {
+            url: server.url("/echo"),
+            scripts: Scripts {
+                pre_request: String::new(),
+                post_response: script.into(),
+            },
+            ..Request::default()
+        };
+        let using = Request {
+            url: server.url("/echo"),
+            headers: vec![KeyValue::new("X-Token", "{{token}}")],
+            ..Request::default()
+        };
+
+        let execution = executor
+            .execute(
+                None,
+                &fetch("gm.collectionVariables.set('token', 'fresh');"),
+                &mut context,
+            )
+            .await;
+        assert!(!execution.failed(), "{execution:#?}");
+        assert_eq!(execution.warnings, [HIDDEN_TOKEN]);
+        // The warning is right: the next request sends the empty value.
+        let execution = executor.execute(None, &using, &mut context).await;
+        let echo = execution.response.as_ref().unwrap().json().unwrap();
+        assert_eq!(echo["headers"]["x-token"], "", "{echo}");
+        assert_eq!(execution.warnings, Vec::<String>::new());
+
+        // Set in the environment, the value counts and nothing is said.
+        let execution = executor
+            .execute(
+                None,
+                &fetch("gm.environment.set('token', 'fresh');"),
+                &mut context,
+            )
+            .await;
+        assert_eq!(execution.warnings, Vec::<String>::new());
+        let execution = executor.execute(None, &using, &mut context).await;
+        let echo = execution.response.as_ref().unwrap().json().unwrap();
+        assert_eq!(echo["headers"]["x-token"], "fresh", "{echo}");
     }
 
     #[tokio::test(flavor = "multi_thread")]
