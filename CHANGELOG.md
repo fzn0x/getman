@@ -6,11 +6,10 @@ All notable changes to Getman are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-14
+
 ### Fixed
 
-- Reading a gRPC server's schema through reflection could fail with
-  "the server closed the stream" when the server offers only the older
-  v1alpha reflection, instead of falling back to it.
 - A script or capture that set a variable a stronger scope also defines
   changed nothing, with no sign of it. For example,
   `gm.collectionVariables.set("csrfToken", ...)` while the environment
@@ -21,6 +20,9 @@ All notable changes to Getman are listed here. The format follows
   could not read, such as one with headers written as a map, so a run of
   only such files said "0 requests" and passed. Each one now fails with
   the reason it cannot be read.
+- Reading a gRPC server's schema through reflection could fail with
+  "the server closed the stream" when the server offers only the older
+  v1alpha reflection, instead of falling back to it.
 
 ## [0.3.1] - 2026-10-30
 
@@ -214,7 +216,8 @@ browser UI on `127.0.0.1`, in a terminal UI or run in CI with
 files; checks and captures; JavaScript scripts with the `gm` API (and a
 `pm` alias); import from Postman and cURL, and export as code.
 
-[Unreleased]: https://github.com/fzn0x/getman/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/fzn0x/getman/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/fzn0x/getman/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/fzn0x/getman/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/fzn0x/getman/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/fzn0x/getman/compare/v0.1.0...v0.2.0
