@@ -303,6 +303,11 @@ async fn connect(
         let mut listening = true;
         while let Some(event) = events.recv().await {
             recorder.record(&event);
+            // `closed` is the last event. Forget the session before the
+            // page hears of it, so what the page does next finds none.
+            if matches!(event.kind, realtime::EventKind::Closed { .. }) {
+                forward.realtime.lock().sessions.remove(&session_id);
+            }
             if !listening {
                 continue;
             }
