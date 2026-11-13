@@ -192,7 +192,7 @@ UI browser disajikan oleh Getman hanya di `127.0.0.1`. Server menolak request ya
 
 ## Dokumentasi
 
-- [Memulai](docs/id/getting-started.md) ·
+- [Memulai](docs/getting-started-ID.md) ·
   [Aplikasi desktop](docs/desktop.md) ·
   [Kenapa Getman](docs/why-getman.md), dan pindah dari Postman
 - [Workspaces](docs/workspaces.md) ·
