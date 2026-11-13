@@ -722,6 +722,27 @@ fn describe(error: &hyper::Error) -> String {
 }
 
 #[cfg(test)]
+impl Call {
+    /// A call the server already answered with `headers` alone, and whose
+    /// stream it closed, so nothing more can be sent.
+    pub(crate) fn ended(headers: HeaderMap) -> Self {
+        let (sender, receiver) = mpsc::unbounded_channel();
+        drop(receiver);
+        Self {
+            closed_hint: None,
+            outbound: Some(sender),
+            stage: Stage::Done,
+            head: Some(Head {
+                status: StatusCode::OK,
+                headers,
+            }),
+            buffer: BytesMut::new(),
+            trailers: None,
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

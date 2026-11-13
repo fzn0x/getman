@@ -184,13 +184,23 @@ async fn reflect_with(
 }
 
 /// Sends one question and reads its answer; `None` when the server ended
-/// the stream instead.
+/// the stream instead. A server without this version of reflection can
+/// answer Unimplemented and close the stream before the question goes
+/// out; then too the answer is `None`, and the call's status says why.
 async fn ask(call: &mut Call, question: Ask) -> Result<Option<Answer>> {
     let request = ReflectionRequest {
         host: String::new(),
         ask: Some(question),
     };
-    call.send(&request.encode_to_vec())?;
+    match call.send(&request.encode_to_vec()) {
+        Ok(()) => {}
+        // The server closed the stream: read it to its end for the status.
+        Err(Error::Http(_)) => {
+            while call.next().await?.is_some() {}
+            return Ok(None);
+        }
+        Err(e) => return Err(e),
+    }
     let Some(bytes) = call.next().await? else {
         return Ok(None);
     };
@@ -234,5 +244,25 @@ fn take_files(
         None => Err(Error::Http(format!(
             "The server ended reflection while describing {asked}"
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use http::{HeaderMap, HeaderValue};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn a_stream_closed_before_the_question_answers_with_its_status() {
+        // What a server without v1 reflection answers to a v1 call, and how
+        // tonic leaves the stream: closed before the question went out.
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", HeaderValue::from_static("application/grpc"));
+        headers.insert("grpc-status", HeaderValue::from_static("12"));
+        let mut call = Call::ended(headers);
+        let answer = ask(&mut call, Ask::ListServices("*".into())).await.unwrap();
+        assert!(answer.is_none());
+        assert_eq!(call.status().code, Code::Unimplemented as u32);
     }
 }
