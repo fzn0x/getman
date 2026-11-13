@@ -123,7 +123,7 @@ Ketiganya membaca dan menulis file yang sama, jadi kamu bisa mengedit request di
 | <kbd>/</kbd> | Filter sidebar |
 | <kbd>?</kbd> | Tampilkan semua shortcut |
 
-Di Mac, <kbd>Cmd</kbd> menggantikan <kbd>Ctrl</kbd>. Tombol tab dan jendela memakai <kbd>Alt</kbd> karena browser menyimpan <kbd>Ctrl</kbd> <kbd>N</kbd>, <kbd>Ctrl</kbd> <kbd>W</kbd>, dan <kbd>Ctrl</kbd> <kbd>Tab</kbd> untuk dirinya sendiri.
+Di Mac, <kbd>Cmd</kbd> menggantikan <kbd>Ctrl</kbd>. Tombol tab dan jendela memakai <kbd>Alt</kbd> karena browser sudah mengambil <kbd>Ctrl</kbd> <kbd>N</kbd>, <kbd>Ctrl</kbd> <kbd>W</kbd>, dan <kbd>Ctrl</kbd> <kbd>Tab</kbd> untuk dirinya sendiri.
 
 ## Berikutnya
 
