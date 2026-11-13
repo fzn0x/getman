@@ -35,7 +35,7 @@ getman run              # atau jalankan semua request, untuk CI
 - **Semua protokol yang kamu uji.** HTTP/1.1, HTTP/2 dan HTTP/3 (QUIC), gRPC dari file `.proto` atau server reflection, WebSocket, Server-Sent Events dan Socket.IO, berdampingan dalam satu workspace.
 - **Tes tanpa kode.** Check seperti `status == 200` dan `json.data[0].id exists` hanyalah baris di dalam file request. Script tersedia kalau kamu membutuhkannya.
 - **Kompatibel dengan Postman.** `getman import` membaca Postman collection, environment, dan globals, dan `getman export` menuliskannya kembali. `pm` adalah alias dari API script `gm` milik Getman, jadi sebagian besar script jalan tanpa diubah.
-- **Mock dan AI agent, secara lokal.** `getman mock` menyajikan response yang tersimpan sebagai mock API, dan `getman mcp` membiarkan AI agent memakai request kamu lewat Model Context Protocol, dengan secret yang disamarkan.
+- **Mock dan AI agent, secara lokal.** `getman mock` menyajikan response yang tersimpan sebagai mock API, dan `getman mcp` memungkinkan AI agent memakai request kamu lewat Model Context Protocol, dengan secret yang disamarkan.
 - **Open source**, di bawah MIT atau Apache-2.0.
 
 Postman masih bisa lebih banyak: MQTT, hosted mock dan monitor, dan kolaborasi real-time. [Perbandingan lengkap](docs/why-getman.md) menautkan halaman Postman sendiri untuk setiap klaim dan menjelaskan kapan sebaiknya tetap di Postman.
