@@ -70,7 +70,7 @@ Getman di jendelanya sendiri, dengan perintah `getman` termasuk di dalamnya:
 | Linux ARM64 | [AppImage](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-aarch64.AppImage) · [.deb](https://github.com/fzn0x/getman/releases/latest/download/getman-desktop_arm64.deb) · [.rpm](https://github.com/fzn0x/getman/releases/latest/download/getman-desktop.aarch64.rpm) |
 
 - **Windows:** jalankan setup-nya. Instalasi berlaku untuk user kamu, tanpa hak administrator, dan menambahkan `getman` ke `PATH` kamu. Kalau Windows menampilkan "Windows protected your PC", pilih **More info**, lalu **Run anyway**.
-- **macOS:** buka disk image dan seret Getman ke Applications. Di pertama kali, macOS tidak bisa memverifikasinya: buka **System Settings › Privacy & Security** dan klik **Open Anyway**. **Settings › About** di dalam aplikasi akan meng-install perintah `getman`.
+- **macOS:** buka disk image dan seret Getman ke Applications. Saat pertama kali, macOS tidak bisa memverifikasinya: buka **System Settings › Privacy & Security** dan klik **Open Anyway**. **Settings › About** di dalam aplikasi akan meng-install perintah `getman`.
 - **Linux:** `chmod +x` AppImage lalu jalankan, atau install paketnya dengan `sudo apt install ./getman-desktop_amd64.deb` atau `sudo dnf install ./getman-desktop.x86_64.rpm`, yang juga menaruh `getman` di `/usr/bin`.
 
 Aplikasi memeriksa versi baru sekali sehari, dan kamu bisa mematikannya. Lihat [Aplikasi desktop](docs/desktop.md) untuk detailnya.
