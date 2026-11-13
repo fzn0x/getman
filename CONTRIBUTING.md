@@ -147,23 +147,22 @@ Each release also carries manifests for package managers, written from
 the release's own files by `packaging/render.mjs`: `getman.rb` (Homebrew),
 `getman.json` (Scoop), `fzn0x.Getman*.yaml` (winget) and
 `io.github.fzn0x.getman.yml` (Flatpak, for the desktop app). They hold
-the version, the download URLs and the SHA-256 sums, and they are
-only release files: nothing publishes them yet, so Getman is not
-available from any of these package managers.
+the version, the download URLs and the SHA-256 sums.
 
-To publish them, the maintainer first has to create:
-
-| What | For |
+| Package manager | How a release gets there |
 | --- | --- |
-| A repository `fzn0x/homebrew-tap` with a `Formula` folder | Homebrew: `brew install fzn0x/tap/getman` |
-| A repository `fzn0x/scoop-bucket` with a `bucket` folder | Scoop: `scoop bucket add fzn0x https://github.com/fzn0x/scoop-bucket` |
-| A fork of `microsoft/winget-pkgs` | winget: a pull request adding the three files under `manifests/f/fzn0x/Getman/<version>/`; the first one is reviewed by hand |
-| A Flathub submission, or a Flatpak repository | Flatpak: the manifest repackages the `.deb`; try it first with `flatpak-builder` |
-| A repository secret `PACKAGES_TOKEN`: a fine-grained personal access token with read and write access to the contents of the tap and the bucket | The publishing job in `release.yml`, which is commented out |
+| Homebrew: `brew install fzn0x/tap/getman` | The `publish-packages` job in `release.yml` commits `Formula/getman.rb` to [fzn0x/homebrew-tap](https://github.com/fzn0x/homebrew-tap) |
+| Scoop: `scoop install fzn0x/getman`, after `scoop bucket add fzn0x https://github.com/fzn0x/scoop-bucket` | The same job commits `bucket/getman.json` to [fzn0x/scoop-bucket](https://github.com/fzn0x/scoop-bucket) |
+| winget | By hand: a pull request from a fork of `microsoft/winget-pkgs` adding the three files under `manifests/f/fzn0x/Getman/<version>/`; the first one is reviewed by hand |
+| Flatpak | Not published; the manifest repackages the `.deb` and is only a release file |
 
-Then uncomment the `publish-packages` job at the end of
-`.github/workflows/release.yml`, set its `if` to `true`, and check it on
-a release candidate tag first. Try the manifests by hand before that:
+The job pushes with the repository secret `PACKAGES_TOKEN`, a
+fine-grained personal access token with read and write access to the
+contents of the tap and the bucket. When the token expires, the job fails
+and the release itself is not affected: renew the token, update the
+secret and rerun the job.
+
+Try a changed template by hand before a release:
 `brew install --formula ./getman.rb`, `scoop install ./getman.json`,
 `winget validate` on the folder of winget files, and `flatpak-builder`
 on the Flatpak one. To render them from a release you have downloaded:
