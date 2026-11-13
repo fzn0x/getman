@@ -14,7 +14,8 @@ const escape = (text) =>
 
 /**
  * The page's head. `home` takes `title` as the whole title; `extra` is
- * markup for the end of the head, such as structured data.
+ * markup for the end of the head, such as structured data. `lang` is the
+ * language of the page's text, for a translated guide.
  */
 export function head({
   root,
@@ -25,13 +26,14 @@ export function head({
   site,
   home = false,
   extra = "",
+  lang = "en",
 }) {
   const full = home ? title : `${title} · Getman`;
   const image = `${site}images/getman-dark.png`;
   const alt =
     "Getman in the dark theme, with a request's four checks beside its response: a 200 on a green halftone field";
   return `<!doctype html>
-<html lang="en">
+<html lang="${escape(lang)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
