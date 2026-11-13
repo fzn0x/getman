@@ -196,7 +196,9 @@ jobs:
           path: ${{ runner.temp }}/getman-bin
       - run: chmod +x "$RUNNER_TEMP/getman-bin/getman"
 
-      # curl, Wget and PowerShell (pwsh) come with the runner image.
+      # curl, Wget, PowerShell (pwsh) and Swift come with the runner image.
+      # swift-actions/setup-swift cannot install on Ubuntu 26.04: v2 does
+      # not know it and v3 fails to verify the toolchain's signature.
       - if: matrix.name == 'HTTPie' || matrix.name == 'Python'
         uses: actions/setup-python@v7
         with:
@@ -229,9 +231,7 @@ jobs:
         with:
           dotnet-version: 8.0.x
       - if: matrix.name == 'Swift'
-        uses: swift-actions/setup-swift@v2
-        with:
-          swift-version: "6.0"
+        run: swiftc --version
       - if: matrix.name == 'PHP'
         uses: shivammathur/setup-php@v2
         with:
