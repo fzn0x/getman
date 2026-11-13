@@ -51,6 +51,10 @@ Values set in the environment, workspace and globals are saved to the
 git-ignored local files when you send from the UI. See
 [Variables](variables.md).
 
+Set a variable in the scope `{{name}}` reads it from: a value set in the
+workspace variables does nothing while the environment also has the
+name. The request gets a warning when that happens.
+
 ## The request
 
 In pre-request scripts, `gm.request` is the request about to be sent,

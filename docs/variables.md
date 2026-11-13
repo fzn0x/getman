@@ -32,6 +32,13 @@ weakest to strongest:
 The UI shows the scope a value comes from when you complete a variable
 name after typing `{{`.
 
+A value a script or a capture sets changes nothing while a stronger scope
+defines the same name, even with an empty value. For example,
+`gm.collectionVariables.set("token", ...)` has no effect on `{{token}}`
+while the selected environment has a `token`. The request that set the
+value gets a warning that names the scope that wins, in the UI, in
+`getman run` and in its reports.
+
 ### Session variables
 
 A session variable is for a value that should outlive one request but
