@@ -31,8 +31,9 @@ Orders API with the staging environment: 3 requests
 
 Requests run in the order the sidebar shows them: folders first unless a
 folder's `order` says otherwise. Several targets run one after another,
-in the order you give them; a request named twice runs twice. A request **fails** when it cannot be
-sent, when one of its scripts throws, or when a test or check fails. A
+in the order you give them; a request named twice runs twice. A request **fails** when its file
+cannot be read, when it cannot be sent, when one of its scripts throws,
+or when a test or check fails. A
 `500` with no checks is not a failure, so give the requests that matter
 a `status` check.
 
