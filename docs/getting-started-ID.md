@@ -93,7 +93,7 @@ captures:
   orderId: json.id
 ```
 
-Commit file YAML-nya. Semua yang hanya milik kamu, seperti token dan override pribadi, masuk ke file `*.local.yaml`, yang dikeluarkan oleh `.gitignore` yang dibuat otomatis. Lihat [Workspaces](workspaces.md) untuk format lengkapnya.
+Commit file YAML-nya. Semua yang hanya milik kamu, seperti token dan override pribadi, masuk ke file `*.local.yaml`, yang diabaikan oleh `.gitignore` yang dibuat otomatis. Lihat [Workspaces](workspaces.md) untuk format lengkapnya.
 
 ## Tiga cara masuk
 
