@@ -1,5 +1,11 @@
-# Getman: alternatif Postman yang sangat cepat, ditulis dengan Rust
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/getman-dark.png">
+    <img src="docs/images/getman-light.png" width="900" alt="Getman menampilkan check sebuah request di samping response-nya: angka 200 besar di atas latar halftone, dengan waktu, ukuran, dan 4 dari 4 tes lulus">
+  </picture>
+</p>
 
+# Getman: alternatif Postman yang sangat cepat, ditulis dengan Rust
 
 [![CI](https://github.com/fzn0x/getman/actions/workflows/ci.yml/badge.svg)](https://github.com/fzn0x/getman/actions/workflows/ci.yml)
 [![Docs](https://github.com/fzn0x/getman/actions/workflows/pages.yml/badge.svg)](https://fzn0x.github.io/getman/)
