@@ -22,7 +22,8 @@ are plain YAML files in your repository.
 
 [Download](#install) · [Documentation](https://fzn0x.github.io/getman/) ·
 [Releases](https://github.com/fzn0x/getman/releases) ·
-[Moving from Postman](docs/why-getman.md#moving-over)
+[Moving from Postman](docs/why-getman.md#moving-over) ·
+[Bahasa Indonesia](README-ID.md)
 
 ```sh
 getman init --example   # a workspace with example requests

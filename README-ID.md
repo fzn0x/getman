@@ -17,7 +17,8 @@ Getman adalah API client yang local-first, offline-first, dan open source. Getma
 
 [Unduh](#install) · [Dokumentasi](https://fzn0x.github.io/getman/) ·
 [Rilis](https://github.com/fzn0x/getman/releases) ·
-[Pindah dari Postman](docs/why-getman.md#moving-over)
+[Pindah dari Postman](docs/why-getman.md#moving-over) ·
+[English](README.md)
 
 ```sh
 getman init --example   # sebuah workspace dengan contoh request
@@ -192,7 +193,7 @@ UI browser disajikan oleh Getman hanya di `127.0.0.1`. Server menolak request ya
 
 ## Dokumentasi
 
-- [Memulai](docs/id/getting-started.md) ·
+- [Memulai](docs/getting-started-ID.md) ·
   [Aplikasi desktop](docs/desktop.md) ·
   [Kenapa Getman](docs/why-getman.md), dan pindah dari Postman
 - [Workspaces](docs/workspaces.md) ·
