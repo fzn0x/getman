@@ -241,7 +241,7 @@ standard input and output. Your agent's app starts it; see
 | | |
 | --- | --- |
 | 0 | Success |
-| 1 | `run`: a request failed, or the run stopped early. `send`: the request could not be sent, a script failed, a test or check failed, or a gRPC call ended with a status other than `0 OK`. `import`: some files of a folder could not be imported |
+| 1 | `run`: a request, test or check failed, or the run was stopped early by `--bail` or <kbd>Ctrl</kbd> <kbd>C</kbd>. A run a script ended with `stopExecution()` exits 0 when nothing failed. `send`: the request could not be sent, a script failed, a test or check failed, or a gRPC call ended with a status other than `0 OK`. `import`: some files of a folder could not be imported |
 | 2 | The command could not do its work: bad arguments, no workspace, an unknown environment or target, a file that cannot be read or written |
 | 130 | `send` on a connection: a second <kbd>Ctrl</kbd> <kbd>C</kbd> |
 

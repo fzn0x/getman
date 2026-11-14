@@ -37,7 +37,8 @@ reason it could not be sent, script errors, missing variables and
 warnings, such as a capture that found nothing. A skipped request is
 marked `–`. With several iterations, each starts under an `Iteration
 2/3` heading. The last line is `All passed.` or `Failed.`, after the
-reason when the run stopped early.
+reason when the run stopped early. A run a script stopped on purpose still
+ends with `All passed.` when nothing failed.
 
 Requests run in the order the sidebar shows them: folders first unless a
 folder's `order` says otherwise. Several targets run one after another,
@@ -90,9 +91,12 @@ needs, and the run notes each file it wrote on standard error.
 
 | Status | Means |
 | --- | --- |
-| 0 | Everything passed |
-| 1 | A request failed, or the run stopped early: by `--bail`, by a script's `gm.execution.stopExecution()`, or by <kbd>Ctrl</kbd> <kbd>C</kbd> |
+| 0 | Everything passed. A run that a script ended on purpose with `gm.execution.stopExecution()` counts, when nothing failed |
+| 1 | A request, test or check failed, or the run was stopped early by `--bail` or by <kbd>Ctrl</kbd> <kbd>C</kbd> |
 | 2 | The run could not start, or its results could not be written: no workspace, an unknown target or environment, a bad data file, a report or `--persist` file that cannot be written |
+
+The Runner in the UI follows the same rule: a run a script ended on
+purpose is marked as passed when nothing failed.
 
 ## Run control
 
@@ -109,7 +113,7 @@ Scripts steer the run with `gm.execution`; see
 | `gm.execution.setNextRequest(name)` | After this request, go on with the request of that name or path in the run, ahead or back. A name that is not in the run ends the iteration with a warning |
 | `gm.execution.setNextRequest(null)` | End this iteration after this request; the next iteration starts |
 | `gm.execution.skipRequest()` | In a pre-request script: do not send this request. It counts as skipped, not run |
-| `gm.execution.stopExecution()` | Finish this request and end the run. The run exits with 1 |
+| `gm.execution.stopExecution()` | Finish this request and end the run. The run exits with 0 when nothing failed, and with 1 when something did, such as a request before it |
 
 An iteration that runs more than 100 requests for each one planned, plus
 1,000, is stopped with a warning, since `setNextRequest` probably loops.
@@ -190,7 +194,7 @@ Iterations count from 0 here.
     "skipped_requests": 0, "tests_passed": 0, "tests_failed": 0,
     "checks_passed": 2, "checks_failed": 1,
     "duration_ms": 310.4, "average_response_ms": 86.67,
-    "stopped": null, "warnings": []
+    "stopped": null, "stopped_by_script": false, "warnings": []
   },
   "requests": [
     {
@@ -208,7 +212,9 @@ Iterations count from 0 here.
 ```
 
 `summary.stopped` is the reason the run ended early, and
-`summary.warnings` the problems that did not stop it. A request that was
+`summary.stopped_by_script` is `true` when a script ended it on purpose
+with `stopExecution()`. Such a run passes when nothing failed. The
+`summary.warnings` are the problems that did not stop it. A request that was
 never sent has `null` for its response fields and the reason in `error`.
 
 ### JUnit
