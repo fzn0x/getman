@@ -248,13 +248,17 @@
 {/if}
 
 <style>
+  /* Open requests as tabs on the surface container. The active one takes
+     the page's surface and rounded top corners, so it joins the request
+     below; the rest show a state layer on hover. */
   .strip {
     display: flex;
     align-items: stretch;
     min-width: 0;
-    height: 34px;
-    border-bottom: 1px solid var(--rule);
-    background: var(--sunken);
+    height: 36px;
+    padding: 4px var(--s1) 0;
+    border-bottom: 1px solid var(--outline-variant);
+    background: var(--surface-container);
   }
 
   .list {
@@ -274,23 +278,30 @@
     align-items: center;
     flex: none;
     max-width: 240px;
-    border-right: 1px solid var(--rule-2);
-    color: var(--ink-2);
+    border-radius: var(--r-sm) var(--r-sm) 0 0;
+    color: var(--on-surface-variant);
+    transition: background-color var(--dur-short) var(--ease);
   }
 
-  .item.active {
-    background: var(--paper);
-    color: var(--ink);
+  .item:hover:not(.active) {
+    background: color-mix(in srgb, var(--on-surface) var(--hover), transparent);
   }
 
-  .item.active::before {
+  /* A short divider between two inactive tabs. */
+  .item:not(.active) + .item:not(.active)::before {
     content: "";
     position: absolute;
     left: 0;
-    right: 0;
-    top: 0;
-    height: 3px;
-    background: var(--accent);
+    top: 9px;
+    bottom: 9px;
+    width: 1px;
+    background: var(--outline-variant);
+  }
+
+  .item.active {
+    background: var(--surface);
+    color: var(--on-surface);
+    font-weight: 500;
   }
 
   .item.active::after {
@@ -300,14 +311,14 @@
     right: 0;
     bottom: -1px;
     height: 1px;
-    background: var(--paper);
+    background: var(--surface);
   }
 
   .item.lifted {
     opacity: 0.45;
   }
 
-  /* Where a dragged tab lands: a 2px red line, as between tree rows. */
+  /* Where a dragged tab lands: a 2px primary line, as between tree rows. */
   .item.drop-before,
   .item.drop-after {
     box-shadow: inset 2px 0 0 var(--accent);
@@ -351,8 +362,9 @@
     margin-right: 6px;
     padding: 0;
     border: 0;
+    border-radius: 50%;
     background: none;
-    color: var(--ink-3);
+    color: var(--on-surface-variant);
   }
 
   .close .mark {
@@ -367,7 +379,7 @@
   }
 
   .close.dirty {
-    color: var(--accent);
+    color: var(--primary);
   }
 
   .close:hover {
