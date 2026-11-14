@@ -18,10 +18,17 @@ the font in all three. The font is not modified or sold on its own.
 
 ## Icons
 
-The icons in the browser UI, the website, the favicon and the desktop app
-(`web/src/lib/icons.ts`, `site/src/icons.mjs`, `web/public/favicon.svg` and
-`crates/getman-desktop/icons/`) are pixel drawings made for Getman and are
-under Getman's licence. No icon set of anyone else is bundled.
+The icons in the browser UI and the website (`web/src/lib/icons.ts` and
+`site/src/icons.mjs`) are pixel drawings made for Getman and are under
+Getman's licence. So are the Getman logo, the favicon and the desktop app
+icons (`assets/`, `web/public/favicon.svg` and `crates/getman-desktop/icons/`).
+No icon set of anyone else is bundled.
+
+The wordmark and tagline in `assets/logo.svg`, `assets/logo-light.svg` and
+`assets/logo-dark.svg` are set in **Google Sans Flex**, Copyright 2015 The
+Google Sans Flex Authors (<https://github.com/googlefonts/googlesans-flex>),
+under the SIL Open Font License, Version 1.1, and converted to outlines. The
+font itself is not bundled.
 
 ## Protocol definitions
 
