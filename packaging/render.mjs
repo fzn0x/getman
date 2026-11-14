@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Writes the package files for one release: a Homebrew formula, a Scoop
-// manifest, winget manifests and the Flatpak's metadata. Each is a template
+// manifest, winget manifests, the Flatpak's metadata and an AUR package. Each is a template
 // beside this script (a file ending in .in) with the release's version,
 // download URLs and SHA-256 sums filled in from the files the release holds.
 //
@@ -21,6 +21,8 @@
 //   {{url:FILE}}      the release's download URL for FILE
 //   {{sha256:FILE}}   the SHA-256 of FILE in --dist, in lower case
 //   {{SHA256:FILE}}   the same in upper case, as winget writes it
+//   {{rawurl:FILE}}   the URL of FILE in the repository at the release's tag
+//   {{filesha256:FILE}} the SHA-256 of FILE in the repository checkout
 //   {{cliurl:TARGET}} {{clisha256:TARGET}}   the same for the command-line
 //                     archive of a Rust target, such as aarch64-apple-darwin
 //
@@ -73,6 +75,10 @@ const sha256 = (file) => {
   }
   return hashes.get(file);
 };
+// A file of the repository itself, which the release checkout holds as the
+// tag has it.
+const fileSha256 = (file) =>
+  createHash("sha256").update(readFileSync(join(here, "..", file))).digest("hex");
 const cliArchive = (target) => `getman-${tag}-${target}${target.includes("windows") ? ".zip" : ".tar.gz"}`;
 
 function render(text) {
@@ -85,6 +91,8 @@ function render(text) {
       case "url": return `${download}/${argument}`;
       case "sha256": return sha256(argument);
       case "SHA256": return sha256(argument).toUpperCase();
+      case "rawurl": return `https://raw.githubusercontent.com/${options.repo}/${tag}/${argument}`;
+      case "filesha256": return fileSha256(argument);
       case "cliurl": return `${download}/${cliArchive(argument)}`;
       case "clisha256": return sha256(cliArchive(argument));
       default: throw new Error(`unknown placeholder ${whole}`);
