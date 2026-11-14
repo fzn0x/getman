@@ -6,7 +6,7 @@ cask "getman-desktop" do
 
   url "https://github.com/{{repo}}/releases/download/v#{version}/Getman-macos-universal.dmg"
   name "Getman"
-  desc "Local-first, account-free API client: a Postman alternative"
+  desc "Open-source Postman alternative written in Rust"
   homepage "https://fzn0x.github.io/getman/"
 
   livecheck do
