@@ -7,6 +7,7 @@
   import { KIND_LABELS, kindMark } from "../../lib/realtime";
   import type { IconName } from "../../lib/icons";
   import { keyLabel } from "../../lib/keys";
+  import { nextTheme } from "../../lib/theme";
   import {
     activeTab,
     allFolders,
@@ -109,15 +110,9 @@
       },
       {
         id: "theme",
-        title: "Switch light and dark theme",
+        title: `Switch theme (${prefs.theme}, next ${nextTheme(prefs.theme)})`,
         icon: "contrast",
-        run: () =>
-          setTheme(
-            document.documentElement.dataset.theme === "dark" ||
-              (prefs.theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches)
-              ? "light"
-              : "dark",
-          ),
+        run: () => setTheme(nextTheme(prefs.theme)),
       },
       {
         id: "layout",
