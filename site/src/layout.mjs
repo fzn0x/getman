@@ -31,7 +31,7 @@ export function head({
   const full = home ? title : `${title} · Getman`;
   const image = `${site}images/getman-dark.png`;
   const alt =
-    "Getman in the dark theme, with a request's four checks beside its response: a 200 on a green halftone field";
+    "Getman in the dark theme, with a request's four checks beside its response: 200 OK in green, with 4 of 4 tests passed";
   return `<!doctype html>
 <html lang="${escape(lang)}">
 <head>

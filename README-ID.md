@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/getman-dark.png">
-    <img src="docs/images/getman-light.png" width="900" alt="Getman menampilkan check sebuah request di samping response-nya: angka 200 besar di atas latar halftone, dengan waktu, ukuran, dan 4 dari 4 tes lulus">
+    <img src="docs/images/getman-light.png" width="900" alt="Getman menampilkan empat check sebuah request di samping response-nya: 200 OK berwarna hijau, dengan waktu, ukuran, dan 4 dari 4 tes lulus">
   </picture>
 </p>
 

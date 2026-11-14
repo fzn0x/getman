@@ -104,8 +104,8 @@ ${bar({ root, current: "" })}
 </div>
 
 <figure class="shot">
-  <img class="light" src="${root}images/getman-light.png" width="1280" height="800" loading="lazy" decoding="async" alt="Getman with a request's four checks beside its response: a 200 on a green halftone field, with time, size and 4 of 4 tests passed">
-  <img class="dark" src="${root}images/getman-dark.png" width="1280" height="800" loading="lazy" decoding="async" alt="Getman in the dark theme, with a request's four checks beside its response: a 200 on a green halftone field, with time, size and 4 of 4 tests passed">
+  <img class="light" src="${root}images/getman-light.png" width="1280" height="800" loading="lazy" decoding="async" alt="Getman with a request's four checks beside its response: 200 OK in green, with the time, size and 4 of 4 tests passed">
+  <img class="dark" src="${root}images/getman-dark.png" width="1280" height="800" loading="lazy" decoding="async" alt="Getman in the dark theme, with a request's four checks beside its response: 200 OK in green, with the time, size and 4 of 4 tests passed">
 </figure>
 
 <section class="facts" aria-labelledby="facts">
