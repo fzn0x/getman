@@ -68,7 +68,7 @@ modules:
             <name>Getman</name>
             <summary>A local-first, account-free API client</summary>
             <metadata_license>CC0-1.0</metadata_license>
-            <project_license>MIT OR Apache-2.0</project_license>
+            <project_license>MIT OR GPL-3.0-or-later</project_license>
             <developer_name>fzn0x</developer_name>
             <url type="homepage">https://fzn0x.github.io/getman/</url>
             <url type="bugtracker">https://github.com/{{repo}}/issues</url>

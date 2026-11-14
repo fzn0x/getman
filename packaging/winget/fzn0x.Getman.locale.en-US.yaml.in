@@ -7,8 +7,8 @@ PublisherUrl: https://github.com/fzn0x
 PublisherSupportUrl: https://github.com/{{repo}}/issues
 PackageName: Getman
 PackageUrl: https://fzn0x.github.io/getman/
-License: MIT OR Apache-2.0
-LicenseUrl: https://github.com/{{repo}}/blob/{{tag}}/LICENSE-MIT
+License: MIT OR GPL-3.0-or-later
+LicenseUrl: https://github.com/{{repo}}/blob/{{tag}}/README.md#license
 Copyright: Copyright (c) fzn0x
 ShortDescription: A local-first, account-free API client
 Description: Send requests, test APIs and run collections from plain YAML files in your repository. No account, no cloud.

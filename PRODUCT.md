@@ -24,7 +24,7 @@ Getman is a local-first, open-source API client. Send HTTP requests, inspect res
 - The files in your repository are the only copy: one YAML file per request, reviewable in pull requests, with secrets in git-ignored `*.local.yaml` files.
 - One small binary with three front ends over the same files: browser UI, terminal UI and a CI runner with JUnit output.
 - Brings Postman work along: imports Postman collections and environments, and runs `pm.*` scripts unchanged (`pm` is an alias of `gm`).
-- Open source under MIT or Apache-2.0.
+- Open source under MIT or GPL-3.0-or-later.
 
 ## Operating Context
 

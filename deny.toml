@@ -1,6 +1,7 @@
 # Checked by `cargo deny check` in CI (.github/workflows/ci.yml): known
 # vulnerabilities in dependencies, their licences, and where they come from.
-# Getman is MIT OR Apache-2.0, so what it links must allow that.
+# Getman is MIT OR GPL-3.0-or-later. What it links stays permissive, so a
+# build can be taken under either licence.
 #
 # Every exception below says why it is safe, and where it goes away.
 

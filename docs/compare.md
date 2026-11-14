@@ -15,7 +15,7 @@ often, so follow the links before deciding.
 
 | | Getman | Yaak | Hoppscotch | Bruno | Beam |
 | --- | --- | --- | --- | --- | --- |
-| Licence | MIT or Apache-2.0 | [MIT][yaak-readme]; work use of the official builds needs a [paid licence][yaak-pricing] | [MIT][hopp-license], with a paid [Enterprise Edition][hopp-ee] | [MIT][bruno-license], with [paid editions][bruno-editions] | [GPL-3.0][beam-license] |
+| Licence | MIT or GPL-3.0-or-later | [MIT][yaak-readme]; work use of the official builds needs a [paid licence][yaak-pricing] | [MIT][hopp-license], with a paid [Enterprise Edition][hopp-ee] | [MIT][bruno-license], with [paid editions][bruno-editions] | [GPL-3.0][beam-license] |
 | Price | Free for any use | Free for personal use; $79 a year for one person at work, $149 per user a year for a business ([pricing][yaak-pricing]) | Free; paid plans from $6 per user a month, billed annually ([pricing][hopp-pricing]) | Free; $6, $11 or $18 per user a month, billed annually ([pricing][bruno-pricing]) | Free |
 | Account | None | [None][yaak-privacy] | Optional; needed to sync, work in teams and use [MCP][hopp-mcp] ([README][hopp-readme]) | [None][bruno-intro] | [None][beam-readme] |
 | Where requests live | A YAML file per request, in your repository ([workspaces](workspaces.md)) | A local database ([privacy][yaak-privacy]), with optional [sync to YAML files][yaak-sync] | Browser storage or the desktop app's store, and a server when signed in ([security notes][hopp-security]) | [`.bru`][bruno-bru] or [YAML][bruno-yaml] files | A [TOML file][beam-storage] per request |

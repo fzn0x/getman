@@ -13,7 +13,7 @@
     "targets": "all",
     "publisher": "fzn0x",
     "homepage": "https://fzn0x.github.io/getman/",
-    "license": "MIT OR Apache-2.0",
+    "license": "MIT OR GPL-3.0-or-later",
     "category": "DeveloperTool",
     "shortDescription": "A local-first API client",
     "longDescription": "Send requests, test APIs and run collections from plain YAML files in your repository. No account, no cloud.",

@@ -6,6 +6,13 @@ All notable changes to Getman are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Getman is now licensed under MIT OR GPL-3.0-or-later, in place of MIT OR
+  Apache-2.0. `LICENSE-GPL` holds the GPL text; the Apache-2.0 text moves to
+  `LICENSES/Apache-2.0.txt`, for the bundled files under it. Releases up to
+  0.3.4 keep MIT OR Apache-2.0.
+
 ## [0.3.4] - 2026-11-14
 
 ### Added

@@ -158,7 +158,7 @@ export function footer({ root }) {
   return `<footer class="foot">
   <div class="foot-inner">
     <p class="foot-mark">${mark(20)}<span class="word">Getman</span></p>
-    <p class="foot-line">A local-first API client. Free and open source under MIT or Apache-2.0.</p>
+    <p class="foot-line">A local-first API client. Free and open source under MIT or GPL-3.0-or-later.</p>
     <nav class="foot-links" aria-label="More">
       <a href="${root}docs/getting-started.html">Documentation</a>
       <a href="${repo}/releases">Releases</a>

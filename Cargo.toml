@@ -9,7 +9,7 @@ default-members = ["crates/getman", "crates/getman-core"]
 version = "0.3.4"
 edition = "2024"
 rust-version = "1.88"
-license = "MIT OR Apache-2.0"
+license = "MIT OR GPL-3.0-or-later"
 repository = "https://github.com/fzn0x/getman"
 homepage = "https://fzn0x.github.io/getman/"
 

@@ -1,7 +1,7 @@
 # Third-party notices
 
-Getman's own code is MIT OR Apache-2.0 (see [LICENSE-MIT](LICENSE-MIT) and
-[LICENSE-APACHE](LICENSE-APACHE)). These files and libraries of other
+Getman's own code is MIT OR GPL-3.0-or-later (see [LICENSE-MIT](LICENSE-MIT)
+and [LICENSE-GPL](LICENSE-GPL)). These files and libraries of other
 people are bundled in the `getman` binary, the desktop app or the website,
 and keep their own licences.
 
@@ -29,7 +29,7 @@ The icons in the browser UI and on the website (`web/src/lib/icons.ts` and
 `site/src/icons.mjs`) are **Material Symbols** (Rounded, weight 400),
 Copyright Google LLC, under the Apache License, Version 2.0:
 <https://www.apache.org/licenses/LICENSE-2.0>. The text of that licence is in
-[LICENSE-APACHE](LICENSE-APACHE). Their path data is copied into those files,
+[LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt). Their path data is copied into those files,
 which name each symbol; they are not modified.
 
 The Getman logo, the favicon and the desktop app icons (`assets/`,
@@ -72,8 +72,8 @@ decode the details of a failed gRPC call. Their message definitions are
 those of `google/rpc/status.proto` and `google/rpc/error_details.proto` in
 <https://github.com/googleapis/googleapis>, Copyright Google LLC, licensed
 under the Apache License, Version 2.0: <https://www.apache.org/licenses/LICENSE-2.0>.
-The text of that licence is in [LICENSE-APACHE](LICENSE-APACHE). Getman
-rewrote the comments and left out those of the original.
+The text of that licence is in [LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt).
+Getman rewrote the comments and left out those of the original.
 
 ## Libraries
 

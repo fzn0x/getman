@@ -4,7 +4,7 @@ class Getman < Formula
   desc "Local-first, account-free API client: a Postman alternative"
   homepage "https://fzn0x.github.io/getman/"
   version "{{version}}"
-  license any_of: ["MIT", "Apache-2.0"]
+  license any_of: ["MIT", "GPL-3.0-or-later"]
 
   on_macos do
     on_arm do
