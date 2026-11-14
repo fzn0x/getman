@@ -195,7 +195,7 @@
 
   .grid {
     display: grid;
-    grid-template-columns: 18px minmax(140px, 2fr) 112px minmax(96px, 1fr) 28px;
+    grid-template-columns: 18px minmax(140px, 2fr) 112px minmax(96px, 1fr) var(--icon);
     border-top: 1px solid var(--rule);
   }
 
@@ -239,6 +239,49 @@
     color: var(--error);
     border-bottom: 1px solid var(--rule-3);
     font-size: var(--fs-meta);
+  }
+
+  /* A phone has no room for five columns: the subject takes a line of its
+     own and the comparison and value share the one below. */
+  @media (max-width: 520px) {
+    .grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1.2fr) var(--icon);
+      border-bottom: 1px solid var(--rule-3);
+    }
+
+    .row > span {
+      border-bottom: 0;
+    }
+
+    .row > span:nth-child(1) {
+      grid-area: 1 / 1;
+    }
+
+    .row > span:nth-child(2) {
+      grid-area: 1 / 2 / 2 / 4;
+    }
+
+    .row > span:nth-child(3) {
+      grid-area: 2 / 2;
+    }
+
+    .row > span:nth-child(4) {
+      grid-area: 2 / 3 / 3 / 5;
+    }
+
+    .row > span:nth-child(5) {
+      grid-area: 1 / 4;
+      padding-right: 0;
+    }
+
+    .why {
+      grid-column: 1 / -1;
+    }
   }
 
   .add {
