@@ -195,7 +195,7 @@
 
   .grid {
     display: grid;
-    grid-template-columns: 18px minmax(140px, 3fr) 112px minmax(96px, 2fr) 28px;
+    grid-template-columns: 18px minmax(140px, 2fr) 112px minmax(96px, 1fr) 28px;
     border-top: 1px solid var(--rule);
   }
 
@@ -251,7 +251,8 @@
   .suggest {
     height: 26px;
     padding: 0 var(--s2);
-    border: 1px dashed var(--rule-2);
+    border: 1px dashed var(--outline);
+    border-radius: var(--r-sm);
     background: none;
     color: var(--ink-2);
     font-size: var(--fs-meta);
