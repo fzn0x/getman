@@ -89,8 +89,9 @@ To use `getman` in a terminal, open **Settings › About** in the app and
 choose **Install the getman command**. It creates a link named `getman`
 to the app's own program, in `/usr/local/bin`, or in `~/.local/bin` when
 it cannot write to `/usr/local/bin`. The link follows the app, so the
-command updates with it. A `getman` there that is a file rather than a
-link is left as it is, so one installed another way keeps working.
+command updates with it. The button replaces a `getman` link only when it
+points into a `Getman.app`. A file, or a link to anything else, such as
+Homebrew's, is left as it is, so one installed another way keeps working.
 
 The button is not offered while the app runs from the mounted disk
 image: drag it to **Applications** first.

@@ -184,8 +184,10 @@ installed, the section says where in place of the button.
 If it fails:
 
 - `<path> is a getman command installed another way; Getman leaves it as
-  it is.` A `getman` that is not a link to the app is already there, such
-  as one from the install script. Remove it, or keep using that one.
+  it is.` A `getman` is already there that is a file, or a link
+  that does not point into a Getman app, such as one from the install
+  script or Homebrew. Getman tries `~/.local/bin` next. Remove the other
+  one, or keep using it.
 - `Could not create <path>: ...` Getman could write to neither
   `/usr/local/bin` nor `~/.local/bin`. Check that you own `~/.local`.
 
