@@ -330,10 +330,11 @@ jobs:
       # hashes: a Homebrew formula, a Scoop manifest, winget manifests and
       # a Flatpak manifest. They are only release files for a maintainer to
       # submit (see "Packages" in CONTRIBUTING.md); nothing publishes them.
+      # The AUR files are left out: publish-aur writes its own.
       # A failure here is a warning, so packaging never blocks a release.
       - name: Write the package manifests
         continue-on-error: true
-        run: node packaging/render.mjs --tag "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dist dist
+        run: node packaging/render.mjs --except aur --tag "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dist dist
       - name: Write checksums
         working-directory: dist
         run: sha256sum -- * > SHA256SUMS
@@ -393,4 +394,67 @@ jobs:
             git -C bucket -c user.name=fzn0x -c user.email=fncolon@pm.me \
               commit -m "getman $GITHUB_REF_NAME"
             git -C bucket push
+          fi
+
+  # The AUR package getman-bin, for `yay -S getman-bin` on Arch Linux. It
+  # repackages the release's .deb files. The secret AUR_SSH_PRIVATE_KEY is
+  # the private half of an SSH key whose public half is on the maintainer's
+  # AUR account; without it, and for pre-releases, which pacman cannot
+  # order, the job does nothing. The AUR makes the package at the first push.
+  publish-aur:
+    name: Publish the AUR package
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check that the package is wanted
+        id: wanted
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          case "$GITHUB_REF_NAME" in
+            *-*) echo "::notice::$GITHUB_REF_NAME is a pre-release, so the AUR package stays as it is."
+                 echo "run=false" >> "$GITHUB_OUTPUT" ;;
+            *) if [ -z "$AUR_SSH_PRIVATE_KEY" ]; then
+                 echo "::notice::No AUR_SSH_PRIVATE_KEY secret, so the AUR package stays as it is."
+                 echo "run=false" >> "$GITHUB_OUTPUT"
+               else
+                 echo "run=true" >> "$GITHUB_OUTPUT"
+               fi ;;
+          esac
+      - if: steps.wanted.outputs.run == 'true'
+        name: Write the PKGBUILD and .SRCINFO
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$GITHUB_REF_NAME" --dir debs \
+            --pattern getman-desktop_amd64.deb --pattern getman-desktop_arm64.deb
+          node packaging/render.mjs --only aur --tag "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --dist debs --out aur-files
+          cat aur-files/PKGBUILD
+      - if: steps.wanted.outputs.run == 'true'
+        name: Push to the AUR
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          # Pin the AUR's host key. It comes over the network, so its
+          # fingerprint goes in the log, to compare with the ones the Arch
+          # wiki lists at https://wiki.archlinux.org/title/AUR_submission_guidelines.
+          # After this, a host that is not the AUR fails the push.
+          ssh-keyscan -t ed25519 aur.archlinux.org > ~/.ssh/known_hosts
+          test -s ~/.ssh/known_hosts
+          ssh-keygen -lf ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/aur -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          git clone ssh://aur@aur.archlinux.org/getman-bin.git aur
+          cp aur-files/PKGBUILD aur-files/.SRCINFO aur/
+          git -C aur add PKGBUILD .SRCINFO
+          if git -C aur diff --cached --quiet; then
+            echo "The AUR already has getman-bin $GITHUB_REF_NAME."
+          else
+            git -C aur -c user.name=fzn0x -c user.email=fncolon@pm.me \
+              commit -m "getman-bin ${GITHUB_REF_NAME#v}"
+            git -C aur push origin HEAD:master
           fi
