@@ -156,6 +156,7 @@ the version, the download URLs and the SHA-256 sums.
 | Scoop: `scoop install fzn0x/getman`, after `scoop bucket add fzn0x https://github.com/fzn0x/scoop-bucket` | The same job commits `bucket/getman.json` to [fzn0x/scoop-bucket](https://github.com/fzn0x/scoop-bucket) |
 | winget | By hand: a pull request from a fork of `microsoft/winget-pkgs` adding the three files under `manifests/f/fzn0x/Getman/<version>/`; the first one is reviewed by hand |
 | Flatpak | Not published; the manifest repackages the `.deb` and is only a release file |
+| AUR: `yay -S getman-bin` | The `publish-aur` job in `release.yml` pushes `PKGBUILD` and `.SRCINFO` to `ssh://aur@aur.archlinux.org/getman-bin.git`; see below |
 
 The job pushes with the repository secret `PACKAGES_TOKEN`, a
 fine-grained personal access token with read and write access to the
@@ -163,9 +164,29 @@ contents of the tap and the bucket. When the token expires, the job fails
 and the release itself is not affected: renew the token, update the
 secret and rerun the job.
 
+### The AUR package
+
+`getman-bin` repackages the release's `.deb` files for Arch Linux on
+x86_64 and aarch64. `packaging/aur/PKGBUILD.in` and `.SRCINFO.in` hold the
+package; `render.mjs --only aur` fills in the version and the sums of the
+two `.deb` files and the licence files. The `publish-aur` job pushes the
+result to the AUR when this repository secret is set:
+
+| Secret | |
+| --- | --- |
+| `AUR_SSH_PRIVATE_KEY` | The private half of an SSH key whose public half is on the maintainer's AUR account |
+
+Without the secret the job prints a notice and does nothing. It skips
+pre-releases too, which pacman cannot order. The job reads the AUR's host
+key with `ssh-keyscan`, prints its fingerprint to compare with the Arch
+wiki's, and pushes with `StrictHostKeyChecking=yes`. The AUR makes the
+package at the first push. The package is one program: `/usr/bin/getman`
+is the app and the command line, as in the `.deb`.
+
 Try a changed template by hand before a release:
 `brew install --formula ./getman.rb`, `scoop install ./getman.json`,
-`winget validate` on the folder of winget files, and `flatpak-builder`
+`winget validate` on the folder of winget files, `makepkg` in an Arch
+container on the AUR files, and `flatpak-builder`
 on the Flatpak one. To render them from a release you have downloaded:
 
 ```sh
