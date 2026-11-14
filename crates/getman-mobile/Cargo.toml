@@ -1,0 +1,38 @@
+[package]
+name = "getman-mobile"
+description = "Getman on Android and iOS: the browser UI in the app's webview, with Getman's server running in the same process"
+version.workspace = true
+edition.workspace = true
+# Tauri 2.12 needs Rust 1.90, as for the desktop app.
+rust-version = "1.90"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+
+[lib]
+# Android loads the app as a shared library and iOS links it statically.
+name = "getman_mobile_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+getman.workspace = true
+getman-core.workspace = true
+tauri = { version = "2.12", default-features = false, features = ["wry"] }
+tauri-plugin-opener = "2"
+
+# rustls-platform-verifier asks Android's own trust manager, through the
+# app's Java context, which tao records when the app starts.
+[target.'cfg(target_os = "android")'.dependencies]
+jni = { version = "0.22", default-features = false }
+ndk-context = "0.1"
+rustls-platform-verifier = "0.7"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

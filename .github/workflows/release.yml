@@ -2,7 +2,8 @@ name: Release
 
 # Pushing a v* tag builds the browser UI once, builds getman with it for
 # every platform, bundles the desktop app for Windows, macOS and Linux,
-# and publishes the archives and installers with checksums.
+# builds the Android and iOS apps, and publishes the archives, installers
+# and apps with checksums.
 #
 # The desktop files keep the same names in every release, so links to
 # https://github.com/fzn0x/getman/releases/latest/download/<name> never go
@@ -253,9 +254,126 @@ jobs:
           name: desktop-${{ matrix.target }}
           path: out/*
 
+  # The Android app: one APK for ARM64, ARMv7 and x86_64 devices, signed
+  # with the key in the ANDROID_KEYSTORE secret (a base64 PKCS#12 keystore,
+  # alias "getman", password ANDROID_KEYSTORE_PASSWORD). Every release must
+  # be signed with that same key, or Android refuses the update. Without
+  # the secret the release has no Android app.
+  android:
+    name: Build the Android app
+    needs: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-dist
+          path: web/dist
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: android
+      # QuickJS's bindings are generated for Android at build time.
+      - name: Install libclang
+        run: sudo apt-get install -y --no-install-recommends libclang-dev
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: crates/getman-mobile/package-lock.json
+      - name: Install the Tauri command line
+        working-directory: crates/getman-mobile
+        run: npm ci
+      - name: Build and sign the APK
+        working-directory: crates/getman-mobile
+        env:
+          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          if [ -z "$ANDROID_KEYSTORE" ]; then
+            echo "::warning::ANDROID_KEYSTORE is not set, so this release has no Android app."
+            exit 0
+          fi
+          export GETMAN_ANDROID_KEYSTORE="$RUNNER_TEMP/getman.jks"
+          printf '%s' "$ANDROID_KEYSTORE" | base64 -d > "$GETMAN_ANDROID_KEYSTORE"
+          export GETMAN_ANDROID_KEYSTORE_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
+          export GETMAN_ANDROID_KEY_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
+          export GETMAN_ANDROID_KEY_ALIAS=getman
+          export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          # Newer NDK headers refuse a target without an API level, so
+          # bindgen gets the app's minimum, 26.
+          sysroot="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          export BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android="--sysroot=$sysroot --target=aarch64-linux-android26"
+          export BINDGEN_EXTRA_CLANG_ARGS_armv7_linux_androideabi="--sysroot=$sysroot --target=armv7a-linux-androideabi26"
+          export BINDGEN_EXTRA_CLANG_ARGS_x86_64_linux_android="--sysroot=$sysroot --target=x86_64-linux-android26"
+          npm run tauri -- android build --ci --apk --target aarch64 armv7 x86_64
+          apk=$(find gen/android/app/build/outputs/apk -name '*-release.apk' | head -n 1)
+          "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)/apksigner" verify --print-certs "$apk"
+          cp "$apk" "$GITHUB_WORKSPACE/out/Getman-android-universal.apk"
+          rm -f "$GETMAN_ANDROID_KEYSTORE"
+          ls -l "$GITHUB_WORKSPACE/out"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mobile-android
+          path: out/*
+          if-no-files-found: ignore
+
+  # The iOS app as an unsigned IPA, for AltStore, SideStore or Sideloadly,
+  # which sign it with the user's own Apple ID. The Xcode project is
+  # generated here; Info.ios.plist holds the app's own settings.
+  ios:
+    name: Build the iOS app
+    needs: web
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-dist
+          path: web/dist
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ios
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: crates/getman-mobile/package-lock.json
+      - name: Install the Tauri command line
+        working-directory: crates/getman-mobile
+        run: npm ci
+      - name: Build the IPA
+        working-directory: crates/getman-mobile
+        run: |
+          npm run tauri -- ios init --ci
+          export BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios="-isysroot $(xcrun --sdk iphoneos --show-sdk-path)"
+          npm run tauri -- ios build --ci --no-sign --target aarch64
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          cp "$(find gen/apple/build -name '*.ipa' | head -n 1)" "$GITHUB_WORKSPACE/out/Getman-ios.ipa"
+          ls -l "$GITHUB_WORKSPACE/out"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mobile-ios
+          path: out/*
+
+  # The phone apps are newer than the rest: a release goes out without
+  # them when their builds fail, and says so.
   release:
     name: Publish the release
-    needs: [build, desktop]
+    needs: [build, desktop, android, ios]
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.desktop.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -269,6 +387,18 @@ jobs:
           pattern: desktop-*
           path: dist
           merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: mobile-*
+          path: dist
+          merge-multiple: true
+      - name: Note missing phone apps
+        env:
+          ANDROID: ${{ needs.android.result }}
+          IOS: ${{ needs.ios.result }}
+        run: |
+          [ -f dist/Getman-android-universal.apk ] || echo "::warning::This release has no Android app (build: $ANDROID)."
+          [ -f dist/Getman-ios.ipa ] || echo "::warning::This release has no iOS app (build: $IOS)."
       # The notes are the changelog's section for this version, with links
       # to the docs made absolute so they work on the release page and in
       # the desktop app's update dialog. Without a section, GitHub writes

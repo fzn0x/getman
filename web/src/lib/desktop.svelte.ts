@@ -35,8 +35,15 @@ export async function startDesktop(): Promise<void> {
     import("@tauri-apps/api/event"),
   ]);
   invoke = core.invoke;
-  await event.listen<UpdateStatus>("getman://updates", (e) => (desktop.status = e.payload));
-  const state = await invoke<DesktopState>("desktop_state");
+  let state: DesktopState;
+  try {
+    await event.listen<UpdateStatus>("getman://updates", (e) => (desktop.status = e.payload));
+    state = await invoke<DesktopState>("desktop_state");
+  } catch {
+    // The Android and iOS apps bring Tauri's bridge too, but none of the
+    // desktop app's commands, so the page stays as in a browser tab.
+    return;
+  }
   desktop.status = state.updates;
   desktop.commandLine = state.commandLine;
   desktop.available = true;

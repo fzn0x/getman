@@ -240,11 +240,11 @@ fn tls_config(
             .map_err(|e| Error::Http(format!("Could not load the system's certificates: {e}")))?
     } else {
         let roots = crate::tls::ca_roots(&transport.ca_certs)?;
-        let verifier = rustls_platform_verifier::Verifier::new_with_extra_roots(roots, provider)
+        let verifier = crate::tls::verifier_with_extra_roots(roots, provider)
             .map_err(|e| Error::Http(format!("Could not load the system's certificates: {e}")))?;
         builder
             .dangerous()
-            .with_custom_certificate_verifier(Arc::new(verifier))
+            .with_custom_certificate_verifier(verifier)
     };
     let mut config = match (&transport.client_identity, identity) {
         (Some(client), true) => {

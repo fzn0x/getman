@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Checks the licences of every npm package in the lockfiles of web/ (the
 // browser UI, built into the getman binary and the desktop app), site/ (the
-// website) and crates/getman-desktop/ (the installer tooling).
+// website), crates/getman-desktop/ (the installer tooling) and
+// crates/getman-mobile/ (the phone apps' build tooling).
 //
 //   node .github/scripts/check-npm-licenses.mjs
 //
@@ -17,7 +18,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const folders = ["web", "site", "crates/getman-desktop"];
+const folders = ["web", "site", "crates/getman-desktop", "crates/getman-mobile"];
 
 const permissive = new Set([
   "MIT",

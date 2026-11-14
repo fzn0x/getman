@@ -1,0 +1,8 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. The window is the colour of the page's
+         surface, as in web/src/styles/tokens.css, so the strips behind
+         the status and navigation bars match it. -->
+    <style name="Theme.getman_mobile" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/surface</item>
+    </style>
+</resources>

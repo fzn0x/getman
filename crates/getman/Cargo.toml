@@ -38,6 +38,11 @@ serde_yaml_ng = "0.10"
 tokio = { version = "1", features = ["full"] }
 tower = { version = "0.5", features = ["util"] }
 
+# A debug build reads the UI from web/dist at run time, which a phone does
+# not have, so the mobile apps build it in even then.
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+rust-embed = { version = "8", features = ["debug-embed"] }
+
 [lints]
 workspace = true
 

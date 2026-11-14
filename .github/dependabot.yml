@@ -12,7 +12,7 @@ updates:
         patterns: ["*"]
 
   - package-ecosystem: npm
-    directories: ["/web", "/site", "/crates/getman-desktop"]
+    directories: ["/web", "/site", "/crates/getman-desktop", "/crates/getman-mobile"]
     schedule:
       interval: weekly
     commit-message:

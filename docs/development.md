@@ -13,9 +13,9 @@ has the principles every change follows; read it before a large change.
 | Tool | Version | Set in |
 | --- | --- | --- |
 | Rust | 1.88 or newer for `getman` and `getman-core` | `rust-version` in the root `Cargo.toml` |
-| Rust | 1.90 or newer for the desktop app, which Tauri 2.12 needs | `rust-version` in `crates/getman-desktop/Cargo.toml` |
+| Rust | 1.90 or newer for the desktop and phone apps, which Tauri 2.12 needs | `rust-version` in `crates/getman-desktop/Cargo.toml` and `crates/getman-mobile/Cargo.toml` |
 | Rust components | `clippy` and `rustfmt` | `rust-toolchain.toml` |
-| Node.js | 22.12 or newer | `engines` in `web/package.json`, `site/package.json` and `crates/getman-desktop/package.json` |
+| Node.js | 22.12 or newer | `engines` in `web/package.json`, `site/package.json`, `crates/getman-desktop/package.json` and `crates/getman-mobile/package.json` |
 
 `rust-toolchain.toml` selects the `stable` channel with the `minimal`
 profile, so rustup builds the repository with the current stable
@@ -41,8 +41,9 @@ Node.js.
 
 You only need these libraries for the desktop app. The workspace's
 `default-members` are `crates/getman` and `crates/getman-core`, so plain
-`cargo build`, `cargo run` and `cargo test` leave the desktop app out.
-`--workspace` or `-p getman-desktop` includes it.
+`cargo build`, `cargo run` and `cargo test` leave the desktop and phone
+apps out. `--workspace`, `-p getman-desktop` or `-p getman-mobile`
+includes them.
 
 ## Building
 
@@ -131,6 +132,27 @@ cd crates/getman-desktop
 npm ci
 npx tauri build --config windows/command-line.json
 ```
+
+### The phone apps
+
+`crates/getman-mobile` builds the Android and iOS apps with the Tauri
+command line pinned in its `package.json`. Android needs the Android SDK
+with the NDK, Java 17 or newer and libclang. iOS needs macOS with Xcode
+and XcodeGen. Build the UI first:
+
+```sh
+cd crates/getman-mobile
+npm ci
+npm run tauri -- android build --debug --apk --target x86_64   # for the emulator
+npm run tauri -- ios init                                      # macOS, once
+npm run tauri -- ios build --debug --target aarch64-sim        # for the simulator
+```
+
+QuickJS's bindings are generated at build time for phones, which needs
+`BINDGEN_EXTRA_CLANG_ARGS_<target>` to name the target's system headers and, on Android, its API level. See
+[CONTRIBUTING.md](https://github.com/fzn0x/getman/blob/main/CONTRIBUTING.md#the-mobile-apps)
+for the variables, and for what the Android project in `gen/android`
+changes from Tauri's.
 
 ## Running locally
 
@@ -276,12 +298,18 @@ to `main`. A newer push to the same branch cancels the run before it.
 | Web UI | `npm ci`, `npm run check`, `npm test` and `npm run build` in `web/`, then keeps `web/dist` for the jobs below |
 | Format and lint | `cargo fmt --all --check` and `cargo clippy --workspace --all-targets --locked -- --deny warnings`, with WebKitGTK installed |
 | Test on ubuntu-latest, windows-latest, macos-latest | `cargo test --workspace --locked`, then a smoke run of `getman init`, `getman import --curl` and `getman export --to python` in a new workspace. On Linux and macOS it also runs `--version` through the desktop app's program |
-| Minimum supported Rust version | `cargo +1.88 check --workspace --exclude getman-desktop --all-targets --locked` |
+| Minimum supported Rust version | `cargo +1.88 check --workspace --exclude getman-desktop --exclude getman-mobile --all-targets --locked` |
 | Dependency advisories and licences | `cargo deny check --all-features`, with `EmbarkStudios/cargo-deny-action` |
 | npm licences | `node .github/scripts/check-npm-licenses.mjs` |
 | Build getman for the snippet checks | `cargo build --locked --package getman`, kept for the next two jobs |
 | MCP server with the Inspector | `node .github/scripts/verify-mcp.mjs` on that build |
 | Snippets in ... | `node .github/scripts/verify-snippets.mjs` once per language group: curl, Wget, HTTPie, PowerShell, JavaScript, Python, Go, Rust, Java, Kotlin, C#, Swift, PHP, Ruby and Dart |
+
+`.github/workflows/mobile.yml` runs when a pull request or a push to
+`main` changes the crates. It builds the Android app's release APK for
+ARM64, unsigned. It builds the iOS app for the simulator, starts it
+there, checks that its workspace was made, and keeps a screenshot as an
+artifact.
 
 `.github/workflows/pages.yml` builds the documentation site; see
 [How it is deployed](#how-it-is-deployed).

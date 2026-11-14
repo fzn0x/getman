@@ -32,3 +32,8 @@ Thumbs.db
 
 # Claude Code's local state, such as the worktrees its agents work in
 .claude/
+
+# Mobile apps: the Tauri command line, and the Xcode project, which the
+# iOS builds generate (see .github/workflows/mobile.yml)
+/crates/getman-mobile/node_modules/
+/crates/getman-mobile/gen/apple/

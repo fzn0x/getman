@@ -101,10 +101,10 @@ jobs:
         with:
           toolchain: "1.88"
       - uses: Swatinem/rust-cache@v2
-      # The desktop app is left out on purpose: it sets its own
-      # rust-version, the one Tauri needs (see its Cargo.toml), and is
-      # built with stable by the other jobs.
-      - run: cargo +1.88 check --workspace --exclude getman-desktop --all-targets --locked
+      # The desktop and mobile apps are left out on purpose: they set
+      # their own rust-version, the one Tauri needs (see their
+      # Cargo.toml), and are built with stable by the other jobs.
+      - run: cargo +1.88 check --workspace --exclude getman-desktop --exclude getman-mobile --all-targets --locked
 
   # Advisories, licences and sources of the Rust dependencies, by deny.toml.
   deny:
