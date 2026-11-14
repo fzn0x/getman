@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Writes the package manifests for one release: a Homebrew formula, a Scoop
-// manifest, winget manifests and a Flatpak manifest. Each is a template
+// Writes the package files for one release: a Homebrew formula, a Scoop
+// manifest, winget manifests and the Flatpak's metadata. Each is a template
 // beside this script (a file ending in .in) with the release's version,
 // download URLs and SHA-256 sums filled in from the files the release holds.
 //
@@ -11,6 +11,9 @@
 //   --dist <dir>    the folder with the release files, to hash
 //   --out <dir>     where to write the manifests (default: the --dist folder)
 //   --date <date>   the release date, YYYY-MM-DD (default: today, UTC)
+//   --only <dir>    write only the templates of this folder of packaging/,
+//                   such as flatpak; repeat it for more
+//   --except <dir>  leave out the templates of this folder; repeat it
 //
 // In a template:
 //
@@ -39,11 +42,13 @@ const { values: options } = parseArgs({
     dist: { type: "string" },
     out: { type: "string" },
     date: { type: "string" },
+    only: { type: "string", multiple: true, default: [] },
+    except: { type: "string", multiple: true, default: [] },
   },
 });
 
 if (!options.tag || !options.dist) {
-  console.error("usage: render.mjs --tag v0.2.0 --dist dist [--repo owner/name] [--out dir] [--date YYYY-MM-DD]");
+  console.error("usage: render.mjs --tag v0.2.0 --dist dist [--repo owner/name] [--out dir] [--date YYYY-MM-DD] [--only dir] [--except dir]");
   process.exit(2);
 }
 if (!/^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(options.tag)) {
@@ -96,8 +101,15 @@ function templates(dir) {
   });
 }
 
+/** Whether the --only and --except options let a template's folder through. */
+const wanted = (path) => {
+  const folder = basename(dirname(path));
+  if (options.only.length > 0 && !options.only.includes(folder)) return false;
+  return !options.except.includes(folder);
+};
+
 mkdirSync(out, { recursive: true });
-for (const [path, name] of templates(here)) {
+for (const [path, name] of templates(here).filter(([path]) => wanted(path))) {
   const text = render(readFileSync(path, "utf8"));
   writeFileSync(join(out, name), text);
   console.log(`wrote ${join(out, name)} from ${basename(dirname(path))}/${basename(path)}`);
