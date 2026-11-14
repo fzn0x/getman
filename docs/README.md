@@ -34,3 +34,8 @@ These pages are also published at <https://fzn0x.github.io/getman/>.
 - [Scripting API](scripting-api.md): every member a script can use
 - [Workspace file format](workspace-format.md): every file and key
 - [Security and privacy](security.md)
+
+**Contributing**
+
+- [Development](development.md): build, test and check Getman
+- [Architecture](architecture.md): the crates, the web UI and how a request flows

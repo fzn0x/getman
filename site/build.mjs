@@ -56,6 +56,7 @@ export const sections = [
     title: "Reference",
     pages: ["cli", "scripting-api", "workspace-format", "security"],
   },
+  { title: "Contributing", pages: ["development", "architecture"] },
 ];
 
 const theme = createCssVariablesTheme({
