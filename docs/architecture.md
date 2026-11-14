@@ -29,7 +29,7 @@ front end is a thin layer over it:
 | `crates/getman-mobile` | The Android and iOS apps, on Tauri 2 |
 | `web/` | The browser UI, built into the binary |
 | `docs/`, `site/` | These pages, and the site built from them |
-| `packaging/` | Templates for the Homebrew, Scoop, winget, Flatpak and AUR manifests |
+| `packaging/` | Templates for the Homebrew, Scoop, winget and AUR manifests, and the Flatpak manifest |
 
 The root `Cargo.toml` makes the crates one workspace. Its
 `default-members` leave the desktop and phone apps out, so the rest
@@ -367,6 +367,7 @@ Pushing a `v*` tag runs `.github/workflows/release.yml`:
 | `desktop` | The desktop app: NSIS and MSI installers and a portable zip for Windows x64 and ARM64, one universal `.dmg` for macOS, and an AppImage, `.deb` and `.rpm` for Linux x86_64 and ARM64 |
 | `android` | One APK for ARM64, ARMv7 and x86_64 Android devices, signed with the `ANDROID_KEYSTORE` secret |
 | `ios` | An unsigned `.ipa` for iPhone and iPad, which people sign with their own Apple ID when they sideload it |
+| `flatpak` | `Getman-linux-x86_64.flatpak` and `Getman-linux-aarch64.flatpak`, built from the Linux `.deb` files in Flathub's builder image |
 | `release` | The release notes from the version's section of `CHANGELOG.md`, `latest.json` for the updater, the package manifests from `packaging/render.mjs` and `SHA256SUMS`, then the GitHub release itself |
 | `publish-packages` | Commits the Homebrew formula to `fzn0x/homebrew-tap` and the Scoop manifest to `fzn0x/scoop-bucket` |
 | `publish-aur` | Pushes `PKGBUILD` and `.SRCINFO` for `getman-bin` to the AUR, when the `AUR_SSH_PRIVATE_KEY` secret is set and the release is not a pre-release |

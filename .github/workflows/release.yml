@@ -3,7 +3,8 @@ name: Release
 # Pushing a v* tag builds the browser UI once, builds getman with it for
 # every platform, bundles the desktop app for Windows, macOS and Linux,
 # builds the Android and iOS apps, and publishes the archives, installers
-# and apps with checksums.
+# and apps with checksums. The Flatpak bundles are built from the Linux
+# .deb files.
 #
 # The desktop files keep the same names in every release, so links to
 # https://github.com/fzn0x/getman/releases/latest/download/<name> never go
@@ -368,11 +369,52 @@ jobs:
           name: mobile-ios
           path: out/*
 
-  # The phone apps are newer than the rest: a release goes out without
-  # them when their builds fail, and says so.
+  # The Flatpak bundles, built in Flathub's builder image from the .deb the
+  # desktop job made for each architecture, on a runner of that
+  # architecture. A bundle asks Flathub for the GNOME runtime when it is
+  # installed, so it works with `flatpak install --user <file>`.
+  flatpak:
+    name: Flatpak bundle for ${{ matrix.arch }}
+    needs: desktop
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: desktop-${{ matrix.target }}
+          path: desktop
+      - id: bundle
+        uses: ./.github/actions/flatpak
+        with:
+          arch: ${{ matrix.arch }}
+          deb-dir: desktop
+          tag: ${{ github.ref_name }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: flatpak-${{ matrix.arch }}
+          path: ${{ steps.bundle.outputs.bundle }}
+          if-no-files-found: error
+
+  # The phone apps and the Flatpak bundles are newer than the rest: a
+  # release goes out without them when their builds fail, say on an outage
+  # of Flathub, and says so. Build a missing file again and attach it with
+  # gh release upload, and add it to SHA256SUMS.
   release:
     name: Publish the release
-    needs: [build, desktop, android, ios]
+    needs: [build, desktop, android, ios, flatpak]
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.desktop.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
@@ -392,6 +434,11 @@ jobs:
           pattern: mobile-*
           path: dist
           merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: flatpak-*
+          path: dist
+          merge-multiple: true
       - name: Note missing phone apps
         env:
           ANDROID: ${{ needs.android.result }}
@@ -399,6 +446,12 @@ jobs:
         run: |
           [ -f dist/Getman-android-universal.apk ] || echo "::warning::This release has no Android app (build: $ANDROID)."
           [ -f dist/Getman-ios.ipa ] || echo "::warning::This release has no iOS app (build: $IOS)."
+      - name: Say when a Flatpak bundle is missing
+        run: |
+          for arch in x86_64 aarch64; do
+            [ -f "dist/Getman-linux-$arch.flatpak" ] ||
+              echo "::warning::The $arch Flatpak bundle was not built, so this release lacks it."
+          done
       # The notes are the changelog's section for this version, with links
       # to the docs made absolute so they work on the release page and in
       # the desktop app's update dialog. Without a section, GitHub writes
@@ -457,14 +510,14 @@ jobs:
             --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson platforms "$platforms" \
             '{version: $version, notes: $notes, pub_date: $date, platforms: $platforms}' > dist/latest.json
       # Package manifests for this release, with its version, URLs and
-      # hashes: a Homebrew formula, a Scoop manifest, winget manifests and
-      # a Flatpak manifest. They are only release files for a maintainer to
-      # submit (see "Packages" in CONTRIBUTING.md); nothing publishes them.
-      # The AUR files are left out: publish-aur writes its own.
+      # hashes: a Homebrew formula, a Scoop manifest and winget manifests.
+      # The publish-packages job commits the first two; winget is by hand
+      # (see "Packages" in CONTRIBUTING.md). The AUR and Flatpak files are
+      # left out: publish-aur and the flatpak job write their own.
       # A failure here is a warning, so packaging never blocks a release.
       - name: Write the package manifests
         continue-on-error: true
-        run: node packaging/render.mjs --except aur --tag "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dist dist
+        run: node packaging/render.mjs --except aur --except flatpak --tag "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dist dist
       - name: Write checksums
         working-directory: dist
         run: sha256sum -- * > SHA256SUMS
