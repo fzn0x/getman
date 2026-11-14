@@ -4,7 +4,18 @@
 
 /** How this copy of the app was installed. */
 export type Install =
-  "development" | "nsis" | "msi" | "portable" | "app" | "appimage" | "deb" | "rpm" | "other";
+  | "development"
+  | "nsis"
+  | "msi"
+  | "portable"
+  | "app"
+  | "appimage"
+  | "deb"
+  | "rpm"
+  | "flatpak"
+  | "pacman"
+  | "nix"
+  | "other";
 
 /** Where an update stands. */
 export type UpdatePhase =
@@ -56,6 +67,9 @@ const INSTALLS: Record<Install, string> = {
   appimage: "AppImage",
   deb: "Installed from the .deb package",
   rpm: "Installed from the .rpm package",
+  flatpak: "Flatpak",
+  pacman: "Installed from the AUR",
+  nix: "Built with Nix",
   other: "Release build",
 };
 
