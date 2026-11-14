@@ -34,16 +34,16 @@ the font. The font is not modified or sold on its own.
 
 ## Icons
 
-The icons in the browser UI (`web/src/lib/icons.ts`) are **Material
-Symbols** (Rounded, weight 400), Copyright Google LLC, under the Apache
-License, Version 2.0: <https://www.apache.org/licenses/LICENSE-2.0>. The text
-of that licence is in [LICENSE-APACHE](LICENSE-APACHE). Their path data is
-copied into `icons.ts`, which names each symbol; they are not modified.
+The icons in the browser UI and on the website (`web/src/lib/icons.ts` and
+`site/src/icons.mjs`) are **Material Symbols** (Rounded, weight 400),
+Copyright Google LLC, under the Apache License, Version 2.0:
+<https://www.apache.org/licenses/LICENSE-2.0>. The text of that licence is in
+[LICENSE-APACHE](LICENSE-APACHE). Their path data is copied into those files,
+which name each symbol; they are not modified.
 
-The icons on the website (`site/src/icons.mjs`), the Getman logo, the favicon
-and the desktop app icons (`assets/`, `web/public/favicon.svg` and
-`crates/getman-desktop/icons/`) were made for Getman and are under Getman's
-licence.
+The Getman logo, the favicon and the desktop app icons (`assets/`,
+`web/public/favicon.svg` and `crates/getman-desktop/icons/`) were made for
+Getman and are under Getman's licence.
 
 The wordmark and tagline in `assets/logo.svg`, `assets/logo-light.svg` and
 `assets/logo-dark.svg` are set in Google Sans Flex (see Fonts above) and
