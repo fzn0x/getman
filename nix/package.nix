@@ -39,7 +39,7 @@ rustPlatform.buildRustPackage {
   doCheck = false;
 
   meta = {
-    description = "Local-first, account-free API client: a Postman alternative";
+    description = "Open-source Postman alternative written in Rust";
     homepage = "https://fzn0x.github.io/getman/";
     license = with lib.licenses; [
       mit

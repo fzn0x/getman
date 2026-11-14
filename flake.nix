@@ -1,5 +1,5 @@
 {
-  description = "Getman: a local-first, account-free API client";
+  description = "Getman, an open-source Postman alternative written in Rust";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 

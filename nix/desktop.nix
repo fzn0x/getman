@@ -47,7 +47,7 @@ rustPlatform.buildRustPackage {
   doCheck = false;
 
   meta = {
-    description = "Getman as a desktop app: a local-first, account-free API client";
+    description = "Getman's desktop app, an open-source Postman alternative";
     homepage = "https://fzn0x.github.io/getman/";
     license = with lib.licenses; [
       mit
