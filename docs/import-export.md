@@ -192,9 +192,11 @@ rewriting with `gm.*`.
   body.
 - Authentication: Basic, Digest, Bearer, API key in a header or the
   query, and OAuth 2.0 client credentials and password grants. An
-  OAuth 2.0 grant that needs a browser sends the token saved in the
-  export as a Bearer token, or `{{accessToken}}` when there is none,
-  and is reported. Switched-off authentication becomes none.
+  OAuth 2.0 grant that needs a browser sends `{{accessToken}}` as a
+  Bearer token and is reported. The token saved in the export is not
+  imported, so that it does not end up in a file you commit. Set
+  `accessToken`, or sign in again. Switched-off authentication becomes
+  none.
 - Environments take each variable's current value, or else its initial
   value. Secret variables stay secrets, and an environment without a
   name is called **Globals**.
@@ -423,8 +425,7 @@ with another variable, such as `{{host}}`, whose path is then taken as
 relative to the servers, and a workspace with no `baseUrl` at all,
 whose server is then `/`.
 
-Both formats describe HTTP requests, and the exporters do not tell
-WebSocket, event stream, Socket.IO and gRPC requests apart from HTTP
-ones. Such requests come out as HTTP requests; in OpenAPI a gRPC
-request is left out, since its method is not an HTTP one. Check them in
-the file you get, or export a folder without them.
+Both formats describe HTTP requests. gRPC, WebSocket, event stream and
+Socket.IO requests are left out of both, with a warning that names the
+request, such as `Chat: Postman collections cannot hold a WebSocket
+request; it was left out`.
