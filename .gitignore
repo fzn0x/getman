@@ -37,3 +37,6 @@ Thumbs.db
 # iOS builds generate (see .github/workflows/mobile.yml)
 /crates/getman-mobile/node_modules/
 /crates/getman-mobile/gen/apple/
+
+# Flatpak build inputs: the release .deb files and the rendered metadata
+/packaging/flatpak/dist/
