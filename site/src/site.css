@@ -66,6 +66,12 @@
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 
+  /* Quiet edges, as in the app: dividers at about half the outline-variant
+     role, and fields and buttons filled rather than outlined. */
+  --divider: color-mix(in srgb, var(--outline-variant) 55%, transparent);
+  --fill: var(--surface-container-high);
+  --fill-hover: var(--surface-container-highest);
+
   --gutter: clamp(16px, 4vw, 48px);
   --bar: 64px;
   --wide: 1200px;
@@ -201,7 +207,7 @@ kbd {
   display: inline-block;
   min-width: 20px;
   padding: 2px 5px;
-  border: 1px solid var(--outline-variant);
+  border: 1px solid var(--divider);
   border-bottom-width: 2px;
   border-radius: var(--r-xs);
   background: var(--surface-container-low);
@@ -219,8 +225,8 @@ kbd {
 
 /* ---- Buttons ------------------------------------------------------------------ */
 
-/* Outlined by default; .filled is the one main action, .text has no
-   outline. Hover and press are state layers of the label color. */
+/* Tonal by default (filled, no outline); .filled is the one main action,
+   .text has no fill. Hover and press are state layers of the label color. */
 .btn {
   --label: var(--primary);
   --layer: transparent;
@@ -230,9 +236,9 @@ kbd {
   gap: var(--s2);
   height: 40px;
   padding: 0 var(--s5);
-  border: 1px solid var(--outline-variant);
+  border: 1px solid transparent;
   border-radius: var(--r-full);
-  background: linear-gradient(var(--layer), var(--layer)) transparent;
+  background: linear-gradient(var(--layer), var(--layer)) var(--fill);
   color: var(--label);
   font-size: var(--fs-ui);
   font-weight: 500;
@@ -265,7 +271,7 @@ kbd {
 
 .btn.text {
   padding: 0 var(--s3);
-  border-color: transparent;
+  background-color: transparent;
 }
 
 .btn.small {
@@ -310,7 +316,7 @@ kbd {
   padding: 0 var(--gutter);
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--outline-variant);
+  border-bottom: 1px solid var(--divider);
 }
 
 .brand,
@@ -476,7 +482,7 @@ kbd {
   width: 100%;
 }
 
-/* The install command, in an outlined field like the app's request line. */
+/* The install command, in a filled field like the app's request line. */
 .command {
   display: flex;
   align-items: center;
@@ -485,9 +491,8 @@ kbd {
   min-width: 0;
   min-height: 48px;
   padding: 4px 4px 4px 6px;
-  border: 1px solid var(--outline);
   border-radius: var(--r-sm);
-  background: var(--surface-container-lowest);
+  background: var(--fill);
 }
 
 .command-label {
@@ -628,7 +633,7 @@ kbd {
 
 .orbit-mark .method {
   padding: 3px 8px;
-  border: 1px solid var(--outline-variant);
+  border: 1px solid var(--divider);
   border-radius: var(--r-sm);
   background: var(--surface-container-lowest);
 }
@@ -664,7 +669,7 @@ kbd {
 .shot img {
   display: block;
   width: 100%;
-  border: 1px solid var(--outline-variant);
+  border: 1px solid var(--divider);
   border-radius: var(--r-lg);
   box-shadow: var(--elevation-3);
 }
@@ -760,7 +765,7 @@ kbd {
   min-width: 0;
   min-height: 220px;
   padding: var(--s4);
-  border: 1px solid var(--outline-variant);
+  border: 1px solid var(--divider);
   border-radius: var(--r-lg);
   background: var(--surface-container-lowest);
   font-size: 13px;
@@ -916,29 +921,27 @@ kbd {
   font-weight: 600;
 }
 
+/* A filled track with the choice as a tonal pill, as in the app. */
 .segmented {
   display: flex;
+  gap: 2px;
   width: max-content;
   max-width: 100%;
-  border: 1px solid var(--outline);
+  padding: 2px;
   border-radius: var(--r-full);
-  overflow: hidden;
+  background: var(--fill);
 }
 
 .seg {
-  padding: 5px 12px;
-  border-right: 1px solid var(--outline);
-  color: var(--on-surface);
+  padding: 3px 12px;
+  border-radius: var(--r-full);
+  color: var(--on-surface-variant);
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
   transition:
     background-color 0.3s var(--ease),
     color 0.3s var(--ease);
-}
-
-.seg:last-child {
-  border-right: 0;
 }
 
 .seg.on {
@@ -976,14 +979,14 @@ kbd {
   min-width: 0;
   height: 40px;
   padding: 0 4px 0 10px;
-  border: 1px solid var(--outline);
   border-radius: var(--r-sm);
+  background: var(--fill);
 }
 
 .request-line .kind {
   flex: none;
   padding-right: var(--s2);
-  border-right: 1px solid var(--outline-variant);
+  border-right: 1px solid var(--divider);
   font-family: var(--font-code);
   font-size: 11px;
   font-weight: 700;
@@ -1302,7 +1305,7 @@ kbd {
   max-width: 100%;
   margin: var(--s5) 0;
   overflow-x: auto;
-  border: 1px solid var(--outline-variant);
+  border: 1px solid var(--divider);
   border-radius: var(--r-md);
 }
 
@@ -1316,7 +1319,7 @@ table {
 th,
 td {
   padding: 10px var(--s4);
-  border-bottom: 1px solid var(--outline-variant);
+  border-bottom: 1px solid var(--divider);
   text-align: left;
   vertical-align: top;
 }
@@ -1336,7 +1339,7 @@ thead th {
 
 figure.code {
   margin: var(--s5) 0;
-  border: 1px solid var(--outline-variant);
+  border: 1px solid var(--divider);
   border-radius: var(--r-md);
   background: var(--surface-container-low);
   overflow: hidden;
@@ -1349,7 +1352,7 @@ figure.code figcaption {
   gap: var(--s3);
   height: 36px;
   padding: 0 var(--s2) 0 var(--s4);
-  border-bottom: 1px solid var(--outline-variant);
+  border-bottom: 1px solid var(--divider);
   color: var(--on-surface-variant);
   font-size: 12px;
   font-weight: 500;
@@ -1491,7 +1494,7 @@ html:not(.js) .doc-actions {
   min-width: 0;
   margin: var(--s5) 0 var(--s7) var(--s4);
   padding: var(--s7);
-  border: 1px solid var(--outline-variant);
+  border: 1px solid var(--divider);
   border-radius: var(--r-lg);
   background: var(--card);
   box-shadow: var(--elevation-1);
@@ -1523,7 +1526,7 @@ html:not(.js) .doc-actions {
 .toc a {
   display: block;
   padding: 4px 0 4px var(--s3);
-  border-left: 2px solid var(--outline-variant);
+  border-left: 2px solid var(--divider);
   color: var(--on-surface-variant);
   font-size: var(--fs-meta);
   line-height: 1.4;
@@ -1648,7 +1651,7 @@ h3:hover .anchor {
   display: grid;
   gap: 2px;
   padding: var(--s4) var(--s5);
-  border: 1px solid var(--outline-variant);
+  border: 1px solid var(--divider);
   border-radius: var(--r-lg);
   color: var(--on-surface);
   text-decoration: none;
@@ -1685,7 +1688,7 @@ h3:hover .anchor {
 /* ---- Footer ------------------------------------------------------------------------ */
 
 .foot {
-  border-top: 1px solid var(--outline-variant);
+  border-top: 1px solid var(--divider);
   background: var(--surface-container-low);
 }
 
@@ -1756,7 +1759,7 @@ h3:hover .anchor {
   gap: var(--s3);
   height: 56px;
   padding: 0 var(--s5);
-  border-bottom: 1px solid var(--outline-variant);
+  border-bottom: 1px solid var(--divider);
   color: var(--on-surface-variant);
 }
 
@@ -1819,7 +1822,7 @@ h3:hover .anchor {
   gap: var(--s5);
   margin: 0;
   padding: var(--s3) var(--s5);
-  border-top: 1px solid var(--outline-variant);
+  border-top: 1px solid var(--divider);
   color: var(--on-surface-variant);
   font-size: var(--fs-meta);
 }
@@ -1939,7 +1942,7 @@ h3:hover .anchor {
     z-index: 5;
     max-height: none;
     padding: 0 var(--gutter);
-    border-bottom: 1px solid var(--outline-variant);
+    border-bottom: 1px solid var(--divider);
     background: var(--page);
   }
 
