@@ -176,8 +176,8 @@ the crates, and keeps a screenshot of the app in the iOS simulator.
 ## Releases
 
 Pushing a `v*` tag runs `.github/workflows/release.yml`, which publishes
-the command-line archives, the desktop installers, the phone apps and
-`SHA256SUMS`. It reads these repository secrets:
+the command-line archives, the desktop installers, the phone apps, the
+Flatpak bundles and `SHA256SUMS`. It reads these repository secrets:
 
 | Secret | |
 | --- | --- |
@@ -204,16 +204,15 @@ the repository: a lost key means users must reinstall to get updates.
 
 Each release also carries manifests for package managers, written from
 the release's own files by `packaging/render.mjs`: `getman.rb` (Homebrew),
-`getman.json` (Scoop), `fzn0x.Getman*.yaml` (winget) and
-`io.github.fzn0x.getman.yml` (Flatpak, for the desktop app). They hold
-the version, the download URLs and the SHA-256 sums.
+`getman.json` (Scoop) and `fzn0x.Getman*.yaml` (winget). They hold the
+version, the download URLs and the SHA-256 sums.
 
 | Package manager | How a release gets there |
 | --- | --- |
 | Homebrew: `brew install fzn0x/tap/getman` | The `publish-packages` job in `release.yml` commits `Formula/getman.rb` to [fzn0x/homebrew-tap](https://github.com/fzn0x/homebrew-tap) |
 | Scoop: `scoop install fzn0x/getman`, after `scoop bucket add fzn0x https://github.com/fzn0x/scoop-bucket` | The same job commits `bucket/getman.json` to [fzn0x/scoop-bucket](https://github.com/fzn0x/scoop-bucket) |
 | winget | By hand: a pull request from a fork of `microsoft/winget-pkgs` adding the three files under `manifests/f/fzn0x/Getman/<version>/`; the first one is reviewed by hand |
-| Flatpak | Not published; the manifest repackages the `.deb` and is only a release file |
+| Flatpak: `flatpak install --user Getman-linux-x86_64.flatpak` | The `flatpak` job in `release.yml` builds `Getman-linux-x86_64.flatpak` and `Getman-linux-aarch64.flatpak` and the release carries them; see below |
 | AUR: `yay -S getman-bin` | The `publish-aur` job in `release.yml` pushes `PKGBUILD` and `.SRCINFO` to `ssh://aur@aur.archlinux.org/getman-bin.git`; see below |
 
 The job pushes with the repository secret `PACKAGES_TOKEN`, a
@@ -241,11 +240,43 @@ wiki's, and pushes with `StrictHostKeyChecking=yes`. The AUR makes the
 package at the first push. The package is one program: `/usr/bin/getman`
 is the app and the command line, as in the `.deb`.
 
+### Flatpak bundles
+
+Each release carries `Getman-linux-x86_64.flatpak` and
+`Getman-linux-aarch64.flatpak`, in `SHA256SUMS` too. The `flatpak` job
+builds each on a runner of its architecture, in Flathub's builder image
+with the GNOME runtime, from the `.deb` the `desktop` job made. A bundle
+names Flathub as its runtime repository, so installing it fetches the
+runtime from there. The bundles are Getman's own release files and are not
+published to any Flatpak remote. The job needs no secret.
+
+`packaging/flatpak/io.github.fzn0x.getman.yml` is the manifest. It reads
+the `.deb` from `packaging/flatpak/dist/`, so you can build the bundle
+yourself:
+
+```sh
+mkdir -p packaging/flatpak/dist
+gh release download v0.3.4 -p 'getman-desktop_*.deb' -D packaging/flatpak/dist
+node packaging/render.mjs --only flatpak --tag v0.3.4 \
+  --dist packaging/flatpak/dist --out packaging/flatpak/dist
+flatpak-builder --user --install --force-clean build-dir packaging/flatpak/io.github.fzn0x.getman.yml
+```
+
+`packaging/flatpak/check.sh` installs a built bundle and runs it, as the
+job does. GNOME runtimes are supported for about a year. To move to a new
+one, change `runtime-version` in the manifest and the `gnome-<version>`
+image in `release.yml` and `flatpak.yml` together. The workflow
+`flatpak.yml` builds the bundles from the newest release's `.deb` files
+for pull requests that touch `packaging/flatpak` or the job, so a broken
+manifest shows before release day. If the `flatpak` job fails on release
+day, the release goes out without the bundle and says so in a warning;
+build it again and attach it with `gh release upload`.
+
 Try a changed template by hand before a release:
 `brew install --formula ./getman.rb`, `scoop install ./getman.json`,
-`winget validate` on the folder of winget files, `makepkg` in an Arch
-container on the AUR files, and `flatpak-builder`
-on the Flatpak one. To render them from a release you have downloaded:
+`winget validate` on the folder of winget files, and `makepkg` in an
+Arch container on the AUR files. To render them from a release you have
+downloaded:
 
 ```sh
 node packaging/render.mjs --tag v0.2.0 --dist downloads --out manifests
