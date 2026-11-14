@@ -22,8 +22,10 @@ scripts:
 
 Folders and the workspace can have scripts too. They run around every
 request inside, outermost first: the workspace's, each folder's, then the
-request's. All scripts of one request share one engine, so a workspace
-script can define helpers on `globalThis` for the others.
+request's. A request's pre-request scripts share one engine, and its
+post-response scripts share another. So a workspace script can define
+helpers on `globalThis` for the other scripts of the same kind, but not
+for the other kind; pass values between the two with variables.
 
 **Coming from Postman?** `pm` is the same object as `gm`, and the older
 `tests["name"] = ...`, `responseBody`, `responseCode` and
@@ -286,8 +288,9 @@ gm.request.headers.upsert({ key: "X-Signature", value: sign(gm.request.body.raw,
 - Only files inside the workspace load. A path that leaves it with `..`,
   or reaches it through a link, is refused. So are files that are not
   `.js`, and files over 256 KiB.
-- A module runs once per script run, however many scripts require it,
-  and every script of the request gets the same exports. Modules that
+- A module runs once per engine, however many scripts require it, and
+  the pre-request scripts of a request get the same exports, as do its
+  post-response scripts. Modules that
   require each other get what the other has exported so far, as in
   Node.js. The `process`, `fs` and `Buffer` globals of Node.js do not
   exist.
