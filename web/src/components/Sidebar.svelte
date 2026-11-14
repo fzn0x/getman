@@ -343,6 +343,10 @@
     border-bottom: 0;
   }
 
+  .switch .tab {
+    padding: 0 8px;
+  }
+
   .tools {
     display: flex;
     gap: 2px;
