@@ -1,5 +1,5 @@
 pkgbase = getman-bin
-	pkgdesc = Local-first, account-free API client: a Postman alternative
+	pkgdesc = Open-source Postman alternative written in Rust
 	pkgver = {{version}}
 	pkgrel = 1
 	url = https://fzn0x.github.io/getman/
