@@ -932,12 +932,12 @@ pub fn slugify(name: &str) -> String {
 pub(crate) fn read_yaml<T: DeserializeOwned>(path: &Path) -> Result<T> {
     let text = fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
     if text.trim().is_empty() {
-        return serde_yaml_ng::from_str("{}").map_err(|source| Error::Yaml {
+        return crate::yaml::from_str("{}").map_err(|source| Error::Yaml {
             path: path.to_owned(),
             source,
         });
     }
-    serde_yaml_ng::from_str(&text).map_err(|source| Error::Yaml {
+    crate::yaml::from_str(&text).map_err(|source| Error::Yaml {
         path: path.to_owned(),
         source,
     })
@@ -961,16 +961,7 @@ pub(crate) fn write_yaml<T: Serialize + ?Sized>(path: &Path, value: &T) -> Resul
 /// `method`. Other YAML files are not requests and give `None`.
 fn peek_request(path: &Path) -> Result<Option<Request>, String> {
     let text = fs::read_to_string(path).map_err(|e| e.to_string())?;
-    let value: serde_yaml_ng::Value = serde_yaml_ng::from_str(&text).map_err(|e| e.to_string())?;
-    let is_request = value
-        .as_mapping()
-        .is_some_and(|map| map.contains_key("url") || map.contains_key("method"));
-    if !is_request {
-        return Ok(None);
-    }
-    serde_yaml_ng::from_value(value)
-        .map(Some)
-        .map_err(|e| e.to_string())
+    crate::yaml::from_str_with_key(&text, &["url", "method"]).map_err(|e| e.to_string())
 }
 
 fn request_stem(file_name: &str) -> Option<&str> {

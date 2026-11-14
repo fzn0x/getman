@@ -3,6 +3,11 @@
 //! People write `port: 3000` or `debug: true` in YAML, which parse as a
 //! number and a boolean. Variables and values are text, so these read every
 //! scalar as the text it was written as, and a missing value as empty.
+//!
+//! They ask for the text with a newtype named [`TEXT`]. The YAML reader in
+//! [`crate::yaml`] answers with the scalar as written, so `1.0` stays `1.0`
+//! and `0x10` stays `0x10`. Other formats, such as JSON over the local API,
+//! pass the value through, and a number or a boolean becomes its text.
 
 use std::fmt;
 
@@ -10,6 +15,9 @@ use serde::Deserializer;
 use serde::de::{self, MapAccess, Visitor};
 
 use crate::model::Vars;
+
+/// The newtype name a field reads through to ask for text.
+pub(crate) const TEXT: &str = "$getman::lenient::Text";
 
 struct ScalarVisitor;
 
@@ -55,11 +63,18 @@ impl<'de> Visitor<'de> for ScalarVisitor {
     fn visit_some<D: Deserializer<'de>>(self, deserializer: D) -> Result<String, D::Error> {
         deserializer.deserialize_any(self)
     }
+
+    fn visit_newtype_struct<D: Deserializer<'de>>(
+        self,
+        deserializer: D,
+    ) -> Result<String, D::Error> {
+        deserializer.deserialize_any(self)
+    }
 }
 
 /// Reads any scalar as a string.
 pub(crate) fn string<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
-    deserializer.deserialize_any(ScalarVisitor)
+    deserializer.deserialize_newtype_struct(TEXT, ScalarVisitor)
 }
 
 struct Scalar(String);
@@ -94,9 +109,13 @@ impl<'de> Visitor<'de> for VarsVisitor {
     fn visit_none<E: de::Error>(self) -> Result<Vars, E> {
         Ok(Vars::new())
     }
+
+    fn visit_newtype_struct<D: Deserializer<'de>>(self, deserializer: D) -> Result<Vars, D::Error> {
+        deserializer.deserialize_any(self)
+    }
 }
 
 /// Reads a map whose keys and values may be any scalar.
 pub(crate) fn vars<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vars, D::Error> {
-    deserializer.deserialize_any(VarsVisitor)
+    deserializer.deserialize_newtype_struct(TEXT, VarsVisitor)
 }
