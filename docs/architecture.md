@@ -311,7 +311,8 @@ for the workspace's `.js` files, and timers.
 A script may use 256 MiB of memory and a 1 MiB stack. An interrupt
 handler stops it after its timeout, 10 seconds unless
 `--script-timeout` says otherwise. `gm.sendRequest` goes through the
-same HTTP client as the request. See [Scripts](scripts.md) and the
+same HTTP client as the request, and the time it waits counts toward
+the timeout. See [Scripts](scripts.md) and the
 [Scripting API](scripting-api.md).
 
 ### Import and export
