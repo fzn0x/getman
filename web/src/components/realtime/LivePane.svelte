@@ -648,14 +648,14 @@
   }
 
   .row.current {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
   }
 
   .row.current .time,
   .row.current .size,
   .row.current .dir {
-    color: var(--paper);
+    color: inherit;
   }
 
   .dir {
@@ -679,10 +679,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--var-ink);
-  }
-
-  .row.current .tag {
-    color: var(--paper);
   }
 
   .text {

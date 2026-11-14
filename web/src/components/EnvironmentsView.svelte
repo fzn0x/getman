@@ -407,8 +407,8 @@
   }
 
   .list li button.selected {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
   }
 
   .name {
@@ -419,10 +419,6 @@
 
   .active {
     color: var(--ok);
-  }
-
-  .selected .active {
-    color: var(--paper);
   }
 
   .editor {

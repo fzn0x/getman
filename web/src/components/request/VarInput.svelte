@@ -371,7 +371,7 @@
     list-style: none;
     border: 1px solid var(--rule);
     background: var(--field);
-    box-shadow: 0 6px 18px -6px color-mix(in srgb, var(--t10) 35%, transparent);
+    box-shadow: var(--elevation-2);
     font-family: var(--font-code);
     font-size: var(--fs-code);
   }
@@ -386,8 +386,8 @@
 
   .complete li.on,
   .complete li:hover {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
   }
 
   .detail {
@@ -413,7 +413,7 @@
     padding: var(--s2);
     border: 1px solid var(--rule);
     background: var(--field);
-    box-shadow: 0 6px 18px -6px color-mix(in srgb, var(--t10) 35%, transparent);
+    box-shadow: var(--elevation-2);
   }
 
   .head {

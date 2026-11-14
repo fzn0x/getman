@@ -265,7 +265,9 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0;
-    border: 1px solid var(--rule);
+    border: 1px solid var(--outline);
+    border-radius: var(--r-full);
+    overflow: hidden;
     width: max-content;
     max-width: 100%;
   }
@@ -273,10 +275,11 @@
   .type {
     display: grid;
     place-items: center;
-    height: 26px;
-    padding: 0 10px;
-    border-right: 1px solid var(--rule-2);
-    color: var(--ink-2);
+    height: 28px;
+    padding: 0 12px;
+    border-right: 1px solid var(--outline);
+    color: var(--on-surface);
+    font-weight: 500;
     cursor: pointer;
   }
 
@@ -290,12 +293,12 @@
   }
 
   .type.on {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
   }
 
   .type:has(input:focus-visible) {
-    outline: 2px dotted var(--ink);
+    outline: 2px solid var(--primary);
     outline-offset: 2px;
   }
 

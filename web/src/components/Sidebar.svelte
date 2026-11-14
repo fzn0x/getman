@@ -354,8 +354,8 @@
   }
 
   .tools .on {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
   }
 
   .body {
@@ -390,8 +390,8 @@
   }
 
   .results button.current {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
   }
 
   .results .method {

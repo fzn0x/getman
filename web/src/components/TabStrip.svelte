@@ -371,8 +371,8 @@
   }
 
   .close:hover {
-    background: var(--ink);
-    color: var(--paper);
+    background: color-mix(in srgb, var(--on-surface) var(--hover), transparent);
+    color: var(--on-surface);
   }
 
   .add {
