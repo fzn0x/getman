@@ -12,6 +12,7 @@ both, at any time.
 | Getman in a window of its own, plus the `getman` command | The [desktop app](#desktop-app) |
 | Only the `getman` command, which opens the UI in your browser | The [command line](#command-line) |
 | Getman on a server, in CI or in a container | The command line, with the [install script](#install-script-for-linux-and-macos) |
+| Getman on a phone or tablet | The [Android](#android) or [iOS](#ios) app |
 
 [Getting started](getting-started.md) has the short version of this page.
 Every release, with its notes and files, is on the
@@ -129,6 +130,115 @@ named `getman`.
 For ARM64, take the files with `aarch64` or `arm64` in their names. The
 desktop files are built on Ubuntu 22.04, so they run on distributions with
 the same glibc or a newer one.
+
+The packages below start with the release after 0.3.4. Releases up to
+0.3.4 have none of them.
+
+<!-- PLACEHOLDER: the commands and file names of Flatpak, AUR, Nix and the
+Homebrew cask are provisional. Confirm each against the release that ships
+them. -->
+
+### Flatpak
+
+Download `Getman-linux-x86_64.flatpak` or `Getman-linux-aarch64.flatpak`
+from the [releases page](https://github.com/fzn0x/getman/releases) and
+install it for your user:
+
+```sh
+flatpak install --user Getman-linux-x86_64.flatpak
+flatpak run io.github.fzn0x.getman
+```
+
+The application ID `io.github.fzn0x.getman` is the one in the Flatpak
+manifest in `packaging/flatpak/`.
+
+### AUR
+
+On Arch Linux and its relatives, install the binary package from the AUR
+with an AUR helper such as `yay`:
+
+```sh
+yay -S getman-bin
+```
+
+The package `getman-bin` installs the release's desktop app, not a build
+from source.
+
+### Nix
+
+Run Getman straight from the repository's flake, without installing it:
+
+```sh
+nix run github:fzn0x/getman
+```
+
+### Homebrew cask
+
+On macOS, install the desktop app with Homebrew:
+
+```sh
+brew install --cask fzn0x/tap/getman-desktop
+```
+
+The cask `getman-desktop` lives in the same tap as the formula
+`getman`, which installs the command line only.
+
+## Mobile apps
+
+The Android and iOS apps start with the release after 0.3.4. They open
+the same workspaces as the desktop app.
+
+<!-- PLACEHOLDER: the file names, steps and paths of the mobile apps are
+provisional. The details of what runs on a phone and where workspaces
+live are still to come. -->
+
+### Android
+
+Download `Getman-android-universal.apk` from the
+[releases page](https://github.com/fzn0x/getman/releases) on the phone,
+or on a computer, and open it. It is one signed APK for every device.
+
+1. Open the APK. When Android asks, allow installs from the app you
+   opened it with, such as your browser or file manager.
+2. Tap **Install**.
+
+From a computer, with USB debugging on:
+
+```sh
+adb install Getman-android-universal.apk
+```
+
+**Updating.** TODO: how the app updates. Until then, install the newer
+APK over the old one.
+
+**Uninstalling.** Touch and hold the app, then choose **Uninstall**, or
+use **Settings › Apps**.
+
+**Where workspaces live.** TODO: the folder or storage the Android app
+keeps its workspaces in.
+
+### iOS
+
+Download `Getman-ios.ipa` from the
+[releases page](https://github.com/fzn0x/getman/releases). It is not
+signed, and there is no App Store version. You install it by
+sideloading: AltStore, SideStore or Sideloadly sign it with your Apple ID
+and put it on the device.
+
+1. Install AltStore, SideStore or Sideloadly by its own instructions.
+2. Open `Getman-ios.ipa` with it and sign in with your Apple ID.
+3. On the device, trust the developer profile if iOS asks.
+
+A free Apple ID signs an app for 7 days. Refresh the app from the same
+tool before the week ends, or it stops opening until you do.
+
+**Updating.** Sideload the newer `Getman-ios.ipa` over the old app. TODO:
+confirm that it keeps the data.
+
+**Uninstalling.** Touch and hold the app, then choose **Remove App**.
+
+**Where workspaces live.** TODO: the folder the iOS app keeps its
+workspaces in, and how to reach it from the Files app.
 
 ## Command line
 
@@ -357,6 +467,12 @@ nothing of them to install by hand.
 | AppImage | The app updates itself. Or replace the file with the newer one |
 | .deb | `sudo apt install ./getman-desktop_amd64.deb` with the newer file |
 | .rpm | `sudo dnf install ./getman-desktop.x86_64.rpm` with the newer file |
+| Flatpak | `flatpak install --user` with the newer file, from the release after 0.3.4 |
+| AUR | `yay -Syu getman-bin`, from the release after 0.3.4 |
+| Nix | Run `nix run github:fzn0x/getman` again to run the flake's current version |
+| Homebrew cask | `brew upgrade --cask getman-desktop`, from the release after 0.3.4 |
+| Android | Install the newer APK over the old one. TODO: in-app updates |
+| iOS | Sideload the newer IPA, and refresh the app every 7 days with a free Apple ID |
 | Portable zip | Download the new zip and unpack it in place of the old one |
 | Install script | Run the script again |
 | Homebrew | `brew upgrade getman` |
@@ -383,6 +499,12 @@ The command line never updates itself and never looks for new versions.
 | AppImage | Delete the file |
 | .deb | `sudo apt remove getman` |
 | .rpm | `sudo dnf remove getman` |
+| Flatpak | `flatpak uninstall io.github.fzn0x.getman` |
+| AUR | `yay -R getman-bin` |
+| Nix | Nothing is installed. `nix store gc` frees the downloaded files |
+| Homebrew cask | `brew uninstall --cask getman-desktop` |
+| Android | Touch and hold the app, then **Uninstall** |
+| iOS | Touch and hold the app, then **Remove App** |
 | Install script, Linux and macOS | `rm ~/.local/bin/getman`, and remove the `PATH` line if you added one |
 | Install script, Windows | Delete `%LOCALAPPDATA%\Programs\getman`, then remove it from **Path** in **Edit environment variables for your account** |
 | Homebrew | `brew uninstall getman`, then `brew untap fzn0x/tap` if you use nothing else from it |
