@@ -29,7 +29,14 @@ const repo = "https://github.com/fzn0x/getman";
 export const sections = [
   {
     title: "Start",
-    pages: ["getting-started", "desktop", "why-getman", "compare"],
+    pages: [
+      "getting-started",
+      "installation",
+      "desktop",
+      "why-getman",
+      "compare",
+      "troubleshooting",
+    ],
   },
   {
     title: "Guides",

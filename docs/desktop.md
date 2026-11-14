@@ -21,6 +21,8 @@ Every release has these downloads, under the same names each time:
 The release's `SHA256SUMS` lists the checksum of each file. The app is
 not signed with a paid certificate, so Windows and macOS warn the first
 time you open it; the steps below get past that once.
+[Installation](installation.md) also covers checking a download against
+`SHA256SUMS`, quiet installs and removing the app.
 
 ### Windows
 

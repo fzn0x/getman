@@ -2,7 +2,9 @@
 
 ## Install
 
-Getman is one program with no runtime to install. Pick one:
+Getman is one program with no runtime to install. Pick one, or see
+[Installation](installation.md) for every way to install, update and
+remove it:
 
 **With the install script** (Linux and macOS):
 
