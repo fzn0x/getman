@@ -13,6 +13,29 @@ use x509_parser::extensions::GeneralName;
 
 use crate::error::{Error, Result};
 
+#[cfg(any(target_os = "android", test))]
+mod extra_roots;
+
+/// The system's certificate verifier, trusting the authorities in `roots`
+/// as well.
+pub(crate) fn verifier_with_extra_roots(
+    roots: Vec<CertificateDer<'static>>,
+    provider: std::sync::Arc<rustls::crypto::CryptoProvider>,
+) -> std::result::Result<
+    std::sync::Arc<dyn rustls::client::danger::ServerCertVerifier>,
+    rustls::Error,
+> {
+    #[cfg(not(target_os = "android"))]
+    let verifier = rustls_platform_verifier::Verifier::new_with_extra_roots(roots, provider)?;
+    #[cfg(target_os = "android")]
+    let verifier = extra_roots::ExtraRoots::new(
+        rustls_platform_verifier::Verifier::new(std::sync::Arc::clone(&provider))?,
+        roots,
+        provider,
+    )?;
+    Ok(std::sync::Arc::new(verifier))
+}
+
 /// A client certificate with its private key, as PEM, ready to present to
 /// servers that ask for one.
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -276,13 +299,12 @@ pub(crate) fn client_config(
                 })?);
             }
         }
-        let verifier = rustls_platform_verifier::Verifier::new_with_extra_roots(roots, provider)
-            .map_err(|e| {
-                Error::Invalid(format!("Could not load the system's certificates: {e}"))
-            })?;
+        let verifier = verifier_with_extra_roots(roots, provider).map_err(|e| {
+            Error::Invalid(format!("Could not load the system's certificates: {e}"))
+        })?;
         builder
             .dangerous()
-            .with_custom_certificate_verifier(std::sync::Arc::new(verifier))
+            .with_custom_certificate_verifier(verifier)
     };
     let mut config = if let Some(identity) = identity {
         let chain: Vec<CertificateDer<'static>> = CertificateDer::pem_slice_iter(identity.pem())

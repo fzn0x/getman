@@ -534,6 +534,29 @@ impl HttpClient {
                 builder.proxy(proxy)
             }
         };
+        // reqwest cannot add authorities to Android's certificate verifier,
+        // so there it gets the whole TLS setup from `tls::client_config`,
+        // which checks them beside the system's. reqwest then sets no ALPN
+        // of its own.
+        #[cfg(target_os = "android")]
+        if !key.ca_certs.is_empty() {
+            let alpn: &[&[u8]] = match key.http_version {
+                HttpVersion::Http1 => &[b"http/1.1"],
+                HttpVersion::Http2 => &[b"h2"],
+                HttpVersion::Auto | HttpVersion::Http3 => &[b"h2", b"http/1.1"],
+            };
+            let tls = crate::tls::client_config(
+                key.verify_tls,
+                &key.ca_certs,
+                key.client_identity.as_ref(),
+                alpn,
+            )?;
+            return builder
+                .tls_backend_preconfigured(tls)
+                .build()
+                .map(Session::Tcp)
+                .map_err(|e| Error::Http(describe(&e)));
+        }
         if let Some(identity) = &key.client_identity {
             let identity = reqwest::Identity::from_pem(identity.pem())
                 .map_err(|e| Error::Invalid(describe(&e)))?;
