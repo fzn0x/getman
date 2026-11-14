@@ -213,7 +213,7 @@ const features = [
   },
 ];
 
-// Measured on Windows 11 x64 with the 0.3.0 release files (README, "Fast").
+// Measured on Windows 11 x64 with the 0.3.0 release files (README, "Performance").
 const facts = [
   { value: 7, unit: "ms", label: "to start the command" },
   { value: 9.5, unit: "MiB", label: "download, browser UI included" },
