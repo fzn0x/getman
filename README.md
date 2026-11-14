@@ -1,22 +1,39 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/getman-dark.png">
-    <img src="docs/images/getman-light.png" width="900" alt="Getman showing a request's four checks beside its response: 200 OK in green, with the time, size and 4 of 4 tests passed">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/logo-light.svg">
+    <img src="assets/logo.svg" width="480" alt="Getman, the blazing fast Postman alternative in Rust: local-first API client. No account, no cloud.">
   </picture>
 </p>
 
-# Getman: blazing fast Postman alternative in Rust
+<p align="center">
+  The blazing fast, open-source Postman alternative, written in Rust.<br>
+  Send, test and run your API requests from plain YAML files in your repository.
+</p>
 
-[![CI](https://github.com/fzn0x/getman/actions/workflows/ci.yml/badge.svg)](https://github.com/fzn0x/getman/actions/workflows/ci.yml)
-[![Docs](https://github.com/fzn0x/getman/actions/workflows/pages.yml/badge.svg)](https://fzn0x.github.io/getman/)
-[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
+<p align="center">
+  <a href="https://github.com/fzn0x/getman/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/fzn0x/getman/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/fzn0x/getman/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/fzn0x/getman?color=3f51b5"></a>
+  <a href="#license"><img alt="MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-3f51b5.svg"></a>
+  <a href="https://fzn0x.github.io/getman/"><img alt="Documentation" src="https://img.shields.io/badge/docs-fzn0x.github.io%2Fgetman-3f51b5.svg"></a>
+</p>
+
+---
+
+<p align="center">
+  <a href="https://fzn0x.github.io/getman/">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/images/getman-dark.png">
+      <img src="docs/images/getman-light.png" width="100%" alt="Getman showing a request's four checks beside its response: 200 OK in green, with the time, size and 4 of 4 tests passed">
+    </picture>
+  </a>
+</p>
 
 Getman is a local-first, offline-first, open-source API client. It
 speaks **HTTP/1.1, HTTP/2 and HTTP/3, gRPC, WebSocket, Server-Sent Events
 and Socket.IO**, and it is **Postman compatible**: it opens Postman
 collections and runs `pm` scripts. Use it as a **desktop app**, in your
-**browser**, in the **terminal**, or from the **CLI in CI**. Your requests
-are plain YAML files in your repository.
+**browser**, in the **terminal**, or from the **CLI in CI**.
 
 **No account. No cloud. No telemetry.**
 

@@ -1,17 +1,35 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/getman-dark.png">
-    <img src="docs/images/getman-light.png" width="900" alt="Getman menampilkan empat check sebuah request di samping response-nya: 200 OK berwarna hijau, dengan waktu, ukuran, dan 4 dari 4 tes lulus">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/logo-light.svg">
+    <img src="assets/logo.svg" width="480" alt="Getman, alternatif Postman yang sangat cepat, ditulis dengan Rust: API client local-first. Tanpa akun, tanpa cloud.">
   </picture>
 </p>
 
-# Getman: alternatif Postman yang sangat cepat, ditulis dengan Rust
+<p align="center">
+  Alternatif Postman yang sangat cepat dan open source, ditulis dengan Rust.<br>
+  Kirim, uji, dan jalankan request API kamu dari file YAML biasa di repository kamu.
+</p>
 
-[![CI](https://github.com/fzn0x/getman/actions/workflows/ci.yml/badge.svg)](https://github.com/fzn0x/getman/actions/workflows/ci.yml)
-[![Docs](https://github.com/fzn0x/getman/actions/workflows/pages.yml/badge.svg)](https://fzn0x.github.io/getman/)
-[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#lisensi)
+<p align="center">
+  <a href="https://github.com/fzn0x/getman/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/fzn0x/getman/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/fzn0x/getman/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/fzn0x/getman?color=3f51b5"></a>
+  <a href="#lisensi"><img alt="MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-3f51b5.svg"></a>
+  <a href="https://fzn0x.github.io/getman/"><img alt="Documentation" src="https://img.shields.io/badge/docs-fzn0x.github.io%2Fgetman-3f51b5.svg"></a>
+</p>
 
-Getman adalah API client yang local-first, offline-first, dan open source. Getman mendukung **HTTP/1.1, HTTP/2 dan HTTP/3, gRPC, WebSocket, Server-Sent Events dan Socket.IO**, dan **kompatibel dengan Postman**: Getman bisa membuka Postman collection dan menjalankan script `pm`. Pakai Getman sebagai **aplikasi desktop**, di **browser**, di **terminal**, atau dari **CLI di CI**. Request kamu adalah file YAML biasa di dalam repository kamu.
+---
+
+<p align="center">
+  <a href="https://fzn0x.github.io/getman/">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/images/getman-dark.png">
+      <img src="docs/images/getman-light.png" width="100%" alt="Getman menampilkan empat check sebuah request di samping response-nya: 200 OK berwarna hijau, dengan waktu, ukuran, dan 4 dari 4 tes lulus">
+    </picture>
+  </a>
+</p>
+
+Getman adalah API client yang local-first, offline-first, dan open source. Getman mendukung **HTTP/1.1, HTTP/2 dan HTTP/3, gRPC, WebSocket, Server-Sent Events dan Socket.IO**, dan **kompatibel dengan Postman**: Getman bisa membuka Postman collection dan menjalankan script `pm`. Pakai Getman sebagai **aplikasi desktop**, di **browser**, di **terminal**, atau dari **CLI di CI**.
 
 **Tanpa akun. Tanpa cloud. Tanpa telemetry.**
 
