@@ -131,26 +131,31 @@ For ARM64, take the files with `aarch64` or `arm64` in their names. The
 desktop files are built on Ubuntu 22.04, so they run on distributions with
 the same glibc or a newer one.
 
-The packages below start with the release after 0.3.4. Releases up to
-0.3.4 have none of them.
-
-<!-- PLACEHOLDER: the commands and file names of Flatpak, AUR, Nix and the
-Homebrew cask are provisional. Confirm each against the release that ships
-them. -->
+The Flatpak, the AUR package and the Homebrew cask start with the
+release after 0.3.4. Releases up to 0.3.4 have none of them. The Nix flake
+builds from the repository.
 
 ### Flatpak
 
 Download `Getman-linux-x86_64.flatpak` or `Getman-linux-aarch64.flatpak`
 from the [releases page](https://github.com/fzn0x/getman/releases) and
-install it for your user:
+install it for your user. It runs on the GNOME runtime, which Flatpak
+fetches from Flathub the first time.
 
 ```sh
 flatpak install --user Getman-linux-x86_64.flatpak
 flatpak run io.github.fzn0x.getman
 ```
 
-The application ID `io.github.fzn0x.getman` is the one in the Flatpak
-manifest in `packaging/flatpak/`.
+The command line is inside the Flatpak too:
+
+```sh
+flatpak run --command=getman io.github.fzn0x.getman --version
+```
+
+The bundle has no remote of its own, so it does not update with
+`flatpak update`. To update, install the newer bundle the same way. The
+app may open workspaces anywhere in your home folder.
 
 ### AUR
 
@@ -161,16 +166,30 @@ with an AUR helper such as `yay`:
 yay -S getman-bin
 ```
 
-The package `getman-bin` installs the release's desktop app, not a build
-from source.
+`getman-bin` installs the release's desktop app, not a build from
+source. Its program, `/usr/bin/getman`, is the command line too:
+`getman desktop` opens the window. `yay -Syu` updates it with the rest of
+the system.
 
 ### Nix
 
-Run Getman straight from the repository's flake, without installing it:
+Run Getman from the repository's flake without installing it, or install
+it into your profile. Both build the newest code on `main`.
 
 ```sh
 nix run github:fzn0x/getman
+nix profile install github:fzn0x/getman
 ```
+
+That is the command line, with the browser UI built in. On Linux, the
+flake also builds the desktop app:
+
+```sh
+nix profile install github:fzn0x/getman#getman-desktop
+```
+
+Both put a program named `getman` in your profile, so install one of
+them, not both.
 
 ### Homebrew cask
 
@@ -180,8 +199,12 @@ On macOS, install the desktop app with Homebrew:
 brew install --cask fzn0x/tap/getman-desktop
 ```
 
-The cask `getman-desktop` lives in the same tap as the formula
-`getman`, which installs the command line only.
+The app is not notarized, so macOS blocks it the first time, as with the
+[disk image](#macos): allow it in **System Settings › Privacy & Security**
+with **Open Anyway**. The cask `getman-desktop` lives in the same tap as
+the formula `getman`, which installs the command line only. To use
+`getman` in a terminal with the cask, choose **Install the getman
+command** in **Settings › About**.
 
 ## Mobile apps
 
@@ -478,10 +501,10 @@ nothing of them to install by hand.
 | AppImage | The app updates itself. Or replace the file with the newer one |
 | .deb | `sudo apt install ./getman-desktop_amd64.deb` with the newer file |
 | .rpm | `sudo dnf install ./getman-desktop.x86_64.rpm` with the newer file |
-| Flatpak | `flatpak install --user` with the newer file, from the release after 0.3.4 |
-| AUR | `yay -Syu getman-bin`, from the release after 0.3.4 |
-| Nix | Run `nix run github:fzn0x/getman` again to run the flake's current version |
-| Homebrew cask | `brew upgrade --cask getman-desktop`, from the release after 0.3.4 |
+| Flatpak | `flatpak install --user` with the newer file |
+| AUR | `yay -Syu` |
+| Nix | `nix profile upgrade getman`, or `getman-desktop`. `nix run` builds the newest code each time |
+| Homebrew cask | `brew upgrade --cask getman-desktop`, or the app updates itself |
 | Android | Install the newer APK over the old one |
 | iOS | Sideload the newer IPA, and refresh the app every 7 days with a free Apple ID |
 | Portable zip | Download the new zip and unpack it in place of the old one |
@@ -510,10 +533,10 @@ The command line never updates itself and never looks for new versions.
 | AppImage | Delete the file |
 | .deb | `sudo apt remove getman` |
 | .rpm | `sudo dnf remove getman` |
-| Flatpak | `flatpak uninstall io.github.fzn0x.getman` |
-| AUR | `yay -R getman-bin` |
-| Nix | Nothing is installed. `nix store gc` frees the downloaded files |
-| Homebrew cask | `brew uninstall --cask getman-desktop` |
+| Flatpak | `flatpak uninstall --user io.github.fzn0x.getman` |
+| AUR | `sudo pacman -Rns getman-bin` |
+| Nix | `nix profile remove getman`, or `getman-desktop`. After `nix run`, `nix store gc` frees the files |
+| Homebrew cask | `brew uninstall --cask getman-desktop`; `--zap` also removes the app's settings |
 | Android | Touch and hold the app, then **Uninstall** |
 | iOS | Touch and hold the app, then **Remove App** |
 | Install script, Linux and macOS | `rm ~/.local/bin/getman`, and remove the `PATH` line if you added one |

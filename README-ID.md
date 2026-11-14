@@ -58,13 +58,10 @@ getman tui                                    # atau UI terminal
 | Android | `Getman-android-universal.apk` di [halaman rilis](https://github.com/fzn0x/getman/releases) | APK bertanda tangan, dipasang langsung |
 | iOS | `Getman-ios.ipa` di [halaman rilis](https://github.com/fzn0x/getman/releases) | Di-sideload dengan AltStore, SideStore atau Sideloadly |
 
-<!-- SEMENTARA: file Android dan iOS, perintah Flatpak, AUR, Nix dan cask
-di bawah serta catatan mobile mulai ada di rilis setelah 0.3.4. Pastikan
-setiap nama dan perintah dengan rilis itu. -->
-
-Android, iOS, Flatpak, AUR, Nix dan cask Homebrew mulai ada di rilis
-setelah 0.3.4. File lainnya ada di setiap rilis, dan tautan ini selalu
-mengambil yang terbaru.
+Android, iOS, Flatpak, AUR dan cask Homebrew mulai ada di rilis setelah
+0.3.4. File lainnya ada di setiap rilis, dan tautan ini selalu mengambil
+yang terbaru. Nix membangun flake repositori, jadi selalu menjalankan kode
+terbaru di `main`.
 
 - **Android:** buka APK di ponsel dan izinkan pemasangan dari sumber itu
   saat Android bertanya.

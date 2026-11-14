@@ -1,12 +1,11 @@
 // Every download of the landing page, in one place. Each platform lists its
 // main download, its other files and its package-manager commands.
 //
-// PROVISIONAL: the entries marked `soon: true` ship with the release after
-// 0.3.4 and their exact file names and commands are still to be confirmed.
-// Change them here and nowhere else on the landing page. The build reads the
-// latest release's file names from the GitHub API: a file the release lacks
-// is shown as "Coming with the next release" instead of a link, and the
-// page needs no edit when the release arrives.
+// The entries marked `soon: true` ship with the release after 0.3.4.
+// Change downloads here and nowhere else on the landing page. The build
+// reads the latest release's file names from the GitHub API: a file the
+// release lacks is shown as "Coming with the next release" instead of a
+// link, and the page needs no edit when the release arrives.
 
 const dl = (file) => ({ file });
 const soon = (file) => ({ file, soon: true });
@@ -75,7 +74,8 @@ export const platforms = [
         soon: true,
       },
       { label: "AUR", text: "yay -S getman-bin", soon: true },
-      { label: "Nix", text: "nix run github:fzn0x/getman", soon: true },
+      // The flake builds from the repository, so it needs no release.
+      { label: "Nix", text: "nix run github:fzn0x/getman" },
       { label: "CLI", text: "curl -fsSL https://fzn0x.github.io/getman/install.sh | sh" },
     ],
   },

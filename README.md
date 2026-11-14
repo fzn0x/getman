@@ -64,13 +64,10 @@ a free test API. See [Getting started](docs/getting-started.md).
 | Android | `Getman-android-universal.apk` on the [releases page](https://github.com/fzn0x/getman/releases) | Signed APK, installed directly |
 | iOS | `Getman-ios.ipa` on the [releases page](https://github.com/fzn0x/getman/releases) | Sideloaded with AltStore, SideStore or Sideloadly |
 
-<!-- PROVISIONAL: the Android and iOS files, the Flatpak, AUR, Nix and
-cask commands below and the mobile notes start with the release after
-0.3.4. Confirm each name and command against that release. -->
-
-Android, iOS, Flatpak, AUR, Nix and the Homebrew cask start with the
-release after 0.3.4. The other files are on every release, and these
-links always fetch the newest one.
+Android, iOS, Flatpak, AUR and the Homebrew cask start with the release
+after 0.3.4. The other files are on every release, and these links always
+fetch the newest one. Nix builds the repository's flake, so it runs the
+newest code on `main`.
 
 - **Android:** open the APK on the phone and allow installs from that
   source when Android asks.
