@@ -25,6 +25,29 @@ const out = join(here, "dist");
 const site = "https://fzn0x.github.io/getman/";
 const repo = "https://github.com/fzn0x/getman";
 
+/**
+ * The file names of the latest release, for the landing page: a file the
+ * release lacks is not linked. A failed request must not fail the build,
+ * so it gives null and the page falls back to the files known to exist.
+ */
+async function latestRelease() {
+  try {
+    const headers = { accept: "application/vnd.github+json", "user-agent": "getman-site-build" };
+    if (process.env.GITHUB_TOKEN) headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+    const response = await fetch("https://api.github.com/repos/fzn0x/getman/releases/latest", {
+      headers,
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const release = await response.json();
+    return new Set(release.assets.map((asset) => asset.name));
+  } catch (error) {
+    console.warn(`Could not read the latest release (${error.message}); linking known files only.`);
+    return null;
+  }
+}
+const released = await latestRelease();
+
 // The order of the sidebar, and of previous and next.
 export const sections = [
   {
@@ -350,7 +373,10 @@ for (const name of translations) {
 }
 
 // The landing page and the rest.
-writeFileSync(join(out, "index.html"), landing({ root: "./", assets, site, repo, pages: order }));
+writeFileSync(
+  join(out, "index.html"),
+  landing({ root: "./", assets, site, repo, pages: order, released }),
+);
 writeFileSync(join(out, "404.html"), notFound({ root: site, assets, site }));
 writeFileSync(join(out, "search.json"), JSON.stringify(index));
 writeFileSync(
