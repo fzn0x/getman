@@ -1616,6 +1616,9 @@ h3:hover .anchor {
   border-radius: var(--r-xs);
   background: var(--surface-container-high);
   font-size: 0.88em;
+  /* A long URL or path breaks rather than pushing the page sideways.
+     break-word, unlike anywhere, leaves table columns their width. */
+  overflow-wrap: break-word;
 }
 
 .prose a code {

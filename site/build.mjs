@@ -27,7 +27,17 @@ const repo = "https://github.com/fzn0x/getman";
 
 // The order of the sidebar, and of previous and next.
 export const sections = [
-  { title: "Start", pages: ["getting-started", "why-getman", "compare", "desktop"] },
+  {
+    title: "Start",
+    pages: [
+      "getting-started",
+      "installation",
+      "desktop",
+      "why-getman",
+      "compare",
+      "troubleshooting",
+    ],
+  },
   {
     title: "Guides",
     pages: [
@@ -45,9 +55,15 @@ export const sections = [
       "import-export",
       "browser-ui",
       "terminal",
+      "keyboard-shortcuts",
+      "settings",
     ],
   },
-  { title: "Reference", pages: ["cli", "security"] },
+  {
+    title: "Reference",
+    pages: ["cli", "scripting-api", "workspace-format", "security"],
+  },
+  { title: "Contributing", pages: ["development", "architecture"] },
 ];
 
 const theme = createCssVariablesTheme({
@@ -114,6 +130,21 @@ export function codeBlock(code, lang = "text", { wrap = false } = {}) {
   return `<figure class="code${wrap ? " wrap" : ""}"><figcaption><span>${label}</span><button class="copy" type="button" data-copy aria-label="Copy the ${label} code">Copy</button></figcaption>${body}</figure>`;
 }
 
+/**
+ * A heading's HTML as plain text, for the page outline and search, which
+ * escape it again: tags dropped and marked's entities, such as the
+ * apostrophe's &#39;, turned back into characters.
+ */
+function plain(html) {
+  return html
+    .replace(/<[^>]+>/g, "")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
 export function slug(text) {
   return text
     .toLowerCase()
@@ -139,7 +170,7 @@ function render(markdown) {
         let id = slug(text) || "section";
         while (used.has(id)) id += "-";
         used.add(id);
-        if (depth <= 3) headings.push({ depth, id, text: html.replace(/<[^>]+>/g, "") });
+        if (depth <= 3) headings.push({ depth, id, text: plain(html) });
         return `<h${depth} id="${id}"><a class="anchor" href="#${id}" aria-hidden="true" tabindex="-1"></a>${html}</h${depth}>\n`;
       },
       link({ href, title, tokens }) {

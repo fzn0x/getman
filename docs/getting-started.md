@@ -2,7 +2,9 @@
 
 ## Install
 
-Getman is one program with no runtime to install. Pick one:
+Getman is one program with no runtime to install. Pick one, or see
+[Installation](installation.md) for every way to install, update and
+remove it:
 
 **With the install script** (Linux and macOS):
 
@@ -158,9 +160,11 @@ anything.
 | <kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>T</kbd> | Reopen the tab closed last |
 | <kbd>Alt</kbd> <kbd>[</kbd> <kbd>Alt</kbd> <kbd>]</kbd> | Previous and next tab |
 | <kbd>/</kbd> | Filter the sidebar |
-| <kbd>?</kbd> | Show every shortcut |
+| <kbd>?</kbd> | Show the main shortcuts |
 
-On a Mac, <kbd>Cmd</kbd> takes the place of <kbd>Ctrl</kbd>. Tab and window
+On a Mac, <kbd>Cmd</kbd> takes the place of <kbd>Ctrl</kbd>, and
+<kbd>Opt</kbd> of <kbd>Alt</kbd>. [Keyboard shortcuts](keyboard-shortcuts.md)
+lists every key. Tab and window
 keys use <kbd>Alt</kbd> because browsers keep <kbd>Ctrl</kbd> <kbd>N</kbd>,
 <kbd>Ctrl</kbd> <kbd>W</kbd> and <kbd>Ctrl</kbd> <kbd>Tab</kbd> for
 themselves.

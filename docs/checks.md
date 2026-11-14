@@ -33,16 +33,19 @@ separated by spaces.
 | --- | --- |
 | `status` | The status code |
 | `time` | Milliseconds from sending to the end of the body |
-| `size` | The body's size in bytes |
+| `size` | The body's size in bytes, after decompression |
 | `url` | The final URL, after redirects |
-| `body` | The body as text |
-| `header.<name>` | A response header, any case: `header.content-type` |
-| `cookie.<name>` | A cookie the response set |
-| `json` | The whole body, parsed as JSON |
+| `body` | The body as text. `text` is the same |
+| `header.<name>` | A response header, any case: `header.content-type`. The first one when it repeats. `headers.<name>` is the same |
+| `cookie.<name>` | A cookie the response set in a `Set-Cookie` header, by its exact name. `cookies.<name>` is the same |
+| `json` | The whole body, parsed as JSON, whatever its `Content-Type` |
 | `json.<path>` | Part of it |
-
 | `messages` | The messages a connection received; see [below](#messages-of-a-connection) |
 | `messages.<path>` | Part of them, like `messages[0].data` |
+
+`status`, `time`, `size`, `url` and `body` have no parts, so
+`status.code` is an error. So is `json` when the body is not JSON, and
+any other name, such as `foo`.
 
 For a [gRPC request](grpc.md#checks-captures-and-scripts), `status` is
 the gRPC status code (`0` is OK), `json` is the response message (the list
@@ -52,7 +55,10 @@ trailers too.
 A JSON path is made of `.name`, `[index]` (negative counts from the end),
 `["a key with spaces"]` and `.length` for arrays and strings:
 `json.data[0].id`, `json.items[-1].price`, `json["full name"]`,
-`json.tags.length`.
+`json.tags.length`. A quoted key can use single quotes too, as in
+`json['full name']`. The length of a string counts characters. A path
+that leads nowhere, such as an index past the end, finds nothing; see
+[`exists`](#operators).
 
 ### Messages of a connection
 
@@ -101,13 +107,29 @@ and the others fail; on an HTTP request, `messages` is an error.
 | `is empty` `is not empty` | has nothing in it (`""`, `[]`, `{}` or `null`), or has something; take no value |
 | `is truthy` `is falsy` | is true or false as in JavaScript: `false`, `0`, `""` and `null` are falsy, everything else is truthy, even an empty array; take no value |
 
+The symbols need no spaces around them: `status==200` works.
+`startsWith` and `endsWith` compare as text, and so does `contains`
+unless the target is an array or an object. `is integer` passes for a
+number with no fraction, such as `3` or `3.0`, and type names are read
+in any case. `matches` takes the value as written, not as JSON, and uses
+Rust's regular expression syntax, which has no look-around and no
+backreferences; `(?i)` at the start ignores case.
+
+When the target finds nothing, every operator except `exists` and
+`!exists` fails with `... does not exist`. A line that is not a check,
+an operator Getman does not know, a comparison such as `<` of something
+that is not a number, a bad regular expression, `in` with no list and
+`between` without two numbers fail too, with the reason.
+
 ### Values
 
 A value that is valid JSON is compared as JSON: `== 42` is a number,
 `== "42"` a string, `== true` a boolean, `== null` null, and
 `contains {"id": 1}` an object. Anything else is text, so
 `== Ada Lovelace` needs no quotes. Numbers and numeric strings compare
-equal (`"3" == 3`), which suits headers and query values.
+equal (`"3" == 3`), which suits headers and query values. In the same
+way a string equals a boolean or `null` written as that text, so a
+header `true` passes `== true`.
 
 ```yaml
 checks:
@@ -153,6 +175,15 @@ variables when no environment is selected. In the UI they are saved to
 the git-ignored local file; in `getman run` they last for the run (or are
 saved with `--persist`). Strings are copied as they are; numbers,
 booleans, arrays and objects as JSON text.
+
+Captures run after the checks. A capture whose target finds nothing,
+or is not a target, leaves the variable as it was and adds a warning to
+the request, such as `token: json.access_token does not exist in the
+response`; it does not fail the request. On a WebSocket, event stream or
+Socket.IO request, captures read `messages` too, as in `lastPrice:
+messages[-1].json.price`. A captured value changes nothing while a
+stronger scope defines the same name; see
+[Variables](variables.md#where-values-come-from).
 
 A typical login flow needs no script at all:
 

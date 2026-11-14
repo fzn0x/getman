@@ -307,8 +307,9 @@ messages, collects what arrives until the request's `until` (see
 [Stopping a run](#stopping-a-run)), and runs the post-response script,
 checks and captures. A failed check or test fails the request and the run,
 and the results are in every report: the line in the terminal says how many
-messages came, the HTML report lists them, and the JSON report holds the
-whole conversation under `realtime`. See [Runner](runner.md).
+messages came and the HTML report lists them. The JSON report has the
+request's result, its checks and tests, but not the messages. See
+[Runner](runner.md).
 
 The [terminal UI](terminal.md) connects to them too, shows their messages
 as they arrive and sends saved or typed ones, and its runs work as

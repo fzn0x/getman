@@ -15,11 +15,13 @@ The format is told from the file's content, so there is nothing to
 choose. Each import reports what it could not carry over exactly,
 rather than dropping it quietly.
 
-Several files or a folder that is not a Bruno collection import file by
-file. A file that cannot be imported does not stop the others: the
-report lists it with the reason, and `getman import` then exits with
-status 1. Files in no format Getman reads, such as a README, are passed
-over and listed too.
+A folder that holds a `bruno.json` or any `.bru` file is one Bruno
+collection. Several files, or any other folder, import file by file. A
+file that cannot be imported does not stop the others: the report lists
+it with the reason, and `getman import` then exits with status 1. Files
+in no format Getman reads, such as a README, are passed over and listed
+too. When nothing at all could be imported, the import fails. A file's
+extension does not matter, except that `.bru` marks a Bruno file.
 
 | Format | What is read |
 | --- | --- |
@@ -55,12 +57,18 @@ too), or export an environment or the globals, and import the file.
 | | |
 | --- | --- |
 | Requests | Method, URL, query and path parameters (disabled ones kept), headers, description |
-| Bodies | Raw (JSON, XML, text), form, multipart, binary file, GraphQL |
+| Bodies | Raw (JSON, XML, HTML, JavaScript, text), form, multipart, binary file, GraphQL |
 | Authentication | Basic, Bearer, API key, Digest, OAuth 1.0, OAuth 2.0 (every grant), AWS Signature, JWT, Hawk, Akamai EdgeGrid, ASAP |
-| Scripts | Pre-request and test scripts, unchanged: `pm` is the same object as `gm` |
-| Variables | Collection, folder, environment and global variables |
-| Settings | Redirects, TLS verification |
+| Scripts | Pre-request and test scripts, unchanged: `pm` is the same object as `gm`. Disabled scripts are left out |
+| Variables | Collection, folder, environment and global variables. Disabled ones are left out |
+| Settings | Following redirects, the most redirects, keeping the method and the `Authorization` header on a redirect, TLS verification |
 | Examples | Saved responses, with their status, headers, body and the request that got them. See [Examples and mocks](examples-and-mocks.md) |
+
+A collection fetched from the Postman API, which wraps it in
+`collection`, imports the same way. Other collection formats, such as
+v1, are refused; export the collection again as v2.1. An environment's
+values of the `secret` type become secrets, kept in its local file. The
+globals go to `getman.local.yaml`, the workspace's git-ignored file.
 
 Reported instead: files chosen for form fields or bodies (exports hold
 a path on the exporting machine; copy the file into the workspace),
@@ -68,37 +76,65 @@ saved OAuth 2.0 tokens (they would end up in a shared file; get a new
 one under **Auth**), a callback URL Getman cannot listen on, such as
 Postman's own (Getman receives the sign-in on this machine; see
 [Authentication](auth.md#signing-in-with-a-browser)), and other
-authentication types such as NTLM.
+authentication types such as NTLM. A body mode Getman does not know is
+dropped and reported. An OAuth 2.0 grant it does not know sends
+`{{accessToken}}` as a Bearer token, OAuth 1.0 with a signature method
+it does not know signs with HMAC-SHA1, and a JWT with an algorithm it
+does not know signs with HS256; each is reported.
 
 ## From OpenAPI and Swagger
 
 Each operation becomes a request:
 
-- **Folders** per tag, in the order of the document's `tags`, or per
-  first path segment for operations without one.
+- **Folders** per operation's first tag, in the order of the document's
+  `tags`, with the tag's description. Operations without a tag go in a
+  folder named after the first path segment that is not a parameter,
+  and those with neither stay at the top.
 - **URLs** start with `{{baseUrl}}`, which is set in the folder's
   variables from the first server (with its variables at their
-  defaults) or from `host` and `basePath`. Path parameters become
-  `:name` segments.
+  defaults) or from `host`, `basePath` and `schemes`, preferring
+  `https`. Path parameters become `:name` segments; one that shares a
+  segment with other text, as in `/files/{name}.{ext}`, becomes a
+  `{{name}}` variable of the request.
 - **Parameters**: query and header parameters are listed with their
-  example, default or first enum value, switched on when required.
-  Cookie parameters become a `Cookie` header.
+  example, default or first enum value, switched on when required. An
+  operation's parameters replace the path's with the same name and
+  place. Cookie parameters become a `Cookie` header. `Accept`,
+  `Content-Type` and `Authorization` header parameters are left out.
 - **Bodies** come from the media type's example or examples, or else a
   sample built from the schema: `$ref`s are followed (within the
   document), cycles are cut, and the sample stops eight levels deep.
-  JSON is preferred, then forms, multipart, XML and text.
+  JSON is preferred, then forms, multipart, XML and text. In Swagger
+  2.0, `body` parameters give the body, and `formData` parameters a
+  form, or a multipart body when one is a file or the operation
+  consumes `multipart/*`.
+- **Samples** use the schema's `example`, `default`, `const`, first
+  `examples` or first `enum` value when it has one. Otherwise strings
+  follow their `format`, such as `user@example.com` for `email` or
+  `2024-01-01` for `date`, numbers start at their `minimum` or `0`,
+  booleans are `true`, `allOf` parts are merged, and `oneOf` and `anyOf`
+  take the first choice. Objects leave out `readOnly` properties and
+  keep at most 64.
 - **Authentication** comes from the security schemes: HTTP Bearer,
   Basic and Digest, API keys in a header or the query, and OAuth 2.0
   client credentials and password flows. Secrets are read from
   variables such as `{{token}}`, `{{apiKey}}` or `{{clientSecret}}`;
-  set them in an environment, as secrets.
-- **Docs**: the summary names the request, and the summary and
-  description become its description.
+  set them in an environment, as secrets. The document's `security`
+  goes on the collection's folder, and an operation's own on its
+  request; `security: []` means no authentication. OpenID Connect and
+  OAuth 2.0 flows that need a browser send `{{accessToken}}` as a
+  Bearer token.
+- **Docs**: the summary names the request when it is 80 characters or
+  fewer, else the `operationId`, else the method and path. The summary
+  and description become its description, with a note when the
+  operation is deprecated. The document's title names the collection,
+  and its description becomes the collection's.
 
-Reported instead: references to other files (bundle the document
-first), API keys sent as cookies, OpenID Connect and OAuth 2.0 flows
-that need a browser, multipart files and binary bodies to choose, and
-servers other than the first.
+The document's responses are not read. Reported instead: references to
+other files (bundle the document first), examples kept in other files,
+API keys sent as cookies, OpenID Connect and OAuth 2.0 flows that need a
+browser, schemes required together (only the first is set), multipart
+files and binary bodies to choose, and servers other than the first.
 
 ## From a browser (HAR)
 
@@ -107,9 +143,14 @@ and import it. Each entry becomes a request, named after its method and
 path. Headers the browser adds on its own are left out: cookies, HTTP/2
 pseudo-headers, `Host`, `Content-Length`, `Connection`,
 `Accept-Encoding`, `User-Agent`, `Referer`, `Sec-*` and the like.
-Bodies are read by their MIME type. The import says how many requests
-carried cookies and which headers hold the credentials that were
-captured, so you can move them into secret variables before you commit.
+Bodies are read by their MIME type: forms from their fields, and
+multipart bodies with the names of the files they uploaded, which you
+copy into the workspace. The responses are not imported. The import says
+how many requests carried cookies, and how many headers hold captured
+credentials (`Authorization`, and names with `api-key` or `token`), so
+you can move them into secret variables before you commit. The
+collection is named after the first page's title, or else the first
+request's host.
 
 ## From Insomnia
 
@@ -124,6 +165,17 @@ and authentication types Getman does not send are reported. Scripts'
 `insomnia.*` calls are rewritten as `gm.*`; check that they still do
 what they did.
 
+| Insomnia | Getman |
+| --- | --- |
+| `{% now 'unix' %}`, `{% now 'millis' %}` | `{{$timestamp}}`, `{{$timestampMs}}` |
+| `{% faker 'randomEmail' %}`, `'randomFirstName'`, `'randomLastName'`, `'randomInt'` | `{{$randomEmail}}`, `{{$randomFirstName}}`, `{{$randomLastName}}`, `{{$randomInt}}` |
+| Nested environment data, such as `{"db": {"host": "x"}}` | The variable `db.host`, as `{{ _.db.host }}` reads it |
+| Basic, Digest, Bearer (with its prefix), API key in a header or the query | The same |
+| OAuth 2.0 client credentials and password grants | The same |
+| OAuth 2.0 grants that need a browser | `{{accessToken}}` sent as a Bearer token, reported |
+| Bodies: JSON and other text, form, multipart, GraphQL, a file | The same; a file to upload is reported, to copy into the workspace |
+| Following redirects, when set on the request | The request's setting |
+
 ## From Hoppscotch
 
 Export a collection, all collections, or environments, as JSON.
@@ -132,6 +184,20 @@ authentication types Getman supports carry over, and `<<name>>`
 becomes `{{name}}`. Exports do not hold uploaded files; choose them
 again. Scripts are kept as they are, and their `pw.*` calls need
 rewriting with `gm.*`.
+
+- A collection's headers, authentication, variables and scripts go to
+  its folder's `_folder.yaml`. A file with several collections becomes a
+  folder named **Hoppscotch collections**, with one folder for each.
+- GraphQL collections import too, as `POST` requests with a GraphQL
+  body.
+- Authentication: Basic, Digest, Bearer, API key in a header or the
+  query, and OAuth 2.0 client credentials and password grants. An
+  OAuth 2.0 grant that needs a browser sends the token saved in the
+  export as a Bearer token, or `{{accessToken}}` when there is none,
+  and is reported. Switched-off authentication becomes none.
+- Environments take each variable's current value, or else its initial
+  value. Secret variables stay secrets, and an environment without a
+  name is called **Globals**.
 
 ## From Bruno
 
@@ -142,22 +208,33 @@ Import dialog.
 - `bruno.json` names the collection; `collection.bru` and `folder.bru`
   give headers, authentication, variables, scripts and docs.
 - Each request keeps its query and path parameters, headers, body
-  (JSON, XML, text, form, multipart, GraphQL, file) and variables.
+  (JSON, XML, text, SPARQL, form, multipart, GraphQL, file), variables
+  and docs, in the order of the files' `seq`.
+- Authentication: Basic, Digest, Bearer, API key in a header or the
+  query, and OAuth 2.0 client credentials and password grants. Other
+  OAuth 2.0 grants send `{{accessToken}}` as a Bearer token, and other
+  types are reported.
 - `environments/*.bru` become environments. Secret variables are listed
   without values, which Bruno keeps outside the collection; set them
   in each environment's local file.
 - **Assertions** become checks where Getman has the same test:
   `res.status: eq 200` becomes `status == 200`, `res.body.name:
   isString` becomes `json.name is string`, and `eq`, `neq`, `gt`,
-  `gte`, `lt`, `lte`, `contains`, `startsWith`, `endsWith`, `matches`,
-  `isDefined`, `isNull`, `isEmpty`, `length` and the type tests all
-  translate. Others are reported.
+  `gte`, `lt`, `lte`, `contains`, `notContains`, `startsWith`,
+  `endsWith`, `matches`, `notMatches`, `isDefined`, `isUndefined`,
+  `isNull`, `isEmpty`, `isNotEmpty`, `length` and the type tests
+  (`isString`, `isNumber`, `isBoolean`, `isArray`, and `isJson` as
+  `is object`) all translate. Others, such as `isTruthy`, are
+  reported.
 - **Post-response variables** that read the response, such as
-  `token: res.body.token`, become captures.
+  `token: res.body.token`, become captures. Assertions and captures
+  read `res.status`, `res.responseTime` (as `time`), `res.body` and
+  paths in it, `res('path')` and `res.headers.name`.
 - **Scripts and tests** are carried over and run as they are: Getman
   provides `bru`, `req`, `res`, `test` and `expect` (see
-  [Scripts](scripts.md#scripts-written-for-bruno)). A call it does not
-  provide is reported, and needs rewriting with `gm.*`.
+  [Scripts](scripts.md#scripts-written-for-bruno)). A request's `tests`
+  block goes at the end of its post-response script. A call Getman does
+  not provide is reported, and needs rewriting with `gm.*`.
 - `{{process.env.NAME}}` becomes `{{$env.GETMAN_NAME}}`, since Getman
   reads only environment variables that start with `GETMAN_`.
 
@@ -177,6 +254,25 @@ JSON, form or raw text), `--data-urlencode`, `-F` form fields and files,
 `-u` with `--digest` or `--basic`, `-G`, `-I`, `-A`, `-e`, `-b`, `-L`,
 `--max-redirs`, `-k`, `-m` and `--oauth2-bearer`. Options that make no
 sense for a saved request, such as `-o` or `--proxy`, are skipped.
+
+| Option | Becomes |
+| --- | --- |
+| `-X`, `--request` | The method. Without it, `HEAD` with `-I`, `POST` with data or a form, else `GET` |
+| `-H`, `--header` | A header. `Name;` sends it empty, and `Name:` with no value is left out. `Authorization: Bearer ...` becomes Bearer authentication |
+| `-d`, `--data`, `--data-ascii`, `--data-binary`, `--data-raw` | The body, joined with `&`. JSON when the `Content-Type` says so or, without one, when the data is JSON. Else a form, when the `Content-Type` is `application/x-www-form-urlencoded` or missing and the data is one line; XML when the `Content-Type` says XML; text otherwise |
+| `-d @file` | A body sent from that file (not with `--data-raw`) |
+| `--json` | A JSON body, with `Accept: application/json` unless the command sets one |
+| `--data-urlencode` | Form data, encoded |
+| `-F`, `--form`, `--form-string` | A multipart field, `name=@file` a file and `;type=` its content type. `--form-string` never reads a file |
+| `-u`, `--user` | Basic authentication, or Digest with `--digest` |
+| `-G`, `--get` | The data goes to the query string instead |
+| `-A`, `-e`, `-b` | `User-Agent`, `Referer` and `Cookie` headers; `-b` only when it holds `name=value`, not a cookie file |
+| `--url` | The URL |
+| `-L`, `--max-redirs`, `-k`, `-m` | Follow redirects, the most redirects, no TLS verification, a timeout in seconds |
+| `--oauth2-bearer` | Bearer authentication |
+
+Short flags written together, such as `-sSL` or `-XPOST`, are read too.
+The request is named after its method and the URL's path.
 
 ## Export as code
 
@@ -214,6 +310,16 @@ getman export orders/create.yaml --to python -e staging
 Every value is quoted for the language it is written in, so quotes,
 backslashes, `$`, line breaks and non-ASCII text arrive as they were.
 
+Headers the client sets itself are left out: Getman's own `User-Agent`,
+`Accept: */*`, `Content-Length` and `Host`. A multipart body is built by
+the code, with its own boundary, so its `Content-Type` is left out too.
+Files a request uploads are named relative to the workspace, so the code
+works from the workspace folder on any machine.
+
+A [gRPC request](grpc.md) is written only as a `grpcurl` command, with
+`--to curl`, the default, or `--to grpcurl`. WebSocket, event stream and
+Socket.IO requests are not written as code.
+
 Exported code contains the real values of your variables, tokens
 included. To share a snippet, keep the variables instead: switch on
 **Keep `{{variables}}`** in the code dialog, or pass `--keep-vars`.
@@ -224,8 +330,8 @@ since they cannot be encoded.
 ### Indent and boilerplate
 
 Each language is written the way it is usually written: tabs in Go, two
-spaces in JavaScript, Ruby and Dart, four elsewhere. Two options change
-that, in the code dialog and on the command line:
+spaces in cURL, Wget, JavaScript, Ruby and Dart, four elsewhere. Two
+options change that, in the code dialog and on the command line:
 
 | Option | Does |
 | --- | --- |
@@ -271,6 +377,14 @@ Postman's own, with three exceptions that are reported: private keys
 read from a file are left out (paste the key into Postman), Postman adds
 no `iat` or `exp` to a JWT, and it always signs the payload for AWS.
 
+Also reported: OAuth 1.0 parameters sent in the body, which now go in
+the URL; an OAuth 2.0 audience, which only some Postman versions send;
+form files, which Postman reads from its working directory and which
+are named relative to the workspace; a request's timeout, and settings
+on a folder or the workspace, which Postman has no place for; and
+request files that cannot be read, which are left out. An exported
+environment marks its secret variables with Postman's `secret` type.
+
 Environments and globals export as Postman environment files. Values
 kept in git-ignored local files are left out unless you ask for them
 (`--with-secrets`, or **Include local values** in the UI): secret values
@@ -290,7 +404,12 @@ point:
   their values as examples.
 - Bodies become a request body of their media type with the body as
   the example; forms and multipart bodies also get a simple schema.
-- Top-level folders become tags; the request's name is the summary.
+- Top-level folders become tags; the request's name is the summary,
+  its description the description, and a unique camelCase form of the
+  name the `operationId`. Headers include those the request inherits
+  from its folders.
+- The title is the folder's or workspace's name, with its description,
+  and `info.version` is `1.0.0`.
 - Authentication becomes security schemes, for the whole document or
   per operation where it differs. JWT and ASAP become bearer JWTs, and
   OAuth 2.0 grants their flows. Request signing (AWS Signature,
@@ -299,4 +418,13 @@ point:
   one have no `responses`, which OpenAPI 3.1 allows.
 
 Methods OpenAPI does not know, and a second request for the same method
-and path, are left out and reported.
+and path, are left out and reported. Also reported: a URL that starts
+with another variable, such as `{{host}}`, whose path is then taken as
+relative to the servers, and a workspace with no `baseUrl` at all,
+whose server is then `/`.
+
+Both formats describe HTTP requests, and the exporters do not tell
+WebSocket, event stream, Socket.IO and gRPC requests apart from HTTP
+ones. Such requests come out as HTTP requests; in OpenAPI a gRPC
+request is left out, since its method is not an HTTP one. Check them in
+the file you get, or export a folder without them.
