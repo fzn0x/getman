@@ -799,8 +799,18 @@ async fn drive(
         address: recorder.call.address.clone(),
     });
     for message in initial {
-        stream.send(&message.bytes)?;
-        recorder.sent(message);
+        match stream.send(&message.bytes) {
+            Ok(()) => recorder.sent(message),
+            // The stream closed before the message went out: the server
+            // answered early, or the connection broke, as when a TLS 1.3
+            // server refuses the client certificate. The answer read below
+            // says which, more than this error does.
+            Err(Error::Http(_)) => {
+                stream.end();
+                break;
+            }
+            Err(e) => return Err(e),
+        }
     }
     if commands.is_none() || !recorder.call.call_type.client_streams() {
         stream.end();
