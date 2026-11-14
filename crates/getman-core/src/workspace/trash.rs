@@ -6,6 +6,7 @@
 //!   1761590400000-3f2a9c1e/
 //!     entry.json             where it was, its name, when it went
 //!     create-user.yaml       the request file, or the folder itself
+//!     create-user.examples/  the request's saved response bodies, if any
 //! ```
 
 use std::fs;
@@ -14,7 +15,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    FOLDER_FILE, Workspace, copy_dir, item_key, join, read_yaml, request_stem, split, unique_stem,
+    FOLDER_FILE, Workspace, copy_dir, item_key, join, move_examples, read_yaml, request_stem,
+    split, unique_stem,
 };
 use crate::error::{Error, Result};
 use crate::model::{Folder, Request};
@@ -135,7 +137,16 @@ impl Workspace {
         let text = serde_json::to_string_pretty(&item)
             .map_err(|e| Error::Invalid(format!("could not record the deleted item: {e}")))?;
         fs::write(&entry, text).map_err(|e| Error::io(&entry, e))?;
-        if let Err(e) = move_path(&source, &slot.join(file)) {
+        let kept = slot.join(file);
+        if let Err(e) = move_path(&source, &kept) {
+            let _ = fs::remove_dir_all(&slot);
+            return Err(e);
+        }
+        // A request's saved responses go to the trash with it.
+        if kind == TrashKind::Request
+            && let Err(e) = move_examples(&source, &kept)
+        {
+            let _ = move_path(&kept, &source);
             let _ = fs::remove_dir_all(&slot);
             return Err(e);
         }
@@ -184,7 +195,11 @@ impl Workspace {
         // A request keeps its extension, `.yaml` or `.yml`.
         let extension = &file[request_stem(file).map_or(file.len(), str::len)..];
         let new_file = format!("{key}{extension}");
-        move_path(&source, &dir.join(&new_file))?;
+        let restored = dir.join(&new_file);
+        move_path(&source, &restored)?;
+        if item.kind == TrashKind::Request {
+            move_examples(&source, &restored)?;
+        }
         let _ = fs::remove_dir_all(&slot);
         if item.ordered {
             let mut meta = self.read_folder(parent)?;
@@ -301,6 +316,30 @@ mod tests {
         assert_eq!(ws.read_request("two.yaml").unwrap().name, "Two");
         assert_eq!(ws.read_folder("").unwrap().order, ["one", "two", "three"]);
         assert!(ws.trash_list().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_deleted_request_takes_its_examples_folder_along_and_brings_it_back() {
+        let (dir, ws) = workspace();
+        ws.create_request("", "One", &get("1")).unwrap();
+        let examples = dir.path().join("one.examples");
+        fs::create_dir(&examples).unwrap();
+        fs::write(examples.join("ok.json"), "{}").unwrap();
+
+        let item = ws.trash("one.yaml").unwrap();
+        assert!(!examples.exists());
+        let slot = dir.path().join(".getman/trash").join(&item.id);
+        assert!(slot.join("one.examples/ok.json").is_file());
+        assert_eq!(ws.trash_list().unwrap().len(), 1);
+
+        assert_eq!(ws.restore(&item.id).unwrap(), "one.yaml");
+        assert_eq!(fs::read_to_string(examples.join("ok.json")).unwrap(), "{}");
+        assert!(!slot.exists());
+
+        ws.trash("one.yaml").unwrap();
+        ws.empty_trash().unwrap();
+        assert!(!dir.path().join(".getman/trash").exists());
+        assert!(!examples.exists());
     }
 
     #[test]
