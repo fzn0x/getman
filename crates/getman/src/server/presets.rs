@@ -40,7 +40,7 @@ pub(crate) fn read(workspace: &Workspace) -> Result<Vec<Preset>, Error> {
     if text.trim().is_empty() {
         return Ok(Vec::new());
     }
-    serde_yaml_ng::from_str(&text).map_err(|source| Error::Yaml { path, source })
+    getman_core::yaml::from_str(&text).map_err(|source| Error::Yaml { path, source })
 }
 
 /// Replaces the workspace's presets.
@@ -81,5 +81,18 @@ mod tests {
             headers: Vec::new(),
         }];
         assert!(write(&workspace, &unnamed).is_err());
+    }
+
+    #[test]
+    fn hand_written_values_keep_their_text() {
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = Workspace::init(dir.path(), "Test").unwrap();
+        workspace.ensure_state_dir().unwrap();
+        fs::write(
+            file(&workspace),
+            "- name: Versioned\n  headers:\n    - name: X-Api-Version\n      value: 2.0\n",
+        )
+        .unwrap();
+        assert_eq!(read(&workspace).unwrap()[0].headers[0].value, "2.0");
     }
 }
