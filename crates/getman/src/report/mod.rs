@@ -639,7 +639,7 @@ fn print_summary(summary: &RunSummary) {
     if let Some(reason) = &summary.stopped {
         anstream::println!("\n  {}", paint(YELLOW, &format!("Stopped: {reason}")));
     }
-    let verdict = if summary.passed() && summary.stopped.is_none() {
+    let verdict = if summary.succeeded() {
         paint(GREEN.bold(), "All passed.")
     } else {
         paint(RED.bold(), "Failed.")

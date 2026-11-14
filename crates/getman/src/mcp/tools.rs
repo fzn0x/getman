@@ -370,7 +370,7 @@ impl Tools {
         .map_err(|e| e.to_string())?;
         let summary = &report.summary;
         Ok(json!({
-            "passed": summary.passed() && summary.stopped.is_none(),
+            "passed": summary.succeeded(),
             "summary": summary,
             "requests": requests,
         }))

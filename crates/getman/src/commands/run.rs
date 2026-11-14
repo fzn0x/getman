@@ -164,11 +164,81 @@ pub(crate) async fn run(args: RunArgs) -> Outcome {
         persist_changes(&workspace, environment.as_deref(), &changes).map_err(|e| e.to_string())?;
     }
 
-    Ok(
-        if report.summary.passed() && report.summary.stopped.is_none() {
-            ExitCode::SUCCESS
-        } else {
-            ExitCode::FAILURE
-        },
-    )
+    Ok(if report.summary.succeeded() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::Router;
+    use clap::Parser as _;
+    use getman_core::model::{Request, Scripts};
+    use getman_core::workspace::Workspace;
+
+    use super::*;
+    use crate::cli::{Cli, Command};
+
+    /// A workspace whose first request runs `post` after a check, and a
+    /// second request the run should never reach.
+    async fn workspace(check: &str, post: &str) -> tempfile::TempDir {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, Router::new().fallback(|| async { "ok" })).await
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = Workspace::init(dir.path(), "Stop").unwrap();
+        for (name, post) in [("Login", post), ("Never", "")] {
+            let request = Request {
+                url: format!("http://{address}/{name}"),
+                checks: vec![check.to_owned()],
+                scripts: Scripts {
+                    pre_request: String::new(),
+                    post_response: post.to_owned(),
+                },
+                ..Request::default()
+            };
+            workspace.create_request("", name, &request).unwrap();
+        }
+        dir
+    }
+
+    /// Runs `getman run` on the workspace, and returns its exit status and
+    /// the JSON report.
+    async fn run_workspace(dir: &tempfile::TempDir) -> (ExitCode, serde_json::Value) {
+        let report = dir.path().join("report.json");
+        let cli = Cli::try_parse_from([
+            "getman".to_owned(),
+            "run".to_owned(),
+            "-w".to_owned(),
+            dir.path().display().to_string(),
+            "-r".to_owned(),
+            format!("json={}", report.display()),
+        ])
+        .unwrap();
+        let Some(Command::Run(args)) = cli.command else {
+            panic!("not a run")
+        };
+        let status = run(args).await.unwrap();
+        let report = std::fs::read_to_string(report).unwrap();
+        (status, serde_json::from_str(&report).unwrap())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_run_a_script_stops_on_purpose_passes_unless_something_failed() {
+        let stop = "gm.test('signed in', () => {}); gm.execution.stopExecution();";
+        let dir = workspace("status == 200", stop).await;
+        let (status, report) = run_workspace(&dir).await;
+        assert_eq!(report["summary"]["stopped"], "Login stopped the run");
+        assert_eq!(report["summary"]["requests"], 1);
+        assert_eq!(status, ExitCode::SUCCESS, "{report:#}");
+
+        let dir = workspace("status == 201", stop).await;
+        let (status, report) = run_workspace(&dir).await;
+        assert_eq!(report["summary"]["stopped"], "Login stopped the run");
+        assert_eq!(status, ExitCode::FAILURE, "{report:#}");
+    }
 }
