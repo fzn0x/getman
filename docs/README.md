@@ -25,6 +25,7 @@ These pages are also published at <https://fzn0x.github.io/getman/>.
 - [Import and export](import-export.md): Postman, cURL, code
 - [Browser UI](browser-ui.md): tabs, console, history, the trash, header presets
 - [Terminal UI](terminal.md)
+- [Keyboard shortcuts](keyboard-shortcuts.md): the browser, desktop and terminal UIs
 
 **Reference**
 

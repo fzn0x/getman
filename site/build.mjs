@@ -48,6 +48,7 @@ export const sections = [
       "import-export",
       "browser-ui",
       "terminal",
+      "keyboard-shortcuts",
     ],
   },
   {
