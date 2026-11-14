@@ -113,13 +113,17 @@ ${hreflang}<meta property="og:type" content="${home ? "website" : "article"}">
   document.documentElement.classList.add("js");
   // The visitor's system, so downloads and install commands match it.
   var platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
-  // Phones, tablets (iPadOS says Mac) and ChromeOS (which says Linux) get the general links.
-  var other = /Android|iPhone|iPad|iPod|CrOS/.test(navigator.userAgent) || (/Mac/.test(platform) && navigator.maxTouchPoints > 1);
-  document.documentElement.dataset.system = other ? "other"
+  // Phones are named for their app. iPadOS says Mac, so touch points tell it from a Mac.
+  // ChromeOS says Linux and gets the general links.
+  var ua = navigator.userAgent;
+  var system = /Android/.test(ua) ? "android"
+    : /iPhone|iPad|iPod/.test(ua) || (/Mac/.test(platform) && navigator.maxTouchPoints > 1) ? "ios"
+    : /CrOS/.test(ua) ? "other"
     : /Win/.test(platform) ? "windows"
     : /Mac/.test(platform) ? "macos"
     : /Linux/.test(platform) ? "linux"
     : "other";
+  document.documentElement.dataset.system = system;
 </script>
 <script src="${root}${assets.js}" defer></script>
 ${extra}</head>`;
