@@ -1,0 +1,132 @@
+name: Mobile
+
+# Builds the Android and iOS apps (crates/getman-mobile) when a change
+# could break them. The Android job builds the release APK for ARM64 phones,
+# unsigned. The iOS job builds for the simulator, starts the app there and
+# keeps a screenshot as an artifact, since nothing else runs the iOS app
+# before a release.
+#
+# QuickJS's bindings are generated for these targets at build time, which
+# needs libclang and the target's system headers: BINDGEN_EXTRA_CLANG_ARGS
+# points at them.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "crates/**"
+      - Cargo.toml
+      - Cargo.lock
+      - .github/workflows/mobile.yml
+  pull_request:
+    paths:
+      - "crates/**"
+      - Cargo.toml
+      - Cargo.lock
+      - .github/workflows/mobile.yml
+
+permissions:
+  contents: read
+
+# A pull request's newer push replaces its older run. Each push to main runs
+# to its end.
+concurrency:
+  group: mobile-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  android:
+    name: Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-web
+      - working-directory: web
+        run: npm run build
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: android
+      - name: Install libclang
+        run: sudo apt-get install -y --no-install-recommends libclang-dev
+      - name: Install the Tauri command line
+        working-directory: crates/getman-mobile
+        run: npm ci
+      - name: Build the APK
+        working-directory: crates/getman-mobile
+        run: |
+          export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          export BINDGEN_EXTRA_CLANG_ARGS="--sysroot=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          npm run tauri -- android build --ci --apk --target aarch64
+          find gen/android/app/build/outputs/apk -name '*.apk' -exec ls -l {} +
+      - uses: actions/upload-artifact@v7
+        with:
+          name: getman-android-arm64-unsigned
+          path: crates/getman-mobile/gen/android/app/build/outputs/apk/**/*.apk
+
+  ios:
+    name: iOS simulator
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-web
+      - working-directory: web
+        run: npm run build
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ios-sim
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Install the Tauri command line
+        working-directory: crates/getman-mobile
+        run: npm ci
+      # The Xcode project is generated here rather than kept in the
+      # repository: its only change from Tauri's is Info.ios.plist, which
+      # the command line merges in.
+      - name: Generate the Xcode project
+        working-directory: crates/getman-mobile
+        run: npm run tauri -- ios init --ci
+      - name: Build for the simulator
+        working-directory: crates/getman-mobile
+        run: |
+          export BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios_sim="-isysroot $(xcrun --sdk iphonesimulator --show-sdk-path)"
+          npm run tauri -- ios build --ci --debug --target aarch64-sim
+      - name: Start the app in the simulator
+        run: |
+          app=$(find crates/getman-mobile/gen/apple/build -name 'Getman.app' -type d -path '*sim*' | head -n 1)
+          [ -n "$app" ] || app=$(find crates/getman-mobile/gen/apple/build -name 'Getman.app' -type d | head -n 1)
+          echo "App: $app"
+          device=$(xcrun simctl list devices available --json |
+            python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for k in sorted(d, reverse=True) if "iOS" in k for x in d[k] if x["name"].startswith("iPhone")))')
+          xcrun simctl boot "$device"
+          xcrun simctl bootstatus "$device"
+          xcrun simctl install "$device" "$app"
+          xcrun simctl launch "$device" io.github.fzn0x.getman
+          # The server starts and the page paints within a few seconds.
+          sleep 20
+          mkdir -p shots
+          xcrun simctl io "$device" screenshot shots/ios-simulator.png
+          # The workspace is made in the app's documents on first start.
+          data=$(xcrun simctl get_app_container "$device" io.github.fzn0x.getman data)
+          ls -R "$data/Documents" | head -n 40
+          test -f "$data/Documents/My workspace/getman.yaml"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ios-simulator-screenshot
+          path: shots/
