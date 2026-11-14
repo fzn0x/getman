@@ -294,6 +294,12 @@ Material's secondary tabs: 13px labels in on-surface-variant on a strip with an 
 ### Segmented buttons
 Body type and response view modes: fully rounded groups with outline dividers; the on segment fills with secondary container.
 
+### Open-request tabs
+A strip on the surface container under the top bar. Tabs have 8px top corners; the active one takes the page's surface and weight 500, so it joins the request below, and the others show a state layer on hover with a short outline-variant divider between them. Unsaved titles set italic; a dirty tab's close mark is primary. A dragged tab lands at a 2px primary line.
+
+### Status bar
+24px, on the surface with an outline-variant rule above: version, workspace path and request count in on-surface-variant, separated by 3px outline dots; Console and Shortcuts are quiet links with a state layer, and Console turns primary while the console is open.
+
 ### Navigation (sidebar tree)
 28px rows with a twisty, the method mark in its color, and the name. Hover fills the surface container; the current request fills secondary container. Picked rows show a 3px primary bar; drop targets show the primary container.
 
@@ -306,6 +312,9 @@ Snackbars at the bottom right: inverse surface, 4px corners, level 3 shadow, an 
 
 ### Response header
 The head of every response: a faint tint of the status color over the surface, the status code at 36px in that color with the reason phrase beside it, then Time, First byte, Size, Protocol and Tests as label and value pairs. Time opens the timing panel. While a request is out, an indeterminate linear progress bar runs along the top.
+
+### Orbiting mark
+The decoration of the empty workspace and the 401 page: the logo mark on a primary-container disc, with Material Symbols for what Getman does on an inner ring and method marks on an outer one turning the other way (`Orbit.svelte`, a port of Magic UI's Orbiting Circles). Rings are outline-variant hairlines, turns take 36 and 54 seconds, and reduced motion stops them. It shows beside the empty workspace's text only when the main area is at least 880px wide. While the workspace loads, the mark alone breathes in primary.
 
 ### Keys
 `kbd` is an 11px code-face keycap: lowest-container fill, outline-variant border with a 2px bottom edge, 4px corners.
