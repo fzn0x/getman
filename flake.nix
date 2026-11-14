@@ -17,10 +17,19 @@
     in
     {
       # Built from source: `nix build`, or `nix run github:fzn0x/getman`.
-      packages = each (pkgs: rec {
-        getman = pkgs.callPackage ./nix/package.nix { };
-        default = getman;
-      });
+      packages = each (
+        pkgs:
+        let
+          web = pkgs.callPackage ./nix/web.nix { };
+        in
+        rec {
+          getman = pkgs.callPackage ./nix/package.nix { inherit web; };
+          default = getman;
+        }
+        // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+          getman-desktop = pkgs.callPackage ./nix/desktop.nix { inherit web; };
+        }
+      );
 
       apps = each (pkgs: rec {
         getman = {

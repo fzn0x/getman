@@ -3,29 +3,13 @@
 {
   lib,
   rustPlatform,
-  buildNpmPackage,
-  importNpmLock,
+  web,
   pkg-config,
   zstd,
 }:
 
 let
   version = (lib.importTOML ../Cargo.toml).workspace.package.version;
-
-  web = buildNpmPackage {
-    pname = "getman-web";
-    inherit version;
-    src = lib.cleanSource ../web;
-    # The lockfile names every package's hash, so nothing here is kept by
-    # hand: a change of package-lock.json is all `nix build` needs.
-    npmDeps = importNpmLock { npmRoot = ../web; };
-    npmConfigHook = importNpmLock.npmConfigHook;
-    installPhase = ''
-      runHook preInstall
-      cp -r dist $out
-      runHook postInstall
-    '';
-  };
 in
 rustPlatform.buildRustPackage {
   pname = "getman";
