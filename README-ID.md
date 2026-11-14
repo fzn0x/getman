@@ -259,6 +259,6 @@ CI menjalankan semua ini di Linux, Windows dan macOS, melakukan smoke test pada 
 
 ## Lisensi
 
-Dilisensikan di bawah [Apache License, Version 2.0](LICENSE-APACHE) atau [lisensi MIT](LICENSE-MIT), sesuai pilihan kamu. Kontribusi diterima dengan syarat yang sama. Font Departure Mono di `web/public/fonts` berada di bawah SIL Open Font License, lihat file lisensinya di sana.
+Dilisensikan di bawah [Apache License, Version 2.0](LICENSE-APACHE) atau [lisensi MIT](LICENSE-MIT), sesuai pilihan kamu. Kontribusi diterima dengan syarat yang sama. Font di `web/public/fonts` berada di bawah SIL Open Font License dan ikonnya adalah Material Symbols di bawah Apache License, lihat [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Postman adalah trademark dari Postman, Inc. Getman tidak berafiliasi dengan atau didukung oleh Postman.
