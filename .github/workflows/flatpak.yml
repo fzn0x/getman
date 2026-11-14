@@ -45,7 +45,12 @@ jobs:
       - name: Download the newest release's .deb
         run: |
           mkdir debs
-          tag="$(curl -fsSL -o /dev/null -w '%{redirect_url}' "https://github.com/$GITHUB_REPOSITORY/releases/latest" | sed 's#.*/##')"
+          # Not following the redirect leaves its target, which ends in the tag.
+          tag="$(curl -fsS -o /dev/null -w '%{redirect_url}' "https://github.com/$GITHUB_REPOSITORY/releases/latest" | sed 's#.*/##')"
+          if [ -z "$tag" ]; then
+            echo "::error::Could not find the newest release's tag"
+            exit 1
+          fi
           echo "TAG=$tag" >> "$GITHUB_ENV"
           curl -fsSL -o "debs/getman-desktop_${{ matrix.deb }}.deb" \
             "https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/getman-desktop_${{ matrix.deb }}.deb"
