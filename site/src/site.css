@@ -1437,7 +1437,7 @@ html:not(.js) .doc-actions {
   top: var(--bar);
   max-height: calc(100vh - var(--bar));
   overflow-y: auto;
-  padding: var(--s5) var(--s5) var(--s6) var(--gutter);
+  padding: var(--s5) var(--s3) var(--s6) var(--gutter);
 }
 
 .sidebar-toggle {
@@ -1485,9 +1485,11 @@ html:not(.js) .doc-actions {
   font-weight: 600;
 }
 
+/* The card keeps clear of the sidebar's scrollbar, which sits on the
+   sidebar's right edge. */
 .doc {
   min-width: 0;
-  margin: var(--s5) 0 var(--s7);
+  margin: var(--s5) 0 var(--s7) var(--s4);
   padding: var(--s7);
   border: 1px solid var(--outline-variant);
   border-radius: var(--r-lg);
