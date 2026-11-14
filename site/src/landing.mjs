@@ -213,18 +213,20 @@ const features = [
   },
 ];
 
-// Measured on Windows 11 x64 with the 0.3.0 release files (README, "Performance").
+// The start time and sizes were measured on Windows 11 x64 with the 0.3.0
+// release files (README, "Performance"). The languages are those of
+// `getman export --to`.
 const facts = [
   { value: 7, unit: "ms", label: "to start the command" },
   { value: 9.5, unit: "MiB", label: "download, browser UI included" },
   { value: 15.2, unit: "MiB", label: "desktop app setup" },
-  { value: 0, unit: "accounts", label: "no sign-in, no cloud, no telemetry" },
+  { value: 18, unit: "languages", label: "to export a request as code" },
 ];
 
 export function landing({ root, assets, site, repo, pages }) {
   const title = "Getman: fast, open-source Postman alternative in Rust";
   const description =
-    "Getman is a local-first, offline API client with HTTP/2, HTTP/3, gRPC and WebSocket, compatible with Postman, for the browser, desktop, terminal and CI, with no account, no cloud and no telemetry.";
+    "Getman is an open-source Postman alternative, written in Rust. Requests are YAML files in your repository, sent from a desktop app, a browser, a terminal or CI, over HTTP/1.1, HTTP/2, HTTP/3, gRPC, WebSocket, SSE and Socket.IO.";
   const app = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -271,9 +273,8 @@ ${bar({ root, current: "" })}
 
 <section class="hero">
   <div class="hero-copy">
-    <p class="eyebrow">Open source · No account · No cloud</p>
     <h1>Getman, the fast <span class="accent">open-source Postman alternative</span></h1>
-    <p class="lead">Send, test and run your API requests from plain YAML files in your repository. On the desktop, in the browser, in the terminal and in CI.</p>
+    <p class="lead">An open-source Postman alternative, written in Rust. Requests are YAML files in your repository, sent from a desktop app, a browser, a terminal or CI.</p>
     ${download}
     <div class="cli">
       <div class="command" role="group" aria-label="Install the command-line tool">
@@ -311,14 +312,14 @@ ${bar({ root, current: "" })}
 </section>
 
 <section class="closing" aria-labelledby="closing">
-  <h2 id="closing">Small, quick and yours</h2>
+  <h2 id="closing">Download Getman</h2>
   <dl class="facts">${facts
     .map(
       (f) =>
         `<div><dt>${f.label}</dt><dd><span class="count" data-to="${f.value}">${f.value}</span> <span class="unit">${f.unit}</span></dd></div>`,
     )
     .join("")}</dl>
-  <p class="facts-note">Measured on Windows 11 x64 with the 0.3.0 release files. <a href="${repo}#fast">How it was measured</a></p>
+  <p class="facts-note">Start time and sizes measured on Windows 11 x64 with the 0.3.0 release files. <a href="${repo}#fast">How it was measured</a></p>
   <div class="closing-get">
     ${download}
     <p class="licence">Free and open source under MIT or Apache-2.0.</p>
