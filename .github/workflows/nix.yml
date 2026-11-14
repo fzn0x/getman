@@ -1,0 +1,44 @@
+name: Nix
+
+# Builds the flake when anything it builds from changes. The flake reads
+# Cargo.lock and web/package-lock.json itself, so a change of either can
+# break it without touching flake.nix.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - flake.nix
+      - flake.lock
+      - nix/**
+      - Cargo.lock
+      - web/package-lock.json
+      - .github/workflows/nix.yml
+  pull_request:
+    paths:
+      - flake.nix
+      - flake.lock
+      - nix/**
+      - Cargo.lock
+      - web/package-lock.json
+      - .github/workflows/nix.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  flake:
+    name: nix build and flake check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      - run: nix build --print-build-logs
+      - run: ./result/bin/getman --version
+      - run: nix build .#getman-desktop --print-build-logs
+      - run: nix flake check --print-build-logs
