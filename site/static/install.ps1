@@ -15,11 +15,29 @@ $repo = 'fzn0x/getman'
 $version = if ($env:GETMAN_VERSION) { $env:GETMAN_VERSION } else { 'latest' }
 $dir = if ($env:GETMAN_INSTALL_DIR) { $env:GETMAN_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'Programs\getman' }
 
-# ARM64 Windows 11 runs the x64 build.
-if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64' -and $env:PROCESSOR_ARCHITECTURE -ne 'ARM64') {
-    throw "There is no Getman release for $($env:PROCESSOR_ARCHITECTURE) Windows. Build it from source: https://github.com/$repo#building-from-source"
+# The architecture of Windows itself. PROCESSOR_ARCHITECTURE describes the
+# running process, so it says AMD64 for an x64 PowerShell emulated on ARM64.
+# The machine-wide value in the registry is the real one.
+function Get-WindowsArchitecture {
+    try {
+        $key = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment'
+        $native = (Get-ItemProperty -Path $key -Name PROCESSOR_ARCHITECTURE -ErrorAction Stop).PROCESSOR_ARCHITECTURE
+        if ($native) { return $native }
+    }
+    catch { }
+    if ($env:PROCESSOR_ARCHITEW6432) { return $env:PROCESSOR_ARCHITEW6432 }
+    return $env:PROCESSOR_ARCHITECTURE
 }
-$target = 'x86_64-pc-windows-msvc'
+
+function Get-GetmanTarget([string]$architecture) {
+    switch ($architecture) {
+        'ARM64' { return 'aarch64-pc-windows-msvc' }
+        'AMD64' { return 'x86_64-pc-windows-msvc' }
+        default { throw "There is no Getman release for $architecture Windows. Build it from source: https://github.com/$repo#building-from-source" }
+    }
+}
+
+$target = Get-GetmanTarget (Get-WindowsArchitecture)
 
 if ($version -eq 'latest') {
     $release = Invoke-RestMethod -UseBasicParsing -Uri "https://api.github.com/repos/$repo/releases/latest" -Headers @{ 'User-Agent' = 'getman-install' }

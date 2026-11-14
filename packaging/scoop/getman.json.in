@@ -8,6 +8,11 @@
       "url": "{{cliurl:x86_64-pc-windows-msvc}}",
       "hash": "{{clisha256:x86_64-pc-windows-msvc}}",
       "extract_dir": "getman-{{tag}}-x86_64-pc-windows-msvc"
+    },
+    "arm64": {
+      "url": "{{cliurl:aarch64-pc-windows-msvc}}",
+      "hash": "{{clisha256:aarch64-pc-windows-msvc}}",
+      "extract_dir": "getman-{{tag}}-aarch64-pc-windows-msvc"
     }
   },
   "bin": "getman.exe",
@@ -19,6 +24,10 @@
       "64bit": {
         "url": "https://github.com/{{repo}}/releases/download/v$version/getman-v$version-x86_64-pc-windows-msvc.zip",
         "extract_dir": "getman-v$version-x86_64-pc-windows-msvc"
+      },
+      "arm64": {
+        "url": "https://github.com/{{repo}}/releases/download/v$version/getman-v$version-aarch64-pc-windows-msvc.zip",
+        "extract_dir": "getman-v$version-aarch64-pc-windows-msvc"
       }
     },
     "hash": {
