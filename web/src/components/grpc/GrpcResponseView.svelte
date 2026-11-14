@@ -316,8 +316,9 @@
 
   .error {
     padding: var(--s3) var(--s4);
-    background: var(--accent-wash);
-    border-bottom: 1px solid var(--error);
+    border-bottom: 1px solid var(--outline-variant);
+    background: var(--error-container);
+    color: var(--on-error-container);
   }
 
   .error p {
@@ -325,14 +326,14 @@
   }
 
   .message {
-    color: var(--error);
+    color: inherit;
     font-weight: 600;
     word-break: break-word;
   }
 
   .hint {
     margin-top: 4px !important;
-    color: var(--ink-2);
+    color: inherit;
   }
 
   .warning {
