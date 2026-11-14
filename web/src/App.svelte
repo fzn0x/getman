@@ -43,6 +43,7 @@
     store,
     tabs,
     undoLast,
+    viewport,
     ws,
   } from "./lib/store.svelte";
 
@@ -57,7 +58,7 @@
     void loadWorkspace();
     void startDesktop();
     const media = matchMedia("(max-width: 900px)");
-    const update = () => (narrow = media.matches);
+    const update = () => (narrow = viewport.overlay = media.matches);
     update();
     // On a phone the sidebar covers the page, so start with it closed.
     if (narrow) prefs.sidebarOpen = false;
