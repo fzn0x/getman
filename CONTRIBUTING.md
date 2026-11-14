@@ -214,6 +214,7 @@ version, the download URLs and the SHA-256 sums.
 | winget | By hand: a pull request from a fork of `microsoft/winget-pkgs` adding the three files under `manifests/f/fzn0x/Getman/<version>/`; the first one is reviewed by hand |
 | Flatpak: `flatpak install --user Getman-linux-x86_64.flatpak` | The `flatpak` job in `release.yml` builds `Getman-linux-x86_64.flatpak` and `Getman-linux-aarch64.flatpak` and the release carries them; see below |
 | AUR: `yay -S getman-bin` | The `publish-aur` job in `release.yml` pushes `PKGBUILD` and `.SRCINFO` to `ssh://aur@aur.archlinux.org/getman-bin.git`; see below |
+| Nix: `nix run github:fzn0x/getman` | Nothing to publish: the flake at the repository's root builds the command line, and on Linux the desktop app, from source, at any commit or tag; see below |
 
 The job pushes with the repository secret `PACKAGES_TOKEN`, a
 fine-grained personal access token with read and write access to the
@@ -271,6 +272,24 @@ for pull requests that touch `packaging/flatpak` or the job, so a broken
 manifest shows before release day. If the `flatpak` job fails on release
 day, the release goes out without the bundle and says so in a warning;
 build it again and attach it with `gh release upload`.
+
+### The Nix flake
+
+`flake.nix` and `nix/package.nix` build the `getman` command, with the
+browser UI built into it, from source. The UI is built first from
+`web/package-lock.json` with nixpkgs' `importNpmLock` (`nix/web.nix`), and
+the Rust crates
+from `Cargo.lock` with `cargoLock.lockFile`, so no hash is kept by hand: a
+change of either lockfile needs no edit in `nix/`. Only `flake.lock`, which
+pins nixpkgs, is updated with `nix flake update`. `packages.getman` is
+the command (`nix/package.nix`) and `packages.getman-desktop` the desktop
+app, for Linux only (`nix/desktop.nix`, built with nixpkgs'
+`cargo-tauri.hook`).
+
+The workflow `nix.yml` runs `nix build` and `nix flake check` when the
+flake, `flake.lock`, `Cargo.lock` or `web/package-lock.json` change. The
+flake takes the version from the workspace's `Cargo.toml`, so a release
+needs nothing there.
 
 Try a changed template by hand before a release:
 `brew install --formula ./getman.rb`, `scoop install ./getman.json`,

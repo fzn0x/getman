@@ -30,6 +30,7 @@ front end is a thin layer over it:
 | `web/` | The browser UI, built into the binary |
 | `docs/`, `site/` | These pages, and the site built from them |
 | `packaging/` | Templates for the Homebrew, Scoop, winget and AUR manifests, and the Flatpak manifest |
+| `flake.nix`, `nix/` | The Nix flake, which builds the `getman` command and the Linux desktop app from source |
 
 The root `Cargo.toml` makes the crates one workspace. Its
 `default-members` leave the desktop and phone apps out, so the rest
