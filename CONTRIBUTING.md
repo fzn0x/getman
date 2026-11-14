@@ -70,7 +70,8 @@ CI also runs checks that need other tools. You can run them too:
 - **Dependencies**: `cargo deny check` (install it with `cargo install
   cargo-deny --locked`) reads `deny.toml`, and `node
   .github/scripts/check-npm-licenses.mjs` checks the npm packages. A new
-  dependency must have a licence compatible with MIT OR Apache-2.0. If
+  dependency must have a permissive licence, compatible with both MIT and
+  GPL-3.0-or-later. If
   one has an advisory you decide is harmless, allow it in `deny.toml` with
   the reason.
 - **Workflows**: [actionlint](https://github.com/rhysd/actionlint) checks

@@ -14,7 +14,7 @@
 <p align="center">
   <a href="https://github.com/fzn0x/getman/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/fzn0x/getman/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/fzn0x/getman/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/fzn0x/getman?color=3f51b5"></a>
-  <a href="#lisensi"><img alt="MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-3f51b5.svg"></a>
+  <a href="#lisensi"><img alt="MIT OR GPL-3.0-or-later" src="https://img.shields.io/badge/license-MIT%20OR%20GPL--3.0--or--later-3f51b5.svg"></a>
   <a href="https://fzn0x.github.io/getman/"><img alt="Documentation" src="https://img.shields.io/badge/docs-fzn0x.github.io%2Fgetman-3f51b5.svg"></a>
 </p>
 
@@ -393,6 +393,6 @@ Lisensi dan pemberitahuan untuk semua yang dibundel ada di [THIRD_PARTY_NOTICES.
 
 ## Lisensi
 
-Dilisensikan di bawah [Apache License, Version 2.0](LICENSE-APACHE) atau [lisensi MIT](LICENSE-MIT), sesuai pilihan kamu. Kontribusi diterima dengan syarat yang sama. Font di `web/public/fonts` berada di bawah SIL Open Font License dan ikonnya adalah Material Symbols di bawah Apache License, lihat [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Dilisensikan di bawah [GNU General Public License versi 3](LICENSE-GPL) atau versi yang lebih baru, atau [lisensi MIT](LICENSE-MIT), sesuai pilihan kamu. Kontribusi diterima dengan syarat yang sama. Rilis sampai 0.3.4 berlisensi MIT atau Apache-2.0 dan tetap begitu. Font di `web/public/fonts` berada di bawah SIL Open Font License dan ikonnya adalah Material Symbols di bawah Apache License, lihat [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Postman adalah trademark dari Postman, Inc. Getman tidak berafiliasi dengan atau didukung oleh Postman.

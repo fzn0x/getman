@@ -5,7 +5,8 @@
 //
 //   node .github/scripts/check-npm-licenses.mjs
 //
-// Getman is MIT OR Apache-2.0, so what ends up in a build must be permissive.
+// Getman is MIT OR GPL-3.0-or-later, and what ends up in a build must be
+// permissive, so a build can be taken under either licence.
 // Packages that only run while building (`dev` in the lockfile) may also be
 // MPL-2.0, which asks only that changes to its own files are shared: nothing
 // of it is copied into what Getman ships. Anything else fails, and so does a

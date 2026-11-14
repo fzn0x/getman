@@ -14,7 +14,7 @@
 <p align="center">
   <a href="https://github.com/fzn0x/getman/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/fzn0x/getman/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/fzn0x/getman/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/fzn0x/getman?color=3f51b5"></a>
-  <a href="#license"><img alt="MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-3f51b5.svg"></a>
+  <a href="#license"><img alt="MIT OR GPL-3.0-or-later" src="https://img.shields.io/badge/license-MIT%20OR%20GPL--3.0--or--later-3f51b5.svg"></a>
   <a href="https://fzn0x.github.io/getman/"><img alt="Documentation" src="https://img.shields.io/badge/docs-fzn0x.github.io%2Fgetman-3f51b5.svg"></a>
 </p>
 
@@ -521,11 +521,15 @@ code, issues and reviews. What changed in each release is in
 
 ## License
 
-Licensed under either of the [Apache License, Version 2.0](LICENSE-APACHE)
-or the [MIT license](LICENSE-MIT), at your option. Contributions are
-accepted under the same terms. The fonts in `web/public/fonts` are under the
-SIL Open Font License and the icons are Material Symbols under the Apache
-License; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Licensed under either of the [GNU General Public License, version 3](LICENSE-GPL)
+or any later version, or the [MIT license](LICENSE-MIT), at your option.
+Contributions are accepted under the same terms. Releases up to 0.3.4
+were licensed under MIT or Apache-2.0 and stay so.
+
+The fonts in `web/public/fonts` are under the SIL Open Font License, and the
+icons are Material Symbols under the
+[Apache License, Version 2.0](LICENSES/Apache-2.0.txt); see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Postman is a trademark of Postman, Inc. Getman is not affiliated with or
 endorsed by Postman.

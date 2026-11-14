@@ -72,7 +72,9 @@ jobs:
         run: |
           name="getman-$GITHUB_REF_NAME-${{ matrix.target }}"
           mkdir "$name"
-          cp README.md LICENSE-MIT LICENSE-APACHE THIRD_PARTY_NOTICES.md "$name/"
+          mkdir -p "$name/LICENSES"
+          cp README.md LICENSE-MIT LICENSE-GPL THIRD_PARTY_NOTICES.md "$name/"
+          cp LICENSES/Apache-2.0.txt "$name/LICENSES/"
           if [ "$RUNNER_OS" = "Windows" ]; then
             cp "target/${{ matrix.target }}/release/getman.exe" "$name/"
             7z a "$name.zip" "$name" > /dev/null
@@ -210,7 +212,9 @@ jobs:
               mkdir -p portable/Getman/bin
               cp "target/${{ matrix.target }}/release/getman-desktop.exe" portable/Getman/Getman.exe
               cp crates/getman-desktop/windows/bin/getman.exe portable/Getman/bin/
-              cp README.md LICENSE-MIT LICENSE-APACHE THIRD_PARTY_NOTICES.md portable/Getman/
+              mkdir -p portable/Getman/LICENSES
+              cp README.md LICENSE-MIT LICENSE-GPL THIRD_PARTY_NOTICES.md portable/Getman/
+              cp LICENSES/Apache-2.0.txt portable/Getman/LICENSES/
               (cd portable && 7z a "../out/Getman-windows-$arch-portable.zip" Getman > /dev/null)
               ;;
             macOS)

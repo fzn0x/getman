@@ -236,7 +236,7 @@ export function landing({ root, assets, site, repo, pages }) {
     applicationCategory: "DeveloperApplication",
     operatingSystem: "Windows, macOS, Linux",
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-    license: [`${repo}/blob/main/LICENSE-MIT`, `${repo}/blob/main/LICENSE-APACHE`],
+    license: [`${repo}/blob/main/LICENSE-MIT`, `${repo}/blob/main/LICENSE-GPL`],
     downloadUrl: `${repo}/releases/latest`,
     screenshot: `${site}images/getman-dark.png`,
     image: `${site}favicon.svg`,
@@ -322,7 +322,7 @@ ${bar({ root, current: "" })}
   <p class="facts-note">Start time and sizes measured on Windows 11 x64 with the 0.3.0 release files. <a href="${repo}#fast">How it was measured</a></p>
   <div class="closing-get">
     ${download}
-    <p class="licence">Free and open source under MIT or Apache-2.0.</p>
+    <p class="licence">Free and open source under MIT or GPL-3.0-or-later.</p>
   </div>
 </section>
 
