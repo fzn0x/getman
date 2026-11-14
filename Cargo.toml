@@ -6,7 +6,7 @@ members = ["crates/*"]
 default-members = ["crates/getman", "crates/getman-core"]
 
 [workspace.package]
-version = "0.3.4"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR GPL-3.0-or-later"
