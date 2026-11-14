@@ -312,7 +312,7 @@ ${bar({ root, current: "" })}
 </section>
 
 <section class="closing" aria-labelledby="closing">
-  <h2 id="closing">Small, quick and yours</h2>
+  <h2 id="closing">Download Getman</h2>
   <dl class="facts">${facts
     .map(
       (f) =>
