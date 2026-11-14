@@ -321,9 +321,10 @@
     cursor: not-allowed;
   }
 
+  /* Wide enough for its placeholder, data[0].name, in the code face. */
   .filter {
     flex: 1;
-    min-width: 80px;
+    min-width: 128px;
     max-width: 260px;
   }
 
