@@ -104,7 +104,8 @@ pub(crate) struct VarArgs {
 /// `VarArgs` for `export`, where `GETMAN_ENVIRONMENT` must not stand in
 /// for `-e`: with `--to postman`, `-e` chooses an environment to export,
 /// so the variable would change what is exported. Code exports read the
-/// variable themselves.
+/// variable themselves. Export runs no scripts, so there is no
+/// `--script-timeout`.
 #[derive(Debug, Args)]
 pub(crate) struct ExportVarArgs {
     /// Environment to use, by file name or display name. With
@@ -117,10 +118,6 @@ pub(crate) struct ExportVarArgs {
     /// for more.
     #[arg(long = "var", value_name = "NAME=VALUE", value_parser = parse_var)]
     pub(crate) vars: Vec<(String, String)>,
-
-    /// Seconds a script may run before it is stopped.
-    #[arg(long, value_name = "SECONDS", default_value_t = 10.0)]
-    pub(crate) script_timeout: f64,
 }
 
 #[derive(Debug, Args)]
@@ -586,6 +583,10 @@ mod tests {
         };
         assert_eq!(args.request.as_deref(), Some("orders"));
         assert_eq!(args.language, "postman");
+        // Export runs no scripts, so it offers no script timeout.
+        assert!(
+            Cli::try_parse_from(["getman", "export", "a.yaml", "--script-timeout", "5"]).is_err()
+        );
         let cli = Cli::try_parse_from([
             "getman",
             "export",
