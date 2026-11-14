@@ -198,16 +198,17 @@ the globals instead.
 | `--indent 2\|4\|tab` | Indent code with two spaces, four spaces or tabs, instead of the language's own habit |
 | `--no-boilerplate` | Leave out the imports and the `main` function, where the language has them (see [Indent and boilerplate](import-export.md#indent-and-boilerplate)) |
 | `-w`, `--workspace DIR` | The workspace |
-| `-e`, `--env NAME` | Environment to fill in variables from; with `--to postman` and no `ITEM`, the environment to export. `GETMAN_ENVIRONMENT` sets it too |
+| `-e`, `--env NAME` | Environment to fill in variables from; with `--to postman` and no `ITEM`, the environment to export. For code, `GETMAN_ENVIRONMENT` sets it too |
 | `--globals` | With `--to postman`, export the globals. Takes no `ITEM` |
 | `--with-secrets` | With `--to postman`, include values from git-ignored local files |
 | `--var NAME=VALUE` | As for `send` |
-| `--script-timeout SECONDS` | Accepted as for `send`; export runs no scripts |
 
 WebSocket, event stream and Socket.IO requests are not written as code;
-connect to them with `getman send`. Because `GETMAN_ENVIRONMENT` counts as
-`-e`, `getman export --to postman` without an `ITEM` exports that
-environment, not the workspace, while the variable is set.
+connect to them with `getman send`. Export runs no scripts, so it has no
+`--script-timeout`. Only code exports read `GETMAN_ENVIRONMENT`, to fill
+in variables. With `--to postman` or `--to openapi` the variable is
+ignored, so `getman export --to postman` without an `ITEM` exports the
+workspace even while it is set. Give `-e` to export an environment.
 
 ## getman mock
 
@@ -248,7 +249,7 @@ standard input and output. Your agent's app starts it; see
 
 | Variable | |
 | --- | --- |
-| `GETMAN_ENVIRONMENT` | The environment for `run`, `send` and `export`, as `-e` gives it. `-e` wins |
+| `GETMAN_ENVIRONMENT` | The environment for `run`, `send` and code exports, as `-e` gives it. `-e` wins. `export --to postman` ignores it |
 | `GETMAN_<NAME>` | Read in requests as `{{$env.GETMAN_NAME}}`; no other environment variable can be read. See [Variables](variables.md#secrets-from-the-environment) |
 | `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, `NO_PROXY` | The proxy, while a request's proxy setting is the default, `system`. See [Proxies](http.md#proxies) |
 | `NO_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE` | Colour; see below |

@@ -187,7 +187,7 @@ in another folder. See
 
 | Variable | Read by | Effect |
 | --- | --- | --- |
-| `GETMAN_ENVIRONMENT` | `getman run`, `send` and `export` | The environment to use, as `-e` names it. `-e` wins |
+| `GETMAN_ENVIRONMENT` | `getman run`, `send` and code exports | The environment to use, as `-e` names it. `-e` wins. `export --to postman` ignores it |
 | `GETMAN_<NAME>` | Request, folder and environment files | Read as `{{$env.GETMAN_NAME}}`. No other environment variable can be read this way. See [Secrets from the environment](variables.md#secrets-from-the-environment) |
 | `GETMAN_VERSION`, `GETMAN_INSTALL_DIR` | The install scripts | The release to install, such as `v0.1.0`, and the folder to install it in. See [Install](getting-started.md#install) |
 | `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, `NO_PROXY` | Requests, connections and gRPC calls | The proxy, while a request's `proxy` is `system`, the default. The lowercase names work too. See [Proxies](http.md#proxies) |
@@ -216,7 +216,7 @@ lists every option of every command.
 | `-p`, `--port PORT` | `getman`, `open` | The port of the UI. Without it, 7878, or the next free port up to 7897, or else any free port. A port you give must be free, or Getman stops with an error |
 | `--no-open` | `getman`, `open` | Print the address instead of opening a browser |
 | `-p`, `--port PORT` | `mock` | The port of the mock server. Default 7979, or the next free port |
-| `-e`, `--env NAME` | `run`, `send`, `export` | The environment, by file name or display name. `GETMAN_ENVIRONMENT` sets it too |
+| `-e`, `--env NAME` | `run`, `send`, `export` | The environment, by file name or display name. `GETMAN_ENVIRONMENT` sets it too, except for `export --to postman` |
 | `--var NAME=VALUE` | `run`, `send`, `export` | Set a variable for this command, over every other value |
 | `--http-version VERSION` | `run`, `send` | `auto`, `http1`, `http2` or `http3`, over every file's setting |
 | `--proxy URL` | `run`, `send` | A proxy URL, `system` or `off`, over every file's setting |
