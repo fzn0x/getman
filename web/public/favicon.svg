@@ -1,1 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges"><rect width="16" height="16" fill="#e5011a"/><g fill="#f2f0eb"><rect x="5" y="4" width="6" height="1"/><rect x="4" y="5" width="2" height="1"/><rect x="10" y="5" width="2" height="1"/><rect x="4" y="6" width="2" height="1"/><rect x="4" y="7" width="2" height="1"/><rect x="4" y="8" width="2" height="1"/><rect x="8" y="8" width="4" height="1"/><rect x="4" y="9" width="2" height="1"/><rect x="10" y="9" width="2" height="1"/><rect x="4" y="10" width="2" height="1"/><rect x="10" y="10" width="2" height="1"/><rect x="5" y="11" width="6" height="1"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" role="img" aria-label="Getman">
+  <title>Getman</title>
+  <rect width="48" height="48" rx="10.8" fill="#3F51B5"/>
+  <path transform="translate(8.16 8.16) scale(0.66)" fill="#FFFFFF" d="M32.42 12.33L27.82 16.93A10 10 0 1 0 27.82 31.07L31.64 27.25L19.5 27.25L26 20.75L40.83 20.75L42.95 22.87A1.6 1.6 0 0 1 42.95 25.13L32.42 35.67A16.5 16.5 0 1 1 32.42 12.33Z"/>
+</svg>
