@@ -1,87 +1,78 @@
-/* Getman — a type specimen for API work.
-   Newsprint paper and rich ink, one synthetic red, a bitmap face at whole
-   pixel multiples for captions and the few numbers worth a glance, and
-   smooth faces for everything people read and type. */
+/* Getman's design system: Material Design 3 at compact density.
+   Color roles come from tokens.css (generated from the logo's indigo); this
+   file sets type, shape, elevation, motion and the shared controls. */
+
+@import "./tokens.css";
 
 @font-face {
-  font-family: "Departure Mono";
-  src: url("/fonts/DepartureMono-Regular.woff2") format("woff2");
-  font-weight: 400;
+  font-family: "Google Sans Flex";
+  src: url("/fonts/GoogleSansFlex.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Google Sans Code";
+  src: url("/fonts/GoogleSansCode.woff2") format("woff2");
+  font-weight: 400 700;
   font-style: normal;
   font-display: block;
 }
 
 :root {
-  color-scheme: light;
-
-  /* The ramp from paper to ink. Every neutral comes from it. */
-  --t0: #f2f0eb;
-  --t1: #e8e5de;
-  --t2: #dcd8cf;
-  --t3: #c9c5bb;
-  --t4: #aeaaa0;
-  --t5: #8d8a82;
-  --t6: #6b6862;
-  --t7: #4f4d48;
-  --t8: #363531;
-  --t9: #1f1e1c;
-  --t10: #0a0a0a;
-
-  --paper: var(--t0);
-  --field: #fbfaf7;
-  --sunken: var(--t1);
-  --ink: var(--t10);
-  --ink-2: var(--t7);
-  --ink-3: var(--t6);
-  --rule: var(--t10);
-  --rule-2: var(--t3);
-  --rule-3: var(--t2);
-
-  --accent: #e5011a;
-  --accent-hover: #c00016;
-  --accent-ink: #ffffff;
-  --accent-text: #c4001a;
-  --accent-wash: #fbe3e5;
-
-  --ok: #0e7a3d;
-  --redirect: #1e4fd0;
-  --error: #c4001a;
-  --warn: #a35a00;
-  --ok-wash: #e2f0e6;
-  --warn-wash: #f7ead6;
-
-  --m-get: #0e7a3d;
-  --m-post: #a35a00;
-  --m-put: #1e4fd0;
-  --m-patch: #7b3fb3;
-  --m-delete: #c4001a;
-  --m-other: var(--t6);
-
-  --var-ink: #7b3fb3;
-  --var-wash: #efe6f8;
-  --dot-strength: 46%;
-  --var-missing: #c4001a;
-
-  --font-bitmap: "Departure Mono", ui-monospace, monospace;
+  /* ---- Type ------------------------------------------------------------ */
   --font-ui:
-    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    "Google Sans Flex", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
   --font-code:
-    ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    "Google Sans Code", ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
 
-  /* The bitmap face only at whole multiples of its pixel grid. */
-  --b1: 11px;
-  --b2: 22px;
-  --b3: 33px;
-  --b4: 44px;
-  --b8: 88px;
-
-  /* The smooth faces in five steps. */
+  /* The Material type scale, trimmed for a dense tool. Body text stays at
+     13px; labels at 12px weight 500; titles and headlines above. */
   --fs-meta: 12px;
   --fs-ui: 13px;
   --fs-code: 13px;
-  --fs-title: 15px;
-  --fs-lead: 18px;
+  --fs-title: 16px;
+  --fs-lead: 16px;
+  --fs-title-large: 22px;
+  --fs-headline: 28px;
+  --fs-headline-large: 36px;
+  --fs-display: 57px;
 
+  /* ---- Shape ----------------------------------------------------------- */
+  --r-xs: 4px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 28px;
+  --r-full: 999px;
+
+  /* ---- Elevation: Material's key and ambient shadows, levels 1 to 3 ----- */
+  --elevation-1:
+    0 1px 2px 0 color-mix(in srgb, var(--shadow) 30%, transparent),
+    0 1px 3px 1px color-mix(in srgb, var(--shadow) 15%, transparent);
+  --elevation-2:
+    0 1px 2px 0 color-mix(in srgb, var(--shadow) 30%, transparent),
+    0 2px 6px 2px color-mix(in srgb, var(--shadow) 15%, transparent);
+  --elevation-3:
+    0 4px 8px 3px color-mix(in srgb, var(--shadow) 15%, transparent),
+    0 1px 3px 0 color-mix(in srgb, var(--shadow) 30%, transparent);
+
+  /* ---- State layers: hover 8%, focus and press 10%, drag 16% ------------ */
+  --hover: 8%;
+  --press: 10%;
+  --drag: 16%;
+
+  /* ---- Motion ---------------------------------------------------------- */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --ease-out: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --dur-short: 150ms;
+  --dur-medium: 250ms;
+  --dur-long: 400ms;
+
+  /* ---- Space ----------------------------------------------------------- */
   --s1: 4px;
   --s2: 8px;
   --s3: 12px;
@@ -89,84 +80,53 @@
   --s5: 24px;
   --s6: 32px;
 
-  --control: 28px;
-  --bar: 40px;
-}
+  --control: 30px;
+  --bar: 44px;
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --t0: #0e0e0d;
-    --t1: #181816;
-    --t2: #23221f;
-    --t3: #33322e;
-    --t4: #4d4b46;
-    --t5: #6d6a64;
-    --t6: #918e86;
-    --t7: #b4b1a8;
-    --t8: #d2cfc6;
-    --t9: #e6e3da;
-    --t10: #f2f0eb;
-    --field: #141412;
-    --rule: #8a877f;
-    --accent: #ff2a3d;
-    --accent-hover: #ff4a5a;
-    --accent-ink: #0e0e0d;
-    --accent-text: #ff5a68;
-    --accent-wash: #3a1418;
-    --ok: #45c47a;
-    --redirect: #7aa2ff;
-    --error: #ff5a68;
-    --warn: #f0a33a;
-    --ok-wash: #12301d;
-    --warn-wash: #33240f;
-    --m-get: #4cc27e;
-    --m-post: #f0a33a;
-    --m-put: #7aa2ff;
-    --m-patch: #c58cff;
-    --m-delete: #ff5a68;
-    --var-ink: #c58cff;
-    --var-wash: #2a1d38;
-    --var-missing: #ff5a68;
-    --dot-strength: 30%;
-  }
-}
-
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --t0: #0e0e0d;
-  --t1: #181816;
-  --t2: #23221f;
-  --t3: #33322e;
-  --t4: #4d4b46;
-  --t5: #6d6a64;
-  --t6: #918e86;
-  --t7: #b4b1a8;
-  --t8: #d2cfc6;
-  --t9: #e6e3da;
-  --t10: #f2f0eb;
-  --field: #141412;
-  --rule: #8a877f;
-  --accent: #ff2a3d;
-  --accent-hover: #ff4a5a;
-  --accent-ink: #0e0e0d;
-  --accent-text: #ff5a68;
-  --accent-wash: #3a1418;
-  --ok: #45c47a;
-  --redirect: #7aa2ff;
-  --error: #ff5a68;
-  --warn: #f0a33a;
-  --ok-wash: #12301d;
-  --warn-wash: #33240f;
-  --m-get: #4cc27e;
-  --m-post: #f0a33a;
-  --m-put: #7aa2ff;
-  --m-patch: #c58cff;
-  --m-delete: #ff5a68;
-  --var-ink: #c58cff;
-  --var-wash: #2a1d38;
-  --var-missing: #ff5a68;
-  --dot-strength: 30%;
+  /* ---- Older names, kept as aliases of the roles above ----------------- */
+  --paper: var(--surface);
+  --field: var(--surface-container-lowest);
+  --sunken: var(--surface-container);
+  --ink: var(--on-surface);
+  --ink-2: var(--on-surface-variant);
+  --ink-3: var(--outline);
+  --rule: var(--outline-variant);
+  --rule-2: var(--outline-variant);
+  --rule-3: var(--surface-container-high);
+  --accent: var(--primary);
+  --accent-hover: color-mix(in srgb, var(--primary) 92%, var(--on-primary));
+  --accent-ink: var(--on-primary);
+  --accent-text: var(--primary);
+  --accent-wash: var(--primary-container);
+  --redirect: var(--info);
+  --ok-wash: var(--ok-container);
+  --warn-wash: var(--warn-container);
+  --m-get: var(--ok);
+  --m-post: var(--warn);
+  --m-put: var(--info);
+  --m-patch: var(--violet);
+  --m-delete: var(--error);
+  --m-other: var(--on-surface-variant);
+  --var-ink: var(--tertiary);
+  --var-wash: var(--tertiary-container);
+  --var-missing: var(--error);
+  --t0: var(--surface);
+  --t1: var(--surface-container);
+  --t2: var(--surface-container-high);
+  --t3: var(--outline-variant);
+  --t4: var(--outline);
+  --t5: var(--outline);
+  --t6: var(--on-surface-variant);
+  --t7: var(--on-surface-variant);
+  --t8: var(--on-surface);
+  --t9: var(--on-surface);
+  --t10: var(--on-surface);
+  --font-bitmap: var(--font-ui);
+  --b1: 12px;
+  --b2: var(--fs-title-large);
+  --b3: var(--fs-headline);
+  --b4: var(--fs-headline-large);
+  --b8: var(--fs-display);
 }
 
 *,
@@ -183,8 +143,8 @@ body,
 
 body {
   margin: 0;
-  background: var(--paper);
-  color: var(--ink);
+  background: var(--surface);
+  color: var(--on-surface);
   font: var(--fs-ui) / 1.45 var(--font-ui);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -192,8 +152,8 @@ body {
 }
 
 ::selection {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--primary-container);
+  color: var(--on-primary-container);
 }
 
 input,
@@ -202,7 +162,7 @@ select,
 button {
   font: inherit;
   color: inherit;
-  caret-color: var(--accent);
+  caret-color: var(--primary);
 }
 
 button {
@@ -210,7 +170,7 @@ button {
 }
 
 a {
-  color: var(--accent-text);
+  color: var(--primary);
   text-underline-offset: 3px;
 }
 
@@ -219,13 +179,13 @@ a {
 }
 
 :focus-visible {
-  outline: 2px dotted var(--ink);
-  outline-offset: 1px;
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--t4) transparent;
+  scrollbar-color: var(--outline-variant) transparent;
 }
 
 ::-webkit-scrollbar {
@@ -238,25 +198,26 @@ a {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--t4);
-  border: 3px solid var(--paper);
+  background: var(--outline-variant);
+  border: 3px solid transparent;
+  border-radius: var(--r-full);
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--t6);
+  background-color: var(--outline);
 }
 
-/* ---- The bitmap face ----------------------------------------------------- */
+/* ---- Labels ---------------------------------------------------------------- */
 
+/* Short labels: section heads, column heads, counts, captions. The class
+   name is older than the design; it now sets Material's label style. */
 .bitmap {
-  font-family: var(--font-bitmap);
+  font-family: var(--font-ui);
   font-size: var(--b1);
-  line-height: 1;
-  letter-spacing: 0;
-  text-transform: uppercase;
-  -webkit-font-smoothing: none;
-  font-smooth: never;
-  font-weight: 400;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
 }
 
 .mono {
@@ -269,7 +230,7 @@ a {
 }
 
 .muted {
-  color: var(--ink-3);
+  color: var(--on-surface-variant);
 }
 
 .sr-only {
@@ -281,141 +242,127 @@ a {
   white-space: nowrap;
 }
 
-/* ---- Controls ---------------------------------------------------------------- */
+/* ---- Buttons --------------------------------------------------------------- */
 
+/* Outlined by default; .primary is filled, .quiet is a text button. A state
+   layer (a translucent wash of the label color) shows hover and press. */
 .btn {
+  --label: var(--primary);
+  --layer: transparent;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--s2);
   height: var(--control);
-  padding: 0 var(--s3);
-  border: 1px solid var(--rule);
-  background: var(--field);
-  color: var(--ink);
-  font-family: var(--font-bitmap);
-  font-size: var(--b1);
+  padding: 0 var(--s4);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--r-full);
+  background: linear-gradient(var(--layer), var(--layer)) transparent;
+  color: var(--label);
+  font-family: var(--font-ui);
+  font-size: var(--fs-ui);
+  font-weight: 500;
   line-height: 1;
-  text-transform: uppercase;
-  -webkit-font-smoothing: none;
+  letter-spacing: 0.01em;
   white-space: nowrap;
   user-select: none;
+  transition:
+    background-color var(--dur-short) var(--ease),
+    box-shadow var(--dur-short) var(--ease);
 }
 
 .btn:hover:not(:disabled) {
-  background: var(--ink);
-  color: var(--paper);
+  --layer: color-mix(in srgb, var(--label) var(--hover), transparent);
 }
 
 .btn:active:not(:disabled) {
-  transform: translateY(1px);
+  --layer: color-mix(in srgb, var(--label) var(--press), transparent);
 }
 
 .btn:disabled {
-  opacity: 0.45;
+  opacity: 0.38;
   cursor: not-allowed;
 }
 
-/* Primary controls get stepped pixel corners, a 4px stair painted in the
-   colour behind the button (--corner). Pressing one draws the specimen's
-   double frame inside it. */
 .btn.primary {
-  --corner: var(--paper);
-  --fill: var(--accent);
-  --steps:
-    linear-gradient(var(--corner), var(--corner)) 0 0 / 4px 1px no-repeat,
-    linear-gradient(var(--corner), var(--corner)) 0 0 / 2px 2px no-repeat,
-    linear-gradient(var(--corner), var(--corner)) 0 0 / 1px 4px no-repeat,
-    linear-gradient(var(--corner), var(--corner)) 100% 0 / 4px 1px no-repeat,
-    linear-gradient(var(--corner), var(--corner)) 100% 0 / 2px 2px no-repeat,
-    linear-gradient(var(--corner), var(--corner)) 100% 0 / 1px 4px no-repeat,
-    linear-gradient(var(--corner), var(--corner)) 0 100% / 4px 1px no-repeat,
-    linear-gradient(var(--corner), var(--corner)) 0 100% / 2px 2px no-repeat,
-    linear-gradient(var(--corner), var(--corner)) 0 100% / 1px 4px no-repeat,
-    linear-gradient(var(--corner), var(--corner)) 100% 100% / 4px 1px no-repeat,
-    linear-gradient(var(--corner), var(--corner)) 100% 100% / 2px 2px no-repeat,
-    linear-gradient(var(--corner), var(--corner)) 100% 100% / 1px 4px no-repeat, var(--fill);
-  border: 0;
-  padding: 0 calc(var(--s3) + 1px);
-  color: var(--accent-ink);
-  background: var(--steps);
+  --label: var(--on-primary);
+  border-color: transparent;
+  background-color: var(--primary);
 }
 
 .btn.primary:hover:not(:disabled) {
-  --fill: var(--accent-hover);
-  background: var(--steps);
-  color: var(--accent-ink);
-}
-
-.btn.primary:active:not(:disabled) {
-  box-shadow:
-    inset 0 0 0 2px var(--fill),
-    inset 0 0 0 3px var(--accent-ink);
+  box-shadow: var(--elevation-1);
 }
 
 .btn.quiet {
+  padding: 0 var(--s3);
   border-color: transparent;
-  background: transparent;
 }
 
-.btn.quiet:hover:not(:disabled) {
-  background: var(--sunken);
-  color: var(--ink);
-}
-
-.btn.danger:hover:not(:disabled) {
-  background: var(--error);
-  border-color: var(--error);
-  color: var(--paper);
+.btn.danger {
+  --label: var(--error);
 }
 
 .icon-btn {
+  --layer: transparent;
   display: inline-grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   padding: 0;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--ink-2);
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--layer);
+  color: var(--on-surface-variant);
+  transition: background-color var(--dur-short) var(--ease);
 }
 
 .icon-btn:hover:not(:disabled) {
-  background: var(--ink);
-  color: var(--paper);
+  --layer: color-mix(in srgb, var(--on-surface-variant) var(--hover), transparent);
+}
+
+.icon-btn:active:not(:disabled) {
+  --layer: color-mix(in srgb, var(--on-surface-variant) var(--press), transparent);
 }
 
 .icon-btn:disabled {
-  opacity: 0.35;
+  opacity: 0.38;
   cursor: not-allowed;
 }
+
+/* ---- Text fields ------------------------------------------------------------- */
 
 .input,
 .select {
   height: var(--control);
   min-width: 0;
-  padding: 0 var(--s2);
-  border: 1px solid var(--rule-2);
+  padding: 0 var(--s3);
+  border: 1px solid var(--outline);
+  border-radius: var(--r-xs);
   background: var(--field);
-  color: var(--ink);
+  color: var(--on-surface);
   font-size: var(--fs-ui);
+  transition:
+    border-color var(--dur-short) var(--ease),
+    box-shadow var(--dur-short) var(--ease);
 }
 
 .input::placeholder,
 textarea::placeholder {
-  color: var(--ink-3);
-  opacity: 1;
+  color: var(--on-surface-variant);
+  opacity: 0.8;
 }
 
 .input:hover,
 .select:hover {
-  border-color: var(--t5);
+  border-color: var(--on-surface);
 }
 
 .input:focus,
 .select:focus,
 textarea:focus {
-  border-color: var(--ink);
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
 }
 
 .input.mono {
@@ -424,56 +371,73 @@ textarea:focus {
 
 .select {
   appearance: none;
-  padding-right: 22px;
+  padding-right: 28px;
   background-image:
-    linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),
-    linear-gradient(-45deg, transparent 50%, var(--ink-2) 50%);
+    linear-gradient(45deg, transparent 50%, var(--on-surface-variant) 50%),
+    linear-gradient(-45deg, transparent 50%, var(--on-surface-variant) 50%);
   background-position:
-    calc(100% - 12px) 12px,
-    calc(100% - 8px) 12px;
-  background-size: 4px 4px;
+    calc(100% - 15px) 50%,
+    calc(100% - 10px) 50%;
+  background-size: 5px 5px;
   background-repeat: no-repeat;
 }
 
 textarea.input {
   height: auto;
-  padding: var(--s2);
+  padding: var(--s2) var(--s3);
   resize: vertical;
 }
 
+/* Material's checkbox: a 2px outline that fills with the primary color and
+   shows a white check when on. */
 .check {
   appearance: none;
-  width: 14px;
-  height: 14px;
+  position: relative;
+  width: 16px;
+  height: 16px;
   margin: 0;
-  border: 1px solid var(--ink-2);
-  background: var(--field);
+  border: 2px solid var(--on-surface-variant);
+  border-radius: 2px;
+  background: transparent;
   display: inline-grid;
   place-content: center;
   cursor: pointer;
   flex: none;
+  transition:
+    background-color var(--dur-short) var(--ease),
+    border-color var(--dur-short) var(--ease);
 }
 
 .check::after {
   content: "";
-  width: 6px;
-  height: 6px;
-  background: var(--ink);
-  transform: scale(0);
+  width: 4px;
+  height: 8px;
+  margin-top: -2px;
+  border: solid var(--on-primary);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0);
+  transition: transform var(--dur-short) var(--ease);
+}
+
+.check:checked {
+  border-color: var(--primary);
+  background: var(--primary);
 }
 
 .check:checked::after {
-  transform: scale(1);
+  transform: rotate(45deg) scale(1);
 }
 
 /* ---- Tabs ------------------------------------------------------------------- */
 
+/* Material's secondary tabs: sentence-case labels with a primary-colored
+   indicator under the selected one. */
 .tablist {
   display: flex;
   align-items: stretch;
   gap: 0;
-  min-height: 32px;
-  border-bottom: 1px solid var(--rule-2);
+  min-height: 36px;
+  border-bottom: 1px solid var(--outline-variant);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -502,27 +466,32 @@ textarea.input {
 }
 
 .tab {
+  --layer: transparent;
   position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 0 10px;
+  padding: 0 12px;
   border: 0;
-  background: none;
-  color: var(--ink-3);
-  font-family: var(--font-bitmap);
-  font-size: var(--b1);
-  text-transform: uppercase;
-  -webkit-font-smoothing: none;
+  background: var(--layer);
+  color: var(--on-surface-variant);
+  font-family: var(--font-ui);
+  font-size: var(--fs-ui);
+  font-weight: 500;
+  letter-spacing: 0.01em;
   white-space: nowrap;
+  transition:
+    background-color var(--dur-short) var(--ease),
+    color var(--dur-short) var(--ease);
 }
 
 .tab:hover {
-  color: var(--ink);
+  --layer: color-mix(in srgb, var(--on-surface) var(--hover), transparent);
+  color: var(--on-surface);
 }
 
 .tab[aria-selected="true"] {
-  color: var(--ink);
+  color: var(--on-surface);
 }
 
 .tab[aria-selected="true"]::after {
@@ -532,11 +501,13 @@ textarea.input {
   right: var(--s2);
   bottom: -1px;
   height: 3px;
-  background: var(--ink);
+  border-radius: 3px 3px 0 0;
+  background: var(--primary);
 }
 
 .tab .count {
-  color: var(--ink-3);
+  color: var(--on-surface-variant);
+  font-variant-numeric: tabular-nums;
 }
 
 .tab .count.bad {
@@ -546,10 +517,11 @@ textarea.input {
 /* ---- Method and status marks ----------------------------------------------- */
 
 .method {
-  font-family: var(--font-bitmap);
-  font-size: var(--b1);
+  font-family: var(--font-code);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
-  -webkit-font-smoothing: none;
   color: var(--m-other);
 }
 
@@ -573,23 +545,22 @@ textarea.input {
   color: var(--ok);
 }
 .status-redirect {
-  color: var(--redirect);
+  color: var(--info);
 }
 .status-client,
 .status-server {
   color: var(--error);
 }
 
-/* ---- Halftone surfaces ---------------------------------------------------- */
+/* ---- Tonal surfaces ---------------------------------------------------------- */
 
+/* Once dot fields; now plain tonal surfaces. */
 .halftone {
-  background-image: radial-gradient(circle, var(--ink) 0.8px, transparent 1.2px);
-  background-size: 4px 4px;
+  background-color: var(--surface-container-high);
 }
 
 .halftone-soft {
-  background-image: radial-gradient(circle, var(--t4) 0.8px, transparent 1.2px);
-  background-size: 4px 4px;
+  background-color: var(--surface-container-low);
 }
 
 /* ---- Empty states ------------------------------------------------------------ */
@@ -601,18 +572,16 @@ textarea.input {
   gap: var(--s3);
   height: 100%;
   padding: var(--s6);
-  color: var(--ink-2);
+  color: var(--on-surface-variant);
 }
 
 .empty h2 {
   margin: 0;
-  font-family: var(--font-bitmap);
-  font-size: var(--b3);
+  font-family: var(--font-ui);
+  font-size: var(--fs-headline);
   font-weight: 400;
-  line-height: 1;
-  text-transform: uppercase;
-  color: var(--ink);
-  -webkit-font-smoothing: none;
+  line-height: 1.25;
+  color: var(--on-surface);
 }
 
 .empty p {
@@ -623,16 +592,16 @@ textarea.input {
 kbd {
   display: inline-block;
   min-width: 18px;
-  padding: 2px 4px;
-  border: 1px solid var(--rule-2);
+  padding: 2px 5px;
+  border: 1px solid var(--outline-variant);
   border-bottom-width: 2px;
-  background: var(--field);
-  color: var(--ink-2);
-  font-family: var(--font-bitmap);
-  font-size: var(--b1);
+  border-radius: var(--r-xs);
+  background: var(--surface-container-low);
+  color: var(--on-surface-variant);
+  font-family: var(--font-code);
+  font-size: 11px;
   line-height: 1;
   text-align: center;
-  -webkit-font-smoothing: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
