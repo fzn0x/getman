@@ -1,0 +1,57 @@
+name: Build the Flatpak bundle
+description: >-
+  Builds Getman-linux-<arch>.flatpak from the .deb of the desktop app, in
+  Flathub's builder image, then installs it and runs it. The caller runs in
+  that image (ghcr.io/flathub-infra/flatpak-github-actions:gnome-<version>,
+  privileged) on a runner of the bundle's architecture.
+
+inputs:
+  arch:
+    description: The Flatpak architecture, x86_64 or aarch64.
+    required: true
+  deb-dir:
+    description: The folder with getman-desktop_amd64.deb and getman-desktop_arm64.deb.
+    required: true
+  tag:
+    description: The release tag the metadata names, such as v0.3.4.
+    required: true
+
+outputs:
+  bundle:
+    description: The bundle's file name.
+    value: ${{ steps.names.outputs.bundle }}
+
+runs:
+  using: composite
+  steps:
+    - id: names
+      shell: bash
+      run: echo "bundle=Getman-linux-${{ inputs.arch }}.flatpak" >> "$GITHUB_OUTPUT"
+    # The metadata names the version and date, which only the tag knows.
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 22
+    - name: Put the .deb and the metadata where the manifest looks
+      shell: bash
+      run: |
+        mkdir -p packaging/flatpak/dist
+        cp "${{ inputs.deb-dir }}"/getman-desktop_*.deb packaging/flatpak/dist/
+        node packaging/render.mjs --only flatpak --tag "${{ inputs.tag }}" --repo "$GITHUB_REPOSITORY" \
+          --dist packaging/flatpak/dist --out packaging/flatpak/dist
+        appstreamcli validate --no-net --explain packaging/flatpak/dist/io.github.fzn0x.getman.metainfo.xml
+    # The action adds Flathub as the bundle's runtime repository, which
+    # makes `flatpak install Getman-linux-<arch>.flatpak` fetch the GNOME
+    # runtime from there.
+    - uses: flatpak/flatpak-github-actions/flatpak-builder@v6.8
+      with:
+        manifest-path: packaging/flatpak/io.github.fzn0x.getman.yml
+        bundle: ${{ steps.names.outputs.bundle }}
+        arch: ${{ inputs.arch }}
+        branch: stable
+        repository-url: https://flathub.org/repo/flathub.flatpakrepo
+        repository-name: flathub
+        cache: false
+        upload-artifact: false
+    - name: Install the bundle and run it
+      shell: bash
+      run: bash packaging/flatpak/check.sh "${{ steps.names.outputs.bundle }}" "${{ inputs.tag }}"

@@ -1,0 +1,56 @@
+name: Flatpak
+
+# Builds the Flatpak bundles from the newest release's .deb files when the
+# manifest, its scripts or the release's Flatpak job change, so a broken
+# manifest shows on the pull request and not on release day.
+
+on:
+  pull_request:
+    paths:
+      - packaging/flatpak/**
+      - packaging/render.mjs
+      - .github/actions/flatpak/**
+      - .github/workflows/flatpak.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    name: Flatpak bundle for ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            deb: amd64
+            runner: ubuntu-latest
+          - arch: aarch64
+            deb: arm64
+            runner: ubuntu-24.04-arm
+    # Keep the image in step with release.yml and runtime-version in the
+    # manifest.
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v7
+      # The container has no gh, so the release's files come from its URL.
+      - name: Download the newest release's .deb
+        run: |
+          mkdir debs
+          tag="$(curl -fsSL -o /dev/null -w '%{redirect_url}' "https://github.com/$GITHUB_REPOSITORY/releases/latest" | sed 's#.*/##')"
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+          curl -fsSL -o "debs/getman-desktop_${{ matrix.deb }}.deb" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/getman-desktop_${{ matrix.deb }}.deb"
+      - uses: ./.github/actions/flatpak
+        with:
+          arch: ${{ matrix.arch }}
+          deb-dir: debs
+          tag: ${{ env.TAG }}
