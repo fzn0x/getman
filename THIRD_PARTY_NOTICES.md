@@ -23,15 +23,6 @@ under `fonts/`. The licence texts are in `OFL-GoogleSansFlex.txt` and
 `OFL-GoogleSansCode.txt` beside them, bundled and served with the fonts. The
 fonts are not sold on their own.
 
-**Departure Mono**, Copyright 2022-2024 Helena Zhang
-(<https://departuremono.com>), under the SIL Open Font License, Version 1.1.
-
-The font file `web/public/fonts/DepartureMono-Regular.woff2` is used by the
-website, which takes it from the browser UI's files, so it is also in the
-`getman` binary and the desktop app. The licence text is in
-`web/public/fonts/OFL-DepartureMono.txt`, which is bundled and served beside
-the font. The font is not modified or sold on its own.
-
 ## Icons
 
 The icons in the browser UI and on the website (`web/src/lib/icons.ts` and
