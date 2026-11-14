@@ -1,5 +1,6 @@
 <script lang="ts">
   import { keyLabel } from "../lib/keys";
+  import { nextTheme, themeLabel } from "../lib/theme";
   import {
     openDialog,
     openEnvironments,
@@ -32,11 +33,6 @@
       selectEnvironment(value);
     }
   }
-
-  const dark = $derived(
-    prefs.theme === "dark" ||
-      (prefs.theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches),
-  );
 </script>
 
 <header class="top">
@@ -119,9 +115,9 @@
     </button>
     <button
       class="icon-btn"
-      aria-label={dark ? "Use the light theme" : "Use the dark theme"}
-      title={dark ? "Light theme" : "Dark theme"}
-      onclick={() => setTheme(dark ? "light" : "dark")}
+      aria-label={themeLabel(prefs.theme)}
+      title={themeLabel(prefs.theme)}
+      onclick={() => setTheme(nextTheme(prefs.theme))}
     >
       <Icon name="contrast" />
     </button>

@@ -5,6 +5,7 @@
 import { api, ApiError } from "./api";
 import { clone, fingerprint, newDraft, toDraft, toRequest } from "./draft";
 import { examples } from "./examples.svelte";
+import { parseTheme, type Theme } from "./theme";
 import { planFor, refreshPlan, runTargets, type PlanItem } from "./plan";
 import {
   closeTargets,
@@ -57,13 +58,13 @@ export function store(key: string, value: unknown): void {
   }
 }
 
-export type Theme = "system" | "light" | "dark";
+export type { Theme };
 export type Layout = "columns" | "rows";
 
 export const prefs = $state({
   theme: (() => {
     try {
-      return (localStorage.getItem("getman.theme") as Theme | null) ?? "system";
+      return parseTheme(localStorage.getItem("getman.theme"));
     } catch {
       return "system" as Theme;
     }
