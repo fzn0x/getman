@@ -228,27 +228,23 @@
   }
 
   .row:focus-visible {
-    outline: 2px dotted var(--ink);
+    outline: 2px solid var(--primary);
     outline-offset: -2px;
   }
 
   /* Picked for a group action: a faint fill with an ink bar. */
   .row.picked {
-    background: var(--t2);
-    box-shadow: inset 3px 0 0 var(--ink);
+    background: var(--surface-container-high);
+    box-shadow: inset 3px 0 0 var(--primary);
   }
 
   .row.current {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
   }
 
   .row.current.picked {
     box-shadow: inset 3px 0 0 var(--accent);
-  }
-
-  .row.current .method {
-    color: var(--paper);
   }
 
   .row.into {

@@ -282,22 +282,27 @@
     min-width: 0;
   }
 
+  /* Material's segmented buttons, at compact height. */
   .modes {
     display: flex;
-    border: 1px solid var(--rule);
+    border: 1px solid var(--outline);
+    border-radius: var(--r-full);
+    overflow: hidden;
   }
 
   .modes button {
-    height: 24px;
-    padding: 0 8px;
+    height: 26px;
+    padding: 0 12px;
     border: 0;
-    border-right: 1px solid var(--rule-2);
+    border-right: 1px solid var(--outline);
     background: none;
-    color: var(--ink-2);
-    font-family: var(--font-bitmap);
-    font-size: var(--b1);
-    text-transform: uppercase;
-    -webkit-font-smoothing: none;
+    color: var(--on-surface);
+    font-size: var(--fs-meta);
+    font-weight: 500;
+  }
+
+  .modes button:hover:not(:disabled, .on) {
+    background: color-mix(in srgb, var(--on-surface) var(--hover), transparent);
   }
 
   .modes button:last-child {
@@ -305,12 +310,12 @@
   }
 
   .modes button.on {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
   }
 
   .modes button:disabled {
-    color: var(--t4);
+    color: color-mix(in srgb, var(--on-surface) 38%, transparent);
     cursor: not-allowed;
   }
 

@@ -173,12 +173,10 @@
     padding: 0 4px;
     margin-left: -4px;
     border: 1px solid transparent;
+    border-radius: var(--r-xs);
     background: transparent;
-    font-family: var(--font-bitmap);
-    font-size: var(--b3);
-    text-transform: uppercase;
-    -webkit-font-smoothing: none;
-    color: var(--ink);
+    font-size: var(--fs-headline);
+    color: var(--on-surface);
     min-width: 0;
   }
 

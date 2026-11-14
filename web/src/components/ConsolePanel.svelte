@@ -352,15 +352,16 @@
   .chip {
     height: 22px;
     padding: 0 var(--s2);
-    border: 1px solid var(--rule-2);
+    border: 1px solid var(--outline-variant);
+    border-radius: var(--r-sm);
     background: none;
     color: var(--ink-3);
   }
 
   .chip.on {
-    border-color: var(--ink);
-    background: var(--ink);
-    color: var(--paper);
+    border-color: var(--secondary-container);
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
   }
 
   .count {
@@ -406,8 +407,8 @@
   }
 
   .row.on {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
   }
 
   .row.on .muted,

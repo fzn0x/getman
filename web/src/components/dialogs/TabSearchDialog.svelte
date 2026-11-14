@@ -196,11 +196,10 @@
   }
 
   li.on {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
   }
 
-  li.on .method,
   li.on .detail,
   li.on .state {
     color: inherit;

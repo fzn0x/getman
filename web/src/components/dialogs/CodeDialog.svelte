@@ -216,8 +216,8 @@
   }
 
   .languages button.on {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
   }
 
   .output {
@@ -249,7 +249,8 @@
 
   .chip {
     padding: 2px var(--s2);
-    border: 1px solid var(--rule-2);
+    border: 1px solid var(--outline-variant);
+    border-radius: var(--r-sm);
     background: none;
     color: var(--ink-2);
   }
@@ -260,9 +261,9 @@
   }
 
   .chip.on {
-    border-color: var(--ink);
-    background: var(--ink);
-    color: var(--paper);
+    border-color: var(--secondary-container);
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
   }
 
   .editor {
