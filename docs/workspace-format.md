@@ -34,7 +34,7 @@ shop/
 | `getman.yaml` | [The workspace file](#the-workspace-file) | Yes |
 | `getman.local.yaml` | [Your overrides, globals and the scripts switch](#the-local-workspace-file) | No |
 | `environments/<id>.yaml` | [An environment](#environment-files) | Yes |
-| `environments/<id>.local.yaml` | Your values for that environment | No |
+| `environments/<id>.local.yaml` | Your values for that environment (`.yml` also works) | No |
 | `<folder>/_folder.yaml` | [Settings of a folder](#folder-files) | Yes |
 | `<name>.yaml` or `<name>.yml` | [A request](#request-files) | Yes |
 | `<name>.examples/` | [Example bodies](#example-bodies) too long, or not text, for the request file | Yes |
@@ -48,11 +48,14 @@ shop/
 ```text
 # Values for this machine only, and Getman's local state
 *.local.yaml
+*.local.yml
 .getman/
 ```
 
-It writes it only when the directory has no `.gitignore` yet. An existing
-one is left as it is, so add those two lines to it yourself.
+When the directory has no `.gitignore`, it writes the file as shown. When
+there is one, `init` keeps its lines and appends only the entries it lacks,
+under the same comment. It prints whether it created the file, added
+entries, or found them all already listed.
 
 The first time Getman writes to `.getman/`, it puts a `.gitignore` holding
 `*` inside it. That keeps its state out of git whatever the repository's
@@ -74,8 +77,8 @@ own rules say. `*.local.yaml` files have no such guard: only the root
   `compose.yaml`, are ignored.
 - A request file that cannot be read is still listed, with its error, so
   a bad merge is easy to spot.
-- `getman.yaml`, `_folder.yaml` and environment files must end in `.yaml`.
-  Only request files may end in `.yml`.
+- `getman.yaml` and `_folder.yaml` must end in `.yaml`. Request files and
+  environment files may end in `.yml`.
 
 ## Names and order
 
@@ -84,7 +87,7 @@ own rules say. `*.local.yaml` files have no such guard: only the root
 | The workspace | `name` in `getman.yaml` | The directory's name |
 | A folder | `name` in `_folder.yaml` | The directory's name |
 | A request | `name` in the request file | The file name without its extension |
-| An environment | `name` in its file | The file name without `.yaml`, which is also its id |
+| An environment | `name` in its file | The file name without `.yaml` or `.yml`, which is also its id |
 
 A folder's `order` lists its items by key: a request's file name without
 its extension, or a folder's directory name. Keys must match exactly,
@@ -132,8 +135,8 @@ The tables on this page give each key one of these types:
 
 | Type | Means |
 | --- | --- |
-| text | Any scalar. A number or boolean is read as text, and an empty value or `~` as empty text |
-| string | YAML text. See below for when it must be quoted |
+| text | Any scalar. A number or boolean is read as text, kept as written, and an empty value or `~` as empty text |
+| string | YAML text. A number or boolean is read as text, kept as written |
 | boolean | `true` or `false` |
 | integer | A whole number, not quoted |
 | pairs | A list of [name and value pairs](#name-and-value-pairs) |
@@ -146,13 +149,17 @@ The tables on this page give each key one of these types:
 - Unknown keys are ignored, at every level, with no warning. A misspelt key
   is ignored too, so check its spelling when a setting seems to do nothing.
 - Keys of type text take any scalar. Map keys and values do too, so
-  `port: 3000` and `debug: true` are fine under `variables`. A number is
-  read as a number first, then turned back into text: `1.0` becomes `1`,
-  `1e3` becomes `1000` and `0x10` becomes `16`. Quote values whose exact
-  spelling matters, such as `apiVersion: "1.0"`.
+  `port: 3000` and `debug: true` are fine under `variables`. The text
+  stays as written: `1.0` stays `1.0`, `1e3` stays `1e3` and `0x10` stays
+  `0x10`.
 - Keys of type string take an unquoted number or boolean exactly as
-  written, except inside an `auth` or `body` block. There it is an error,
-  so quote it: `scope: "5"`, `version: "1.0"`.
+  written, also inside an `auth` or `body` block: `scope: 5` and
+  `version: 1.0` are fine.
+- The first time Getman saves a file, an unquoted number in a text field
+  gains quotes: `version: 1.0` is written back as `version: '1.0'`. The
+  value is the same.
+- Keys that take a number or a boolean still read them as such, so
+  `expires_in: 0x12C` is 300.
 - `kind` ignores capitals and spaces around it, and an empty `kind` means
   `http`.
 - `method` is sent in capitals: `post` sends `POST`.
@@ -945,8 +952,10 @@ With `transport: websocket` the handshake answers `101`. With `auto` or
 
 ## Environment files
 
-An environment is `environments/<id>.yaml`. Commands name it by its id, as
-in `getman run -e staging`, or by its `name`.
+An environment is `environments/<id>.yaml`. A file ending in `.yml` works
+too, and Getman saves changes to it in place. A new environment always
+gets `.yaml`. Commands name it by its id, as in `getman run -e staging`,
+or by its `name`.
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -955,7 +964,9 @@ in `getman run -e staging`, or by its `name`.
 | `secrets` | list of strings | None | Names of variables whose values stay out of this file |
 
 Beside it, `environments/<id>.local.yaml` holds your own values. It has one
-key:
+key. A `<id>.local.yml` file works the same way, and a new local file is
+written as `.local.yaml`. A `.local.yml` file is not listed as an
+environment of its own.
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |

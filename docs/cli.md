@@ -155,11 +155,13 @@ Creates `getman.yaml` and a `.gitignore` for local files.
 | `--name NAME` | Workspace name. Default: the directory's name |
 | `--example` | Add example requests against a public test API, and two environments |
 
-The `.gitignore` lists `*.local.yaml` and `.getman/`, the files that stay
-on your machine. See [Workspaces](workspaces.md#what-to-commit). `DIR`
-is created when it does not exist. A `getman.yaml` already there stops
-the command, and a `.gitignore` already there is left as it is, so add
-those two lines to it yourself.
+The `.gitignore` lists `*.local.yaml`, `*.local.yml` and `.getman/`, the
+files that stay on your machine. See
+[Workspaces](workspaces.md#what-to-commit). `DIR` is created when it does
+not exist. A `getman.yaml` already there stops the command. A `.gitignore`
+already there keeps its lines, and `init` appends only the entries it
+lacks. The note says whether the file was created, had entries added, or
+already listed them all.
 
 ## getman import
 

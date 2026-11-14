@@ -20,7 +20,7 @@ weakest to strongest:
 1. **Globals**: in `getman.local.yaml`, on this machine only
 2. **Workspace variables**: in `getman.yaml`
 3. **The selected environment**: `environments/<name>.yaml`, then its
-   `.local.yaml`
+   `.local.yaml` (`.yml` works for both)
 4. **Folder variables**: in each `_folder.yaml`, outermost first
 5. **Request variables**: the request's own `variables`
 6. **The current data row**, in a run with a data file
@@ -182,11 +182,11 @@ variable for one run, above every other scope.
 
 ## Values that stay on your machine
 
-Three files are never committed (`getman init` adds them to `.gitignore`):
+Three files are never committed (`getman init` adds them to `.gitignore`, and keeps the lines already there):
 
 | File | Holds |
 | --- | --- |
-| `environments/<name>.local.yaml` | Local values of an environment: secrets, tokens, your own base URL |
+| `environments/<name>.local.yaml` (or `.local.yml`) | Local values of an environment: secrets, tokens, your own base URL |
 | `getman.local.yaml` | Local overrides of workspace variables, globals, and the switch that turns [scripts](scripts.md#turning-scripts-off) off |
 | `.getman/` | History of sent requests and their responses, the trash, your header presets |
 
