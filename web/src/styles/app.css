@@ -622,3 +622,14 @@ kbd {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---- Touch screens --------------------------------------------------------- */
+
+/* No keyboard, so no key hints. A phone reports no hover and a coarse
+   primary pointer; a touch laptop keeps its trackpad as primary and so keeps
+   its hints. */
+@media (hover: none) and (pointer: coarse) {
+  .keyhint {
+    display: none !important;
+  }
+}

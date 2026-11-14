@@ -284,8 +284,8 @@
       >
         Console{failures > 0 ? ` (${failures} failed)` : ""}
       </button>
-      <span class="sep" aria-hidden="true"></span>
-      <button class="link bitmap" onclick={() => openDialog({ kind: "shortcuts" })}>
+      <span class="sep keyhint" aria-hidden="true"></span>
+      <button class="link bitmap keyhint" onclick={() => openDialog({ kind: "shortcuts" })}>
         Shortcuts ?
       </button>
     </footer>
