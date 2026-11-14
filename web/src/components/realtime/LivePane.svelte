@@ -120,19 +120,16 @@
 </script>
 
 <div class="live">
-  <header class="head halftone-soft" class:open={conn.status === "open"}>
-    <span
-      class="state bitmap"
-      class:ok={conn.status === "open"}
-      class:bad={conn.status === "closed" && conn.error !== ""}
-      class:busy={conn.status === "connecting" || conn.status === "closing"}
-    >
-      {#if conn.status === "connecting" || conn.status === "closing"}<span
-          class="scan"
-          aria-hidden="true"
-        ></span>{/if}
-      {label}
-    </span>
+  <header
+    class="head"
+    class:ok={conn.status === "open"}
+    class:bad={conn.status === "closed" && conn.error !== ""}
+    class:busy={conn.status === "connecting" || conn.status === "closing"}
+  >
+    {#if conn.status === "connecting" || conn.status === "closing"}
+      <div class="progress" role="progressbar" aria-label={label}></div>
+    {/if}
+    <span class="state">{label}</span>
     <dl class="facts">
       {#if conn.handshake}
         <div>
@@ -442,86 +439,97 @@
     min-height: 0;
   }
 
+  /* The connection's head, like the response header: its state in its
+     color on a faint tint of it, then the facts as label and value pairs. */
   .head {
+    --tone: var(--on-surface-variant);
+    position: relative;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: var(--s3) var(--s5);
-    padding: var(--s3) var(--s4);
-    border-bottom: 1px solid var(--rule);
+    padding: var(--s4);
+    border-bottom: 1px solid var(--outline-variant);
+    background: var(--surface-container-low);
+    overflow: hidden;
+    transition: background-color var(--dur-medium) var(--ease);
+  }
+
+  .head.ok {
+    --tone: var(--ok);
+    background: color-mix(in srgb, var(--tone) 6%, var(--surface));
+  }
+
+  .head.bad {
+    --tone: var(--error);
+    background: color-mix(in srgb, var(--tone) 6%, var(--surface));
   }
 
   .state {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--s2);
-    padding: 4px var(--s2);
-    background: var(--paper);
-    font-size: var(--b2);
-    line-height: 1;
-    color: var(--ink-3);
+    font-size: var(--fs-headline);
+    font-weight: 500;
+    line-height: 1.1;
+    color: var(--tone);
   }
 
-  .conn.ok {
-    color: var(--ok);
+  .head.busy .state {
+    color: var(--on-surface);
   }
 
-  .conn.bad {
-    color: var(--error);
+  /* Material's indeterminate linear progress indicator. */
+  .progress {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: var(--primary-container);
+    overflow: hidden;
   }
 
-  .conn.busy {
-    color: var(--ink);
+  .progress::after {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 40%;
+    border-radius: 3px;
+    background: var(--primary);
+    animation: travel 1.4s var(--ease) infinite;
   }
 
-  .scan {
-    width: 22px;
-    height: 7px;
-    background-image: radial-gradient(circle, currentColor 1px, transparent 1.5px);
-    background-size: 4px 4px;
-    animation: scan 0.9s steps(4) infinite;
-  }
-
-  @keyframes scan {
+  @keyframes travel {
     from {
-      clip-path: inset(0 100% 0 0);
+      transform: translateX(-100%);
     }
     to {
-      clip-path: inset(0 0 0 0);
+      transform: translateX(260%);
     }
   }
 
   .facts {
     display: flex;
     flex-wrap: wrap;
+    gap: var(--s2) var(--s5);
     margin: 0;
-    background: var(--paper);
   }
 
   .facts div {
     display: grid;
-    gap: 3px;
-    padding: 4px var(--s3);
-    border-right: 1px solid var(--rule-3);
-  }
-
-  .facts div:last-child {
-    border-right: 0;
+    gap: 2px;
   }
 
   .facts dt {
-    color: var(--ink-3);
+    color: var(--on-surface-variant);
   }
 
   .facts dd {
     margin: 0;
-    font-weight: 650;
+    font-weight: 600;
   }
 
   .error {
     padding: var(--s3) var(--s4);
-    background: var(--accent-wash);
-    border-bottom: 1px solid var(--error);
+    border-bottom: 1px solid var(--outline-variant);
+    background: var(--error-container);
+    color: var(--on-error-container);
   }
 
   .error p {
@@ -529,14 +537,14 @@
   }
 
   .message {
-    color: var(--error);
+    color: inherit;
     font-weight: 600;
     word-break: break-word;
   }
 
   .hint {
     margin-top: 4px !important;
-    color: var(--ink-2);
+    color: inherit;
   }
 
   .warning {
@@ -703,13 +711,13 @@
   }
 
   .sys.warning {
-    background: var(--warn-wash);
-    color: var(--ink);
+    background: var(--warn-container);
+    color: var(--on-warn-container);
   }
 
   .sys.error {
-    background: var(--accent-wash);
-    color: var(--error);
+    background: var(--error-container);
+    color: var(--on-error-container);
   }
 
   .sys.note {
