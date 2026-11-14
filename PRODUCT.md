@@ -49,7 +49,8 @@ Getman is a local-first, open-source API client. Send HTTP requests, inspect res
 
 ## Brand Commitments
 
-- Name: Getman (lowercase `getman` for the command). No logo exists yet.
+- Name: Getman (lowercase `getman` for the command).
+- Logo: a bold G whose round bowl runs into a forward-pointing tip, like a request on its way out, in indigo `#3F51B5` (the seed of the color scheme). Files in `assets/`: `mark.svg`, and `logo.svg`, `logo-light.svg` and `logo-dark.svg` with the wordmark and tagline. The app icon and favicon put the mark in white on an indigo rounded square.
 - Voice: plain, direct, specific; errors say what happened and what to do next.
 - Postman is named only in comparison and import/compatibility contexts.
 
