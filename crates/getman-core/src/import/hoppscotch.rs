@@ -282,26 +282,26 @@ impl Reader {
                     Some("CLIENT_CREDENTIALS") => OAuth2Grant::ClientCredentials,
                     Some("PASSWORD") => OAuth2Grant::Password,
                     other => {
-                        let token = text(&info["token"])
+                        let saved = text(&info["token"])
                             .or_else(|| text(&auth["token"]))
-                            .filter(|t| !t.is_empty());
+                            .is_some_and(|t| !t.is_empty());
                         warn_once(
                             &mut self.warnings,
                             format!(
-                                "{name}: OAuth 2.0 with the {} grant needs a browser; it now sends {} as a Bearer token",
+                                "{name}: OAuth 2.0 with the {} grant needs a browser; it now sends {{{{accessToken}}}} as a Bearer token{}",
                                 other
                                     .unwrap_or("authorization code")
                                     .to_ascii_lowercase()
                                     .replace('_', " "),
-                                if token.is_some() {
-                                    "the saved token"
+                                if saved {
+                                    "; the saved access token was not imported, so set accessToken or sign in again for a new one"
                                 } else {
-                                    "{{accessToken}}"
+                                    ""
                                 }
                             ),
                         );
                         return Some(Auth::Bearer {
-                            token: token.unwrap_or_else(|| "{{accessToken}}".into()),
+                            token: "{{accessToken}}".into(),
                             prefix: String::new(),
                         });
                     }
@@ -482,6 +482,32 @@ mod tests {
         assert!(warnings.contains("pw.*"), "{warnings}");
         assert!(warnings.contains("choose them again"), "{warnings}");
         assert!(warnings.contains("aws-signature"), "{warnings}");
+    }
+
+    #[test]
+    fn saved_oauth_tokens_stay_out_of_requests() {
+        let source = r#"{"v":2,"name":"Shop","folders":[],"requests":[{"v":"11","name":"Me",
+            "method":"GET","endpoint":"https://example.com/me","params":[],"headers":[],
+            "body":{"contentType":null,"body":null},
+            "auth":{"authType":"oauth-2","authActive":true,"grantTypeInfo":{
+                "grantType":"AUTHORIZATION_CODE","token":"secret-saved-token"}}}]}"#;
+        let Import::Collection(c) = parse(&parse_document(source).unwrap()).unwrap() else {
+            panic!()
+        };
+        let Item::Request(me) = &c.items[0] else {
+            panic!()
+        };
+        assert!(
+            matches!(&me.auth, Auth::Bearer { token, .. } if token == "{{accessToken}}"),
+            "{:?}",
+            me.auth
+        );
+        let warnings = c.warnings.join("\n");
+        assert!(!warnings.contains("secret-saved-token"), "{warnings}");
+        assert!(
+            warnings.contains("saved access token was not imported"),
+            "{warnings}"
+        );
     }
 
     #[test]
