@@ -1,7 +1,8 @@
 //! TLS for the connections Getman opens itself rather than through
 //! reqwest: WebSocket and Socket.IO. Certificates are checked the way the
-//! HTTP client checks them, with the operating system's verifier, unless a
-//! request turns checking off.
+//! HTTP client checks them, with the operating system's verifier and the
+//! request's extra certificate authorities, unless a request turns
+//! checking off, and the request's client certificate is presented.
 
 use std::sync::{Arc, OnceLock};
 
@@ -9,37 +10,39 @@ use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, Server
 use rustls::crypto::WebPkiSupportedAlgorithms;
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{ClientConfig, DigitallySignedStruct, SignatureScheme};
-use rustls_platform_verifier::BuilderVerifierExt as _;
 
-/// The client configuration for checked or unchecked certificates.
-pub(crate) fn config(verify: bool) -> Result<Arc<ClientConfig>, String> {
+use crate::http::Transport;
+use crate::tls::ClientIdentity;
+
+/// The client configuration for `transport`: certificates checked or
+/// not, its extra certificate authorities trusted, and its client
+/// certificate presented when `identity` is set. The common ones, with
+/// neither authorities nor a certificate, are built once.
+pub(crate) fn config(transport: &Transport, identity: bool) -> Result<Arc<ClientConfig>, String> {
     static CHECKED: OnceLock<Result<Arc<ClientConfig>, String>> = OnceLock::new();
     static UNCHECKED: OnceLock<Result<Arc<ClientConfig>, String>> = OnceLock::new();
-    let slot = if verify { &CHECKED } else { &UNCHECKED };
-    slot.get_or_init(|| build(verify)).clone()
+    let identity = transport.client_identity.as_ref().filter(|_| identity);
+    if !transport.ca_certs.is_empty() || identity.is_some() {
+        return build(transport.verify_tls, &transport.ca_certs, identity);
+    }
+    let slot = if transport.verify_tls {
+        &CHECKED
+    } else {
+        &UNCHECKED
+    };
+    slot.get_or_init(|| build(transport.verify_tls, &[], None))
+        .clone()
 }
 
-fn build(verify: bool) -> Result<Arc<ClientConfig>, String> {
-    let provider = Arc::new(rustls::crypto::ring::default_provider());
-    let builder = ClientConfig::builder_with_provider(Arc::clone(&provider))
-        .with_safe_default_protocol_versions()
-        .map_err(|e| format!("Could not set up TLS: {e}"))?;
-    let mut config = if verify {
-        builder
-            .with_platform_verifier()
-            .map_err(|e| format!("Could not load the system's certificates: {e}"))?
-            .with_no_client_auth()
-    } else {
-        builder
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(AcceptAnyCertificate::new(
-                provider.signature_verification_algorithms,
-            )))
-            .with_no_client_auth()
-    };
+fn build(
+    verify: bool,
+    ca_certs: &[Vec<u8>],
+    identity: Option<&ClientIdentity>,
+) -> Result<Arc<ClientConfig>, String> {
     // WebSocket upgrades an HTTP/1.1 connection.
-    config.alpn_protocols = vec![b"http/1.1".to_vec()];
-    Ok(Arc::new(config))
+    crate::tls::client_config(verify, ca_certs, identity, &[b"http/1.1"])
+        .map(Arc::new)
+        .map_err(|e| e.to_string())
 }
 
 /// Accepts any certificate, for requests that turned checking off. The

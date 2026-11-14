@@ -155,7 +155,10 @@ pub(crate) fn pki() -> &'static Pki {
     })
 }
 
-fn server_tls(pki: &Pki, require_client_cert: bool) -> rustls::ServerConfig {
+/// The server side of TLS with the [`pki`] server certificate, refusing
+/// clients without a certificate from the CA when `require_client_cert` is
+/// set.
+pub(crate) fn server_tls(pki: &Pki, require_client_cert: bool) -> rustls::ServerConfig {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let builder = rustls::ServerConfig::builder_with_provider(Arc::clone(&provider))
         .with_safe_default_protocol_versions()
