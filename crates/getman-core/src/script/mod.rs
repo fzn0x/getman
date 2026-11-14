@@ -32,7 +32,7 @@ use sha2::Digest as _;
 
 use crate::checks::TestResult;
 use crate::http::{CookieInfo, Header, HttpClient, Outgoing, Response, Transport};
-use crate::model::{FormField, KeyValue, Vars};
+use crate::model::{FormField, KeyValue, RequestKind, Vars};
 use crate::prepare::Script;
 
 const PRELUDE: &str = include_str!("prelude.js");
@@ -94,7 +94,11 @@ pub struct ScriptScopes {
 /// The request as scripts see it, before variables are replaced.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct ScriptRequest {
-    /// HTTP method.
+    /// What the request is. Setting `gm.request.method` upper-cases an
+    /// HTTP method but leaves a gRPC method name as written, since those
+    /// are case-sensitive.
+    pub kind: RequestKind,
+    /// HTTP method, or the gRPC method name.
     pub method: String,
     /// URL, with `{{variables}}` still in place.
     pub url: String,

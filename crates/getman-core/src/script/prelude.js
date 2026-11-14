@@ -966,7 +966,8 @@
         return method;
       },
       set method(value) {
-        method = String(value).toUpperCase();
+        // gRPC method names are case-sensitive; HTTP methods are not.
+        method = r.kind === "grpc" ? String(value) : String(value).toUpperCase();
       },
       headers,
       body,

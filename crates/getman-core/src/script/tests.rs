@@ -1,6 +1,6 @@
 use super::*;
 use crate::http::Header;
-use crate::model::FormField;
+use crate::model::{FormField, RequestKind};
 use crate::test_server;
 
 fn script(code: &str) -> Vec<Script> {
@@ -32,6 +32,7 @@ fn input(event: Event) -> ScriptInput {
             ..ScriptScopes::default()
         },
         request: ScriptRequest {
+            kind: RequestKind::Http,
             method: "POST".into(),
             url: "{{baseUrl}}/users?page=1".into(),
             headers: vec![KeyValue::new("Accept", "application/json")],

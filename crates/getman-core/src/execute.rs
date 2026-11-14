@@ -899,6 +899,7 @@ pub(crate) fn script_request(
         }),
     };
     ScriptRequest {
+        kind: request.kind,
         method: request.method.clone(),
         url: request.url.clone(),
         headers: headers.to_vec(),
