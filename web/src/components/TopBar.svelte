@@ -51,8 +51,12 @@
   </button>
 
   <div class="mark" aria-label="Getman">
-    <span class="block" aria-hidden="true"></span>
-    <span class="bitmap word">Getman</span>
+    <svg class="logo" viewBox="4 6 40 36" width="22" height="20" aria-hidden="true">
+      <path
+        d="M32.42 12.33L27.82 16.93A10 10 0 1 0 27.82 31.07L31.64 27.25L19.5 27.25L26 20.75L40.83 20.75L42.95 22.87A1.6 1.6 0 0 1 42.95 25.13L32.42 35.67A16.5 16.5 0 1 1 32.42 12.33Z"
+      />
+    </svg>
+    <span class="word">Getman</span>
   </div>
 
   <button class="find" onclick={() => openDialog({ kind: "palette" })}>
@@ -144,14 +148,16 @@
     padding-right: var(--s2);
   }
 
-  .block {
-    width: 11px;
-    height: 11px;
-    background: var(--accent);
+  .logo {
+    flex: none;
+    fill: var(--primary);
   }
 
   .word {
-    font-size: var(--b2);
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--on-surface);
   }
 
   .find {
@@ -231,7 +237,7 @@
   }
 
   .environment:has(.overlay:focus-visible) .current {
-    outline: 2px dotted var(--ink);
+    outline: 2px solid var(--primary);
     outline-offset: 1px;
   }
 
