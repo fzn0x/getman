@@ -196,7 +196,11 @@
         <button class="btn" onclick={() => void loadWorkspace()}>Try again</button>
       </div>
     {:else}
-      <p class="bitmap boot-mark">Getman</p>
+      <svg class="boot-mark" viewBox="4 6 40 36" width="52" height="47" aria-label="Getman">
+        <path
+          d="M32.42 12.33L27.82 16.93A10 10 0 1 0 27.82 31.07L31.64 27.25L19.5 27.25L26 20.75L40.83 20.75L42.95 22.87A1.6 1.6 0 0 1 42.95 25.13L32.42 35.67A16.5 16.5 0 1 1 32.42 12.33Z"
+        />
+      </svg>
     {/if}
   </div>
 {:else}
@@ -298,15 +302,15 @@
     height: 100%;
   }
 
+  /* The logo mark, breathing while the workspace loads. */
   .boot-mark {
-    font-size: var(--b4);
-    margin: 0;
-    animation: blink 1.2s steps(2, jump-none) infinite;
+    fill: var(--primary);
+    animation: breathe 1.2s var(--ease) infinite alternate;
   }
 
-  @keyframes blink {
-    50% {
-      opacity: 0.25;
+  @keyframes breathe {
+    from {
+      opacity: 0.35;
     }
   }
 
@@ -379,8 +383,9 @@
     align-items: center;
     gap: var(--s2);
     padding: 0 var(--s3);
-    border-top: 1px solid var(--rule);
-    color: var(--ink-3);
+    border-top: 1px solid var(--outline-variant);
+    color: var(--on-surface-variant);
+    font-weight: 400;
     white-space: nowrap;
     overflow: hidden;
   }
@@ -392,9 +397,10 @@
   }
 
   .colophon .sep {
-    width: 4px;
-    height: 4px;
-    background: var(--ink-3);
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--outline);
     flex: none;
   }
 
@@ -403,14 +409,23 @@
   }
 
   .link {
+    margin: 0 -6px;
+    padding: 2px 6px;
     border: 0;
+    border-radius: var(--r-xs);
     background: none;
-    padding: 0;
-    color: var(--ink-3);
+    color: var(--on-surface-variant);
+    font-weight: 400;
   }
 
   .link:hover {
-    color: var(--ink);
+    background: color-mix(in srgb, var(--on-surface) var(--hover), transparent);
+    color: var(--on-surface);
+  }
+
+  .link[aria-pressed="true"] {
+    color: var(--primary);
+    font-weight: 500;
   }
 
   .link.bad {
