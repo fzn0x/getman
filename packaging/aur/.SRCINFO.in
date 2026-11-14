@@ -1,0 +1,25 @@
+pkgbase = getman-bin
+	pkgdesc = Local-first, account-free API client: a Postman alternative
+	pkgver = {{version}}
+	pkgrel = 1
+	url = https://fzn0x.github.io/getman/
+	arch = x86_64
+	arch = aarch64
+	license = MIT OR GPL-3.0-or-later
+	depends = gtk3
+	depends = webkit2gtk-4.1
+	depends = hicolor-icon-theme
+	provides = getman
+	conflicts = getman
+	options = !strip
+	options = !debug
+	source = LICENSE-MIT::{{rawurl:LICENSE-MIT}}
+	source = LICENSE-GPL::{{rawurl:LICENSE-GPL}}
+	sha256sums = {{filesha256:LICENSE-MIT}}
+	sha256sums = {{filesha256:LICENSE-GPL}}
+	source_x86_64 = getman-desktop-{{version}}-amd64.deb::{{url:getman-desktop_amd64.deb}}
+	sha256sums_x86_64 = {{sha256:getman-desktop_amd64.deb}}
+	source_aarch64 = getman-desktop-{{version}}-arm64.deb::{{url:getman-desktop_arm64.deb}}
+	sha256sums_aarch64 = {{sha256:getman-desktop_arm64.deb}}
+
+pkgname = getman-bin

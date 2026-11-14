@@ -1,0 +1,34 @@
+# Maintainer: fzn0x <https://github.com/fzn0x>
+#
+# Written for each release by packaging/render.mjs of github.com/{{repo}},
+# from packaging/aur/PKGBUILD.in: change that, not this.
+pkgname=getman-bin
+_pkgname=getman
+pkgver={{version}}
+pkgrel=1
+pkgdesc="Local-first, account-free API client: a Postman alternative"
+arch=('x86_64' 'aarch64')
+url="https://fzn0x.github.io/getman/"
+license=('MIT OR GPL-3.0-or-later')
+# The desktop app draws in WebKitGTK. The one program is the app and the
+# command line: `getman` opens the UI, `getman desktop` the window.
+depends=('gtk3' 'webkit2gtk-4.1' 'hicolor-icon-theme')
+provides=("$_pkgname")
+conflicts=("$_pkgname")
+# The program is stripped upstream.
+options=('!strip' '!debug')
+source=("LICENSE-MIT::{{rawurl:LICENSE-MIT}}"
+        "LICENSE-GPL::{{rawurl:LICENSE-GPL}}")
+source_x86_64=("$_pkgname-desktop-$pkgver-amd64.deb::{{url:getman-desktop_amd64.deb}}")
+source_aarch64=("$_pkgname-desktop-$pkgver-arm64.deb::{{url:getman-desktop_arm64.deb}}")
+sha256sums=('{{filesha256:LICENSE-MIT}}'
+            '{{filesha256:LICENSE-GPL}}')
+sha256sums_x86_64=('{{sha256:getman-desktop_amd64.deb}}')
+sha256sums_aarch64=('{{sha256:getman-desktop_arm64.deb}}')
+
+package() {
+  # What the .deb installs: /usr/bin/getman, the icons and the desktop entry.
+  bsdtar -xf data.tar.* -C "$pkgdir"
+  install -Dm644 LICENSE-MIT "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
+  install -Dm644 LICENSE-GPL "$pkgdir/usr/share/licenses/$pkgname/LICENSE-GPL"
+}
