@@ -18,6 +18,8 @@ pub(crate) fn init(args: &InitArgs) -> Outcome {
         dir.file_name()
             .map_or_else(|| "My API".to_owned(), |n| n.to_string_lossy().into_owned())
     });
+    let ignore_file = dir.join(".gitignore");
+    let ignore_before = std::fs::read_to_string(&ignore_file).ok();
     let workspace = Workspace::init(&dir, &name).map_err(|e| e.to_string())?;
     if args.example {
         crate::examples::add(&workspace).map_err(|e| e.to_string())?;
@@ -36,6 +38,14 @@ pub(crate) fn init(args: &InitArgs) -> Outcome {
     }
     println!();
     style::note("Commit getman.yaml, your request files and environments/*.yaml.");
-    style::note("Values in *.local.yaml stay on this machine; .gitignore already lists them.");
+    let ignore_after = std::fs::read_to_string(&ignore_file).ok();
+    let how = match &ignore_before {
+        None => "init created .gitignore with them",
+        Some(before) if Some(before) != ignore_after.as_ref() => "init added them to .gitignore",
+        Some(_) => ".gitignore already lists them",
+    };
+    style::note(&format!(
+        "Values in *.local.yaml stay on this machine; {how}."
+    ));
     Ok(ExitCode::SUCCESS)
 }

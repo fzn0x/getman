@@ -43,8 +43,41 @@ const LOCAL_SUFFIX: &str = ".local.yaml";
 const LOCAL_WORKSPACE_FILE: &str = "getman.local.yaml";
 const SKIPPED_DIRS: &[&str] = &["node_modules", "target"];
 const MAX_DEPTH: usize = 32;
-const GITIGNORE: &str =
-    "# Values for this machine only, and Getman's local state\n*.local.yaml\n.getman/\n";
+const GITIGNORE_NOTE: &str = "# Values for this machine only, and Getman's local state";
+// Local files may end in .yml as well as .yaml.
+const GITIGNORE_ENTRIES: &[&str] = &["*.local.yaml", "*.local.yml", ".getman/"];
+
+/// Makes sure `root/.gitignore` lists the machine-only files. An existing
+/// file keeps its lines and gets only the missing entries appended.
+fn ignore_machine_files(root: &Path) -> Result<()> {
+    let ignore = root.join(".gitignore");
+    let mut text = match fs::read_to_string(&ignore) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(Error::io(&ignore, e)),
+    };
+    let missing: Vec<&str> = GITIGNORE_ENTRIES
+        .iter()
+        .copied()
+        .filter(|entry| !text.lines().any(|line| line.trim() == *entry))
+        .collect();
+    if missing.is_empty() {
+        return Ok(());
+    }
+    if !text.is_empty() {
+        if !text.ends_with('\n') {
+            text.push('\n');
+        }
+        text.push('\n');
+    }
+    text.push_str(GITIGNORE_NOTE);
+    text.push('\n');
+    for entry in missing {
+        text.push_str(entry);
+        text.push('\n');
+    }
+    fs::write(&ignore, text).map_err(|e| Error::io(&ignore, e))
+}
 
 /// A workspace rooted at a directory.
 #[derive(Debug, Clone)]
@@ -202,10 +235,7 @@ impl Workspace {
                 ..Folder::default()
             },
         )?;
-        let ignore = root.join(".gitignore");
-        if !ignore.exists() {
-            fs::write(&ignore, GITIGNORE).map_err(|e| Error::io(&ignore, e))?;
-        }
+        ignore_machine_files(&root)?;
         Ok(Self { root })
     }
 
@@ -1090,6 +1120,18 @@ mod tests {
             Workspace::discover(&dir.path().join("a/b")).as_deref(),
             Some(dir.path())
         );
+    }
+
+    #[test]
+    fn init_appends_only_the_missing_lines_to_an_existing_gitignore() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join(".gitignore"), "node_modules/\n.getman/").unwrap();
+        Workspace::init(dir.path(), "Test").unwrap();
+        let ignore = fs::read_to_string(dir.path().join(".gitignore")).unwrap();
+        assert!(ignore.starts_with("node_modules/\n.getman/\n"));
+        assert_eq!(ignore.matches(".getman/").count(), 1);
+        assert_eq!(ignore.matches("*.local.yaml").count(), 1);
+        assert_eq!(ignore.matches("*.local.yml").count(), 1);
     }
 
     #[test]
