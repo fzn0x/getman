@@ -1,6 +1,6 @@
 # Architecture
 
-An overview of Getman's source: the three Rust crates, the Svelte web
+An overview of Getman's source: the four Rust crates, the Svelte web
 UI, how one request flows through the engine, and what a release
 builds.
 
@@ -10,8 +10,9 @@ front end is a thin layer over it:
 ```text
  web/  Svelte UI in a browser tab ───┐
                                      │  JSON over HTTP on 127.0.0.1, /api
- crates/getman-desktop  Tauri window ┤  (the desktop app runs the same server
-                                     │   in its own process)
+ crates/getman-desktop  Tauri window ┤  (the desktop and phone apps run the
+ crates/getman-mobile  Tauri webview ┤   same server in their own process)
+                                     │
                                      ▼
  crates/getman  CLI, local server, terminal UI, MCP server, mock server, reports
                                      │
@@ -23,15 +24,16 @@ front end is a thin layer over it:
 | Path | Holds |
 | --- | --- |
 | `crates/getman-core` | The engine. No UI and no command line |
-| `crates/getman` | The `getman` binary, and a library the desktop app links |
+| `crates/getman` | The `getman` binary, and a library the desktop and phone apps link |
 | `crates/getman-desktop` | The desktop app: a Tauri 2 window with in-app updates |
+| `crates/getman-mobile` | The Android and iOS apps, on Tauri 2 |
 | `web/` | The browser UI, built into the binary |
 | `docs/`, `site/` | These pages, and the site built from them |
 | `packaging/` | Templates for the Homebrew, Scoop, winget and Flatpak manifests |
 
 The root `Cargo.toml` makes the crates one workspace. Its
-`default-members` leave the desktop app out, so the rest builds without
-a webview's system libraries. Its lints deny `unsafe` code in every
+`default-members` leave the desktop and phone apps out, so the rest
+builds without a webview's system libraries. Its lints deny `unsafe` code in every
 crate and turn on Clippy's pedantic lints. See
 [Development](development.md) for building and testing.
 
@@ -125,6 +127,28 @@ minisign public key in `tauri.conf.json` before it is installed.
 Development builds, the `.deb` and `.rpm` packages and the portable zip
 cannot replace themselves, so they never look. See
 [Desktop app](desktop.md#updates).
+
+## getman-mobile: the phone apps
+
+`crates/getman-mobile` is the same idea on Android and iOS: Getman's
+server runs in the app's process on 127.0.0.1, and the app's webview
+shows its UI. It is a library, as Tauri's mobile apps are, which Android
+loads and iOS links.
+
+| Path | Does |
+| --- | --- |
+| `src/lib.rs` | Starts the server on the workspace in the app's documents, made with example requests on first start, and opens the webview on it. Links out of the UI open in the phone's browser |
+| `src/android.rs` | Hands the app's Java context to rustls-platform-verifier, which checks certificates with Android's trust manager |
+| `gen/android/` | The Android project, with Getman's network rule, insets, signing and the verifier's Kotlin component |
+| `Info.ios.plist` | What the iOS app adds to its Info.plist: the Files app may show its documents, and the webview may load the local server |
+| `tauri.conf.json`, `icons/` | The app's settings and icons, made from `icons/source/` with `tauri icon` |
+
+The phone apps have none of the desktop app's commands, so the UI runs
+in them as in a browser tab. Android's certificate verifier cannot take
+extra authorities, so for `ca_certs` the engine adds its own check of
+them beside the system's (`getman-core/src/tls/extra_roots.rs`). Phone
+builds generate QuickJS's bindings at build time, and always build the
+UI into the binary.
 
 ## The web UI
 
@@ -341,6 +365,8 @@ Pushing a `v*` tag runs `.github/workflows/release.yml`:
 | `web` | The web UI, once, for every other job |
 | `build` | `getman` for Linux x86_64 and ARM64, macOS on Apple silicon and Intel, and Windows x64 and ARM64, each packed with the README, licences and notices as a `.tar.gz` or `.zip` |
 | `desktop` | The desktop app: NSIS and MSI installers and a portable zip for Windows x64 and ARM64, one universal `.dmg` for macOS, and an AppImage, `.deb` and `.rpm` for Linux x86_64 and ARM64 |
+| `android` | One APK for ARM64, ARMv7 and x86_64 Android devices, signed with the `ANDROID_KEYSTORE` secret |
+| `ios` | An unsigned `.ipa` for iPhone and iPad, which people sign with their own Apple ID when they sideload it |
 | `release` | The release notes from the version's section of `CHANGELOG.md`, `latest.json` for the updater, the package manifests from `packaging/render.mjs` and `SHA256SUMS`, then the GitHub release itself |
 | `publish-packages` | Commits the Homebrew formula to `fzn0x/homebrew-tap` and the Scoop manifest to `fzn0x/scoop-bucket` |
 
@@ -348,6 +374,7 @@ The Linux command-line builds go through `cargo zigbuild` and link against
 glibc 2.28, whatever the runner has. The desktop update files are signed,
 and `latest.json` written, only when the `TAURI_SIGNING_PRIVATE_KEY`
 secret is set. The Linux desktop bundles are built on Ubuntu 22.04, so
-they run on any distribution with that glibc or newer. The secrets and the package managers are
+they run on any distribution with that glibc or newer. A release goes
+out without a phone app whose build failed. The secrets and the package managers are
 described under Releases in
 [CONTRIBUTING.md](https://github.com/fzn0x/getman/blob/main/CONTRIBUTING.md#releases).

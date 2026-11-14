@@ -124,16 +124,73 @@ Windows the installers bring `getman.exe` beside the app: build it and
 put it in `crates/getman-desktop/windows/bin` first, then add
 `--config windows/command-line.json`, as the release workflow does.
 
+## The mobile apps
+
+`crates/getman-mobile` is the Tauri 2 app for Android and iOS. Like the
+desktop app it starts Getman's server in its own process and shows the
+UI in the phone's webview. It keeps one workspace in the app's
+documents. It needs Rust 1.90 or newer, and libclang: QuickJS's bindings
+are generated for phones at build time.
+
+Build the UI first. Phone builds always build it in, since a phone has
+no `web/dist` to read.
+
+For Android, install the Android SDK with the NDK, and Java 17 or newer.
+Set `ANDROID_HOME`, `NDK_HOME` and `JAVA_HOME`, and point bindgen at the
+NDK's headers:
+
+```sh
+cd crates/getman-mobile
+npm ci
+export BINDGEN_EXTRA_CLANG_ARGS="--sysroot=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+npm run tauri -- android build --debug --apk --target x86_64   # for the emulator
+```
+
+On Windows, use the `windows-x86_64` prebuilt folder. Without an LLVM
+install, `pip install libclang` gives a libclang to name in
+`LIBCLANG_PATH`; it then also needs
+`-isystem $NDK_HOME/toolchains/llvm/prebuilt/windows-x86_64/lib/clang/<version>/include`
+in the bindgen arguments. A debug APK's webview can be inspected from
+`chrome://inspect`.
+
+The Android project, `gen/android`, is in the repository, with Getman's
+changes to what Tauri generates: the network rule in
+`res/xml/network_security_config.xml`, the Kotlin component of
+rustls-platform-verifier in `app/build.gradle.kts`, release signing from
+`GETMAN_ANDROID_*` variables, and the insets in `MainActivity.kt`.
+
+iOS builds need macOS with Xcode and XcodeGen. The Xcode project is not
+in the repository: `npm run tauri -- ios init` makes it, and
+`Info.ios.plist` adds Getman's settings to it.
+
+```sh
+npm run tauri -- ios init
+export BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios_sim="-isysroot $(xcrun --sdk iphonesimulator --show-sdk-path)"
+npm run tauri -- ios build --debug --target aarch64-sim       # for the simulator
+```
+
+`.github/workflows/mobile.yml` builds both on pull requests that touch
+the crates, and keeps a screenshot of the app in the iOS simulator.
+
 ## Releases
 
 Pushing a `v*` tag runs `.github/workflows/release.yml`, which publishes
-the command-line archives, the desktop installers and `SHA256SUMS`. It
-reads two repository secrets:
+the command-line archives, the desktop installers, the phone apps and
+`SHA256SUMS`. It reads these repository secrets:
 
 | Secret | |
 | --- | --- |
 | `TAURI_SIGNING_PRIVATE_KEY` | The private key that signs the desktop app's update files: the contents of the key file `npx tauri signer generate` writes |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Its password; leave it empty for a key without one |
+| `ANDROID_KEYSTORE` | The keystore that signs the Android app, base64: a PKCS#12 file with one key, alias `getman` |
+| `ANDROID_KEYSTORE_PASSWORD` | The password of the keystore and its key |
+
+Without `ANDROID_KEYSTORE` a release has no Android app. Every APK must
+be signed with the same key, or Android refuses to install it over the
+last one, so keep the keystore as safe as the updater key. The iOS app is
+unsigned and needs no secret: people sign it with their own Apple ID when
+they install it. When a phone app fails to build, the release goes out
+without it, with a warning in the run.
 
 Without `TAURI_SIGNING_PRIVATE_KEY` a release still has every installer,
 but no update files and no `latest.json`, so installed apps are not
@@ -187,6 +244,7 @@ node packaging/render.mjs --tag v0.2.0 --dist downloads --out manifests
 | `crates/getman/src/server/` | The local server behind the browser UI |
 | `crates/getman/src/tui/` | The terminal UI |
 | `crates/getman-desktop/` | The desktop app: window, updates, installers |
+| `crates/getman-mobile/` | The Android and iOS apps, and the Android project in `gen/android` |
 | `web/src/` | The browser UI |
 | `docs/`, `site/` | Documentation and the website built from it |
 
