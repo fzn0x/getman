@@ -14,7 +14,7 @@ getman run -e staging          # with an environment
 ```
 
 ```text
-Orders API with the staging environment: 3 requests
+getman Orders API with the staging environment: 3 requests
 
   ✓ POST    Create order   201 Created 182 ms · 96 B
       ✓ status == 201
@@ -25,9 +25,19 @@ Orders API with the staging environment: 3 requests
   ✓ DELETE  Archive order  204 No Content 37 ms · 0 B
 
   Requests  3 run · 1 failed · 0 skipped
+  Tests     0 passed · 0 failed
   Checks    2 passed · 1 failed
-  Time      0.31 s total · 87 ms average response
+  Time      310 ms total · 87 ms average response
+
+  Failed.
 ```
+
+Under each request the terminal lists its script tests and checks, the
+reason it could not be sent, script errors, missing variables and
+warnings, such as a capture that found nothing. A skipped request is
+marked `–`. With several iterations, each starts under an `Iteration
+2/3` heading. The last line is `All passed.` or `Failed.`, after the
+reason when the run stopped early.
 
 Requests run in the order the sidebar shows them: folders first unless a
 folder's `order` says otherwise. Several targets run one after another,
@@ -49,34 +59,74 @@ See [WebSocket, SSE and Socket.IO](realtime.md#scripts-and-checks).
 
 | Option | Does |
 | --- | --- |
+| `TARGET`... | Folders and requests to run, in this order. Default: the whole workspace |
 | `-e`, `--env NAME` | Use an environment, by file name or display name. `GETMAN_ENVIRONMENT` sets it too |
 | `--var NAME=VALUE` | Set a variable above every other scope. Repeat for more |
 | `-d`, `--data FILE` | Run once per row of a CSV or JSON file |
 | `-n`, `--iterations N` | Run N times. Defaults to the number of data rows, or 1 |
-| `--delay MS` | Wait between requests |
+| `--delay MS` | Milliseconds to wait between the requests of an iteration. Default 0 |
 | `--bail` | Stop at the first failure |
-| `-r`, `--reporter NAME[=PATH]` | `cli`, `json`, `junit`, `html`, `csv` or `xlsx`; repeat for several, `=PATH` writes to a file (`xlsx` needs one) |
+| `-r`, `--reporter NAME[=PATH]` | `cli`, `json`, `junit`, `html`, `csv` or `xlsx`, in any case; repeat for several, `=PATH` writes to a file (`xlsx` needs one). Default `cli` |
 | `-v`, `--verbose` | Print every response's status line, headers and body, and script console output |
 | `--script-timeout SECONDS` | How long a script may run. Default 10 |
+| `--no-scripts` | Run no pre-request or post-response scripts; checks and captures still run. See [Scripts](scripts.md#turning-scripts-off) |
 | `--persist` | Save variables the run set to the git-ignored local files, as the UI does |
 | `--http-version VERSION` | `auto`, `http1`, `http2` or `http3` for every request, over the files' settings. See [HTTP and connections](http.md) |
 | `--proxy URL` | A proxy URL, `system` or `off` for every request, over the files' settings |
 | `--save` | Keep the run in `.getman/runs`, where the UI's Runner lists it |
 | `-w`, `--workspace DIR` | The workspace, when it is not the current directory or a parent |
 
+With `--persist`, values that scripts and captures set for the
+environment go to its `.local.yaml`, and workspace and global values to
+`getman.local.yaml`. Session and local variables are not saved. The
+values are saved whether or not the run passed.
+
+A reporter without `=PATH` writes to standard output after the run, and
+`cli` writes there as the run goes, so to pipe a report, as in `-r json |
+jq .summary`, leave `cli` out. `=PATH` creates the folders the path
+needs, and the run notes each file it wrote on standard error.
+
 ## Exit status
 
 | Status | Means |
 | --- | --- |
 | 0 | Everything passed |
-| 1 | A request failed, or the run was stopped by `--bail` |
-| 2 | The run could not start: no workspace, an unknown environment, a bad data file |
+| 1 | A request failed, or the run stopped early: by `--bail`, by a script's `gm.execution.stopExecution()`, or by <kbd>Ctrl</kbd> <kbd>C</kbd> |
+| 2 | The run could not start, or its results could not be written: no workspace, an unknown target or environment, a bad data file, a report or `--persist` file that cannot be written |
+
+## Run control
+
+Each iteration runs the planned requests in order. Variables that
+scripts and captures set in one iteration are still set in the next;
+only the data row changes. Between two requests of an iteration, the
+run waits `--delay` milliseconds.
+
+Scripts steer the run with `gm.execution`; see
+[Controlling a run](scripts.md#controlling-a-run):
+
+| Call | In a run |
+| --- | --- |
+| `gm.execution.setNextRequest(name)` | After this request, go on with the request of that name or path in the run, ahead or back. A name that is not in the run ends the iteration with a warning |
+| `gm.execution.setNextRequest(null)` | End this iteration after this request; the next iteration starts |
+| `gm.execution.skipRequest()` | In a pre-request script: do not send this request. It counts as skipped, not run |
+| `gm.execution.stopExecution()` | Finish this request and end the run. The run exits with 1 |
+
+An iteration that runs more than 100 requests for each one planned, plus
+1,000, is stopped with a warning, since `setNextRequest` probably loops.
+Warnings do not change the exit status.
+
+`--bail` ends the run after the first request that fails, and
+<kbd>Ctrl</kbd> <kbd>C</kbd> ends it after the request that is running.
+Either way the reports are written, and the terminal, JSON, HTML and
+Excel reports give the reason the run stopped.
 
 ## Data files
 
 With `--data`, each row's columns are variables for one iteration,
-stronger than the environment. Scripts read them through
-`gm.iterationData`.
+stronger than the environment, folder and request variables and weaker
+than session and local ones; see
+[Variables](variables.md#where-values-come-from). Scripts read them
+through `gm.iterationData`.
 
 ```csv
 email,plan
@@ -91,8 +141,15 @@ grace@example.com,free
 ]
 ```
 
-CSV needs a header row. JSON must be an array of objects; values that are
-not strings are passed as JSON text.
+A file whose name ends in `.json` is read as JSON, and any other file as
+CSV. CSV needs a header row, and every row needs as many fields as the
+header; names in the header are trimmed, values are kept as they are,
+and fields can be quoted, as in `"Lovelace, A"`. JSON must be an array
+of objects; values that are not strings are passed as JSON text.
+
+The run has as many iterations as the file has rows, unless `-n` says
+otherwise. With more iterations than rows, the last row repeats; with
+fewer, the rows after the last iteration are not used.
 
 ## Reports
 
@@ -109,18 +166,103 @@ not strings are passed as JSON text.
 getman run -e staging -r cli -r junit=getman.xml -r html=getman.html
 ```
 
-The HTML report is a single file with its styles inside. It loads
-nothing, runs no script, and prints cleanly to PDF from a browser, so you
-can attach it to a CI run or mail it. In the CSV, a cell that starts
-with `=`, `+`, `-` or `@` gets a leading `'`, so a spreadsheet does not
-run it as a formula.
-
 Reports leave out bodies and headers, so tokens in them stay out of CI
 artifacts. The values of the variables the environment lists under
 `secrets` show as `[secret]` wherever a run shows them: in the terminal,
 in every report, in kept runs and in the browser's Runner, also inside a
 URL, a test's name or a script's console output. So do the values
-`--var`, a data file or a script gives those variables during the run.
+`--var`, a data file, a script or a capture gives those variables during
+the run. Their JSON-escaped and percent-encoded forms are hidden too,
+and for values of four bytes or more their hex and Base64 forms.
+
+### JSON
+
+The report holds the Getman version, the number of iterations, the
+summary, and one entry per request per iteration, in the order they ran.
+Iterations count from 0 here.
+
+```json
+{
+  "getman": "0.3.4",
+  "iterations": 1,
+  "summary": {
+    "iterations": 1, "requests": 3, "failed_requests": 1,
+    "skipped_requests": 0, "tests_passed": 0, "tests_failed": 0,
+    "checks_passed": 2, "checks_failed": 1,
+    "duration_ms": 310.4, "average_response_ms": 86.67,
+    "stopped": null, "warnings": []
+  },
+  "requests": [
+    {
+      "iteration": 0, "name": "Get order", "path": "orders/get-order.yaml",
+      "method": "GET", "url": "https://staging.example.com/orders/7",
+      "status": 404, "time_ms": 41.2,
+      "timings": { "dns_ms": 0.4, "connect_ms": 12.1, "first_byte_ms": 38.0, "download_ms": 0.3, "reused": false },
+      "http_version": "HTTP/1.1", "size": 23, "passed": false, "skipped": false, "error": null,
+      "script_errors": [], "tests": [],
+      "checks": [{ "name": "status == 200", "passed": false, "message": "status is 404; expected == 200" }],
+      "missing_variables": [], "warnings": [], "logs": []
+    }
+  ]
+}
+```
+
+`summary.stopped` is the reason the run ended early, and
+`summary.warnings` the problems that did not stop it. A request that was
+never sent has `null` for its response fields and the reason in `error`.
+
+### JUnit
+
+The `<testsuites>` element is named after the workspace. Each request of
+each iteration is a `<testsuite>`, named after the request, with
+`(iteration 2)` after the name when there are several. Its test cases
+have the request's path as their class name:
+
+- one per script test and per check; a failed one holds a `<failure>`
+  with the message, and a skipped test is `<skipped/>`;
+- `request`, holding an `<error>`, when the request could not be sent;
+- `script in ...`, holding an `<error>`, for each script that threw;
+- `request` alone, passing or skipped, when the request has nothing else
+  to report.
+
+A suite's time is the response time in seconds.
+
+### HTML
+
+The page opens with the workspace, what ran, the environment, the start
+time in UTC and, when there are several, the number of iterations, then
+the verdict and the
+totals of requests, tests, checks and time. Each request shows its
+method, name, status and time, with a bar comparing its time to the
+slowest; open it for its URL, timings, the messages of a connection,
+errors, checks, script tests, missing variables and warnings. Failed
+requests start open. The page follows the system's light or dark theme.
+
+The HTML report is a single file with its styles inside. It loads
+nothing, runs no script, and prints cleanly to PDF from a browser, so you
+can attach it to a CI run or mail it.
+
+### CSV and Excel
+
+The CSV has these columns, one row per request per iteration, with
+iterations counted from 1:
+
+```text
+iteration,name,path,method,url,status,status_text,time_ms,first_byte_ms,size_bytes,result,tests_passed,tests_failed,checks_passed,checks_failed,failures
+```
+
+`result` is `passed`, `failed` or `skipped`, and `failures` lists the
+reasons, separated by ` | `. Times are milliseconds and sizes are body
+bytes. A cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage
+return gets a leading `'`, so a spreadsheet does not run it as a
+formula.
+
+The Excel workbook's **Summary** sheet has the workspace, what ran, the
+environment, the start time in UTC, the result, the reason it stopped,
+any warnings, the counts of iterations, requests, tests and checks, and
+the total and average times. Its **Requests** sheet has the CSV's rows,
+with the header row frozen and a filter on every column. Text over
+32,000 bytes is cut, since Excel refuses longer cells.
 
 ## In the browser
 
@@ -133,9 +275,11 @@ change the order. The files are not changed. The Runner shows the
 Every run started there is kept in the workspace's git-ignored
 `.getman/runs`, the newest 20, and so is a `getman run --save`. The
 Runner lists them under **Past runs**: select one to see its results
-again, and use **Report** to download any of them as HTML, Excel, CSV,
-JSON or JUnit XML. Kept runs leave out bodies, headers and variable
-values.
+again, use **Report** to download any of them as HTML, Excel, CSV,
+JSON or JUnit XML, or **Forget** to delete one. A downloaded report is
+named after the workspace and the start time, as in
+`getman-orders-2026-10-14-0507.html`. Kept runs leave out bodies,
+headers and variable values.
 
 ## Secrets
 
