@@ -13,7 +13,7 @@ use crate::style;
 pub(crate) fn render(recorded: &Recorded) -> String {
     let about = &recorded.about;
     let summary = recorded.summary.clone().unwrap_or_default();
-    let passed = summary.passed() && summary.stopped.is_none();
+    let passed = summary.succeeded();
     let mut page = String::with_capacity(16 * 1024);
 
     let _ = write!(
@@ -416,6 +416,33 @@ mod tests {
         assert!(html.contains("Could not connect"), "{html}");
         assert!(html.contains("<strong>Failed.</strong>"), "{html}");
         assert!(html.contains("staging environment"), "{html}");
+    }
+
+    #[test]
+    fn a_run_a_script_stopped_passes_and_says_it_stopped() {
+        let mut recorded = super::super::sample();
+        recorded.summary = Some(getman_core::runner::RunSummary {
+            requests: 1,
+            stopped: Some("Login stopped the run".into()),
+            stopped_by_script: true,
+            ..getman_core::runner::RunSummary::default()
+        });
+        let html = render(&recorded);
+        assert!(
+            html.contains("<strong>All passed.</strong> Stopped: Login stopped the run."),
+            "{html}"
+        );
+
+        // Cancelled, the run did not pass.
+        recorded.summary = Some(getman_core::runner::RunSummary {
+            stopped: Some("cancelled".into()),
+            ..getman_core::runner::RunSummary::default()
+        });
+        let html = render(&recorded);
+        assert!(
+            html.contains("<strong>Failed.</strong> Stopped: cancelled."),
+            "{html}"
+        );
     }
 
     #[test]

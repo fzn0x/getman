@@ -129,6 +129,9 @@ pub struct RunSummary {
     pub average_response_ms: f64,
     /// Why the run ended early, if it did.
     pub stopped: Option<String>,
+    /// Whether a script ended the run on purpose, with `stopExecution()`.
+    /// Such a run succeeds if nothing failed.
+    pub stopped_by_script: bool,
     /// Problems that did not stop the run.
     pub warnings: Vec<String>,
 }
@@ -137,6 +140,12 @@ impl RunSummary {
     /// Whether nothing failed.
     pub fn passed(&self) -> bool {
         self.failed_requests == 0 && self.tests_failed == 0 && self.checks_failed == 0
+    }
+
+    /// Whether the run succeeded: nothing failed, and it ran to the end or
+    /// a script ended it on purpose. A cancelled run did not succeed.
+    pub fn succeeded(&self) -> bool {
+        self.passed() && (self.stopped.is_none() || self.stopped_by_script)
     }
 }
 
@@ -327,6 +336,7 @@ pub async fn run(
             }
             if stop {
                 summary.stopped = Some(format!("{} stopped the run", item.name));
+                summary.stopped_by_script = true;
                 overlay = context.overlay;
                 break 'iterations;
             }
@@ -495,16 +505,17 @@ mod tests {
         let server = test_server::spawn().await;
         let (_dir, executor) = setup(&server.url(""));
         let ws = &executor.workspace;
-        ws.create_request(
-            "",
-            "1 stops",
-            &request(
-                "{{base}}/echo",
-                &["status == 200"],
-                "gm.test('still runs', () => {}); bru.runner.stopExecution();",
-            ),
-        )
-        .unwrap();
+        let first = ws
+            .create_request(
+                "",
+                "1 stops",
+                &request(
+                    "{{base}}/echo",
+                    &["status == 200"],
+                    "gm.test('still runs', () => {}); bru.runner.stopExecution();",
+                ),
+            )
+            .unwrap();
         ws.create_request("", "2 never runs", &request("{{base}}/echo", &[], ""))
             .unwrap();
         let options = RunOptions {
@@ -530,6 +541,25 @@ mod tests {
             report.summary.stopped.as_deref(),
             Some("1 stops stopped the run")
         );
+        // Stopped on purpose, with nothing failed: the run succeeded.
+        assert!(report.summary.stopped_by_script);
+        assert!(report.summary.succeeded(), "{:#?}", report.summary);
+
+        // A failure before the stop still fails the run.
+        ws.write_request(
+            &first,
+            &request(
+                "{{base}}/echo",
+                &["status == 201"],
+                "bru.runner.stopExecution();",
+            ),
+        )
+        .unwrap();
+        let report = run(&executor, &options, &AtomicBool::new(false), |_| {})
+            .await
+            .unwrap();
+        assert!(report.summary.stopped_by_script);
+        assert!(!report.summary.succeeded(), "{:#?}", report.summary);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -680,6 +710,8 @@ mod tests {
             .unwrap();
         assert_eq!(report.summary.requests, 0);
         assert_eq!(report.summary.stopped.as_deref(), Some("cancelled"));
+        assert!(!report.summary.stopped_by_script);
+        assert!(!report.summary.succeeded());
     }
 
     #[test]

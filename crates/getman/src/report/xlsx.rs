@@ -20,7 +20,7 @@ fn build(recorded: &Recorded) -> Result<Vec<u8>, XlsxError> {
 
     let about = &recorded.about;
     let summary = recorded.summary.clone().unwrap_or_default();
-    let passed = summary.passed() && summary.stopped.is_none();
+    let passed = summary.succeeded();
 
     let sheet = workbook.add_worksheet();
     sheet.set_name("Summary")?;

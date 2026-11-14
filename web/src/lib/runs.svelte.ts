@@ -64,13 +64,16 @@ export function runTally(summary: RunSummary | null): { passed: number; total: n
   };
 }
 
-/** Whether a run passed: nothing failed and it was not stopped. */
+/**
+ * Whether a run passed: nothing failed, and it ran to the end or a script
+ * stopped it on purpose, as `getman run` decides its exit status.
+ */
 export function runPassed(summary: RunSummary | null): boolean {
   return (
     summary !== null &&
     summary.failed_requests === 0 &&
     summary.tests_failed === 0 &&
     summary.checks_failed === 0 &&
-    summary.stopped === null
+    (summary.stopped === null || summary.stopped_by_script === true)
   );
 }
