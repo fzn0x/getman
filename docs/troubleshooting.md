@@ -427,7 +427,9 @@ error: Could not connect: client error (Connect): invalid peer certificate: Unkn
 Turning off **Check TLS certificates** is `verify_tls: false` in the
 file; there is no command-line flag for it. See [TLS](http.md#tls), and
 [Client certificates](http.md#client-certificates) for servers that ask
-for one.
+for one. WebSocket and Socket.IO connections use the same settings as HTTP
+requests, so `ca_certs` and `client_cert` fix their certificate errors
+too.
 
 ### Proxies
 
