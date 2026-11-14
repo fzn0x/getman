@@ -589,6 +589,7 @@ fn render(vars: &VarStack, text: &str, missing: &mut Vec<String>) -> String {
 /// The request as scripts see it: the message is the body.
 fn script_request(request: &Request, headers: &[crate::model::KeyValue]) -> ScriptRequest {
     ScriptRequest {
+        kind: request.kind,
         method: request.method.clone(),
         url: request.url.clone(),
         headers: headers.to_vec(),

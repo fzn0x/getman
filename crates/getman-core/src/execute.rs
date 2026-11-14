@@ -899,6 +899,7 @@ pub(crate) fn script_request(
         }),
     };
     ScriptRequest {
+        kind: request.kind,
         method: request.method.clone(),
         url: request.url.clone(),
         headers: headers.to_vec(),
@@ -1415,6 +1416,25 @@ mod tests {
         assert!(execution.skipped);
         assert!(execution.request.is_none());
         assert!(!execution.failed());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn skipping_after_the_response_leaves_the_request_sent() {
+        let server = test_server::spawn().await;
+        let (_dir, executor) = setup();
+        let request = Request {
+            url: server.url("/echo"),
+            scripts: Scripts {
+                pre_request: String::new(),
+                post_response: "gm.execution.skipRequest();".into(),
+            },
+            ..Request::default()
+        };
+        let execution = executor
+            .execute(None, &request, &mut Context::default())
+            .await;
+        assert!(!execution.skipped);
+        assert_eq!(execution.response.unwrap().status, 200);
     }
 
     #[tokio::test(flavor = "multi_thread")]

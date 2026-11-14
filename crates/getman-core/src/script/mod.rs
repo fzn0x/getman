@@ -32,7 +32,7 @@ use sha2::Digest as _;
 
 use crate::checks::TestResult;
 use crate::http::{CookieInfo, Header, HttpClient, Outgoing, Response, Transport};
-use crate::model::{FormField, KeyValue, Vars};
+use crate::model::{FormField, KeyValue, RequestKind, Vars};
 use crate::prepare::Script;
 
 const PRELUDE: &str = include_str!("prelude.js");
@@ -94,7 +94,11 @@ pub struct ScriptScopes {
 /// The request as scripts see it, before variables are replaced.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct ScriptRequest {
-    /// HTTP method.
+    /// What the request is. Setting `gm.request.method` upper-cases an
+    /// HTTP method but leaves a gRPC method name as written, since those
+    /// are case-sensitive.
+    pub kind: RequestKind,
+    /// HTTP method, or the gRPC method name.
     pub method: String,
     /// URL, with `{{variables}}` still in place.
     pub url: String,
@@ -423,7 +427,8 @@ fn run_engine(
 }
 
 /// Runs queued promise jobs and timers until the script's promise settles
-/// and nothing is left to do.
+/// and nothing is left to do. A script whose timers fire more than
+/// [`MAX_TICKS`] times, such as an interval never cleared, fails.
 fn settle<'js>(
     ctx: &Ctx<'js>,
     promise: &Promise<'js>,
@@ -431,24 +436,33 @@ fn settle<'js>(
     origin: &str,
     host: &ScriptHost,
 ) -> Result<(), String> {
-    for _ in 0..MAX_TICKS {
+    let mut ticks = 0;
+    loop {
         while ctx.execute_pending_job() {}
         match tick.call::<_, bool>(()).catch(ctx) {
             Ok(true) => {}
             Ok(false) => break,
             Err(caught) => return Err(describe(ctx, caught, origin, host)),
         }
+        ticks += 1;
+        if ticks > MAX_TICKS {
+            return Err(format!(
+                "the script's timers fired more than {MAX_TICKS} times, so it was stopped; clear an interval with clearInterval once it is done"
+            ));
+        }
     }
     match promise.state() {
         PromiseState::Resolved => Ok(()),
-        PromiseState::Rejected => match promise.result::<rquickjs::Value<'_>>().map(|r| r.catch(ctx)) {
+        PromiseState::Rejected => match promise
+            .result::<rquickjs::Value<'_>>()
+            .map(|r| r.catch(ctx))
+        {
             Some(Err(caught)) => Err(describe(ctx, caught, origin, host)),
             _ => Err("the script failed".into()),
         },
-        PromiseState::Pending => Err(
-            "the script never finished: it awaits something that never settles, or a timer that keeps firing"
-                .into(),
-        ),
+        PromiseState::Pending => {
+            Err("the script never finished: it awaits something that never settles".into())
+        }
     }
 }
 
@@ -556,7 +570,7 @@ fn natives<'js>(
             .to_string()
         })?,
     )?;
-    let deadline = Rc::clone(deadline);
+    let sleep_deadline = Rc::clone(deadline);
     native.set(
         "sleep",
         // Never sleeps past the script's time limit: the script is stopped
@@ -564,7 +578,9 @@ fn natives<'js>(
         Function::new(ctx.clone(), move |ctx: Ctx<'_>, ms: f64| {
             let wanted = Duration::try_from_secs_f64(ms.clamp(0.0, 3_600_000.0) / 1000.0)
                 .unwrap_or_default();
-            let left = deadline.get().saturating_duration_since(Instant::now());
+            let left = sleep_deadline
+                .get()
+                .saturating_duration_since(Instant::now());
             std::thread::sleep(wanted.min(left));
             if wanted > left {
                 return Err(Exception::throw_message(&ctx, "interrupted"));
@@ -574,25 +590,42 @@ fn natives<'js>(
     )?;
     let http = host.http.clone();
     let transport = host.transport.clone();
+    let send_deadline = Rc::clone(deadline);
     native.set(
         "send",
-        Function::new(ctx.clone(), move |json: String| -> String {
-            let reply = match (&http, serde_json::from_str::<Outgoing>(&json)) {
-                (None, _) => serde_json::json!({ "error": "gm.sendRequest is not available here" }),
-                (_, Err(e)) => {
-                    serde_json::json!({ "error": format!("the request is not valid: {e}") })
-                }
-                (Some((client, handle)), Ok(outgoing)) => {
-                    match handle.block_on(client.send(&outgoing, transport.clone())) {
-                        Ok(response) => {
-                            serde_json::json!({ "response": ScriptResponse::from(&response) })
-                        }
-                        Err(e) => serde_json::json!({ "error": e.to_string() }),
+        // The engine cannot interrupt a script while it waits here, so the
+        // wait ends at the script's time limit, which stops the script as
+        // `sleep` does.
+        Function::new(
+            ctx.clone(),
+            move |ctx: Ctx<'_>, json: String| -> rquickjs::Result<String> {
+                let reply = match (&http, serde_json::from_str::<Outgoing>(&json)) {
+                    (None, _) => {
+                        serde_json::json!({ "error": "gm.sendRequest is not available here" })
                     }
-                }
-            };
-            reply.to_string()
-        })?,
+                    (_, Err(e)) => {
+                        serde_json::json!({ "error": format!("the request is not valid: {e}") })
+                    }
+                    (Some((client, handle)), Ok(outgoing)) => {
+                        let left = send_deadline
+                            .get()
+                            .saturating_duration_since(Instant::now());
+                        let sent = handle.block_on(tokio::time::timeout(
+                            left,
+                            client.send(&outgoing, transport.clone()),
+                        ));
+                        match sent {
+                            Ok(Ok(response)) => {
+                                serde_json::json!({ "response": ScriptResponse::from(&response) })
+                            }
+                            Ok(Err(e)) => serde_json::json!({ "error": e.to_string() }),
+                            Err(_) => return Err(Exception::throw_message(&ctx, "interrupted")),
+                        }
+                    }
+                };
+                Ok(reply.to_string())
+            },
+        )?,
     )?;
     Ok(native)
 }

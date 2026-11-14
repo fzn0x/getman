@@ -151,6 +151,23 @@ async fn pre_request_scripts_edit_the_message_and_metadata() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_pre_request_script_sets_the_method_name_as_written() {
+    let server = test_server::spawn(Reflection::None).await;
+    let (_dir, executor) = setup();
+    // Method names are case-sensitive, unlike HTTP methods.
+    let request = Request {
+        scripts: Scripts {
+            pre_request: "gm.request.method = 'getman.test.Echo/Unary';".into(),
+            post_response: String::new(),
+        },
+        ..call(&server.address, "Missing", r#"{"text": "hi"}"#)
+    };
+    let execution = run(&executor, &request).await;
+    assert!(!execution.failed(), "{execution:#?}");
+    assert_eq!(received(&execution)[0]["text"], "hi");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn server_streams_arrive_as_a_list() {
     let server = test_server::spawn(Reflection::None).await;
     let (_dir, executor) = setup();

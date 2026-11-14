@@ -1,6 +1,6 @@
 use super::*;
 use crate::http::Header;
-use crate::model::FormField;
+use crate::model::{FormField, RequestKind};
 use crate::test_server;
 
 fn script(code: &str) -> Vec<Script> {
@@ -32,6 +32,7 @@ fn input(event: Event) -> ScriptInput {
             ..ScriptScopes::default()
         },
         request: ScriptRequest {
+            kind: RequestKind::Http,
             method: "POST".into(),
             url: "{{baseUrl}}/users?page=1".into(),
             headers: vec![KeyValue::new("Accept", "application/json")],
@@ -355,6 +356,26 @@ fn async_code_and_timers_run_to_completion() {
 }
 
 #[test]
+fn an_interval_that_is_never_cleared_fails_the_script() {
+    let output = pre("setInterval(() => {}, 10);");
+    let message = output.error.map(|e| e.message).unwrap_or_default();
+    assert!(
+        message.contains("more than 100000 times") && message.contains("clearInterval"),
+        "{message:?}"
+    );
+
+    let output = pre(r"
+        let n = 0;
+        const id = setInterval(() => { if (++n === 3) clearInterval(id); }, 10);
+        gm.test('cleared', async () => {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            gm.expect(n).to.equal(3);
+        });
+    ");
+    assert_all_pass(&output);
+}
+
+#[test]
 fn crypto_matches_known_vectors() {
     let output = post(
         r#"
@@ -425,6 +446,10 @@ fn flow_control_is_reported() {
     assert_eq!(output.next_request, None);
     let output = post("gm.test.skip('later', () => {});");
     assert!(output.tests[0].skipped);
+    // The request was sent before post-response scripts run.
+    let output = post("gm.execution.skipRequest(); bru.runner.skipRequest();");
+    assert!(output.error.is_none(), "{:?}", output.error);
+    assert!(!output.skip_request);
 }
 
 #[test]
@@ -479,6 +504,39 @@ async fn scripts_can_send_requests() {
             .unwrap();
     assert_all_pass(&output);
     assert_eq!(output.changes[0].value.as_deref(), Some("ping"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn waiting_for_a_sent_request_counts_toward_the_time_limit() {
+    let server = test_server::spawn().await;
+    let host = ScriptHost {
+        http: Some((
+            Arc::new(HttpClient::new()),
+            tokio::runtime::Handle::current(),
+        )),
+        timeout: Duration::from_millis(200),
+        ..ScriptHost::default()
+    };
+    // The server answers after 5 s.
+    let code = format!(
+        r#"await gm.sendRequest("{}"); gm.test("never", () => {{}});"#,
+        server.url("/slow")
+    );
+    let started = Instant::now();
+    let output =
+        tokio::task::spawn_blocking(move || run(&host, &script(&code), &input(Event::PreRequest)))
+            .await
+            .unwrap();
+    assert!(
+        started.elapsed() < Duration::from_secs(3),
+        "{:?}",
+        started.elapsed()
+    );
+    assert_eq!(
+        output.error.map(|e| e.message).as_deref(),
+        Some("the script ran longer than 0.2 s and was stopped")
+    );
+    assert!(output.tests.is_empty());
 }
 
 fn form_input() -> ScriptInput {
