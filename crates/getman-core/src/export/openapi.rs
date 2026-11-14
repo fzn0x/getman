@@ -213,6 +213,13 @@ impl Writer<'_> {
         root_auth: &Auth,
     ) {
         let name = request.name.as_str();
+        if !request.kind.is_http() {
+            self.warnings.push(format!(
+                "{name}: OpenAPI cannot describe a {} request; it was left out",
+                request.kind.label()
+            ));
+            return;
+        }
         let method = request.method.trim().to_ascii_lowercase();
         if !METHODS.contains(&method.as_str()) {
             self.warnings.push(format!(
@@ -652,7 +659,7 @@ fn request_body(body: &Body) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::FormField;
+    use crate::model::{FormField, RequestKind};
 
     fn workspace() -> (tempfile::TempDir, Workspace) {
         let dir = tempfile::tempdir().unwrap();
@@ -742,6 +749,43 @@ mod tests {
         )
         .unwrap();
         (dir, ws)
+    }
+
+    #[test]
+    fn grpc_and_live_requests_are_left_out_with_a_warning() {
+        let (_dir, ws) = workspace();
+        let kinds = [
+            ("Call order", RequestKind::Grpc),
+            ("Chat", RequestKind::Websocket),
+        ];
+        for (name, kind) in kinds {
+            ws.create_request(
+                "",
+                name,
+                &Request {
+                    kind,
+                    method: "shop.Orders/GetOrder".into(),
+                    url: "wss://example.com/chat".into(),
+                    ..Request::default()
+                },
+            )
+            .unwrap();
+        }
+        let exported = document(&ws, "", false).unwrap();
+        assert!(
+            !exported.content.contains("shop.orders"),
+            "{}",
+            exported.content
+        );
+        let warnings = exported.warnings.join("\n");
+        assert!(
+            warnings.contains("Call order: OpenAPI cannot describe a gRPC"),
+            "{warnings}"
+        );
+        assert!(
+            warnings.contains("Chat: OpenAPI cannot describe a WebSocket"),
+            "{warnings}"
+        );
     }
 
     #[test]

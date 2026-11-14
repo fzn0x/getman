@@ -221,6 +221,13 @@ impl Writer<'_> {
                     path, error: None, ..
                 } => {
                     let request = self.workspace.read_request(path)?;
+                    if !request.kind.is_http() {
+                        self.warnings.push(format!(
+                            "{path}: Postman collections cannot hold a {} request; it was left out",
+                            request.kind.label()
+                        ));
+                        continue;
+                    }
                     items.push(self.request(&request));
                 }
                 Node::Request {
@@ -1019,7 +1026,7 @@ fn json_path(path: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{FormField, OAuth2};
+    use crate::model::{FormField, OAuth2, RequestKind};
     use crate::workspace::EnvironmentFiles;
 
     fn workspace() -> (tempfile::TempDir, Workspace) {
@@ -1098,6 +1105,42 @@ mod tests {
         )
         .unwrap();
         (dir, ws)
+    }
+
+    #[test]
+    fn grpc_and_live_requests_are_left_out_with_a_warning() {
+        let (_dir, ws) = workspace();
+        let kinds = [
+            ("Get order", RequestKind::Grpc),
+            ("Chat", RequestKind::Websocket),
+        ];
+        for (name, kind) in kinds {
+            ws.create_request(
+                "",
+                name,
+                &Request {
+                    kind,
+                    method: "shop.Orders/GetOrder".into(),
+                    url: "wss://example.com/chat".into(),
+                    ..Request::default()
+                },
+            )
+            .unwrap();
+        }
+        let exported = collection(&ws, "").unwrap();
+        assert!(
+            !exported.content.contains("SHOP.ORDERS"),
+            "{}",
+            exported.content
+        );
+        assert!(
+            !exported.content.contains("\"Chat\""),
+            "{}",
+            exported.content
+        );
+        let warnings = exported.warnings.join("\n");
+        assert!(warnings.contains("gRPC request"), "{warnings}");
+        assert!(warnings.contains("WebSocket request"), "{warnings}");
     }
 
     #[test]
