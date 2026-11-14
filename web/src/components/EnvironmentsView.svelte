@@ -343,7 +343,7 @@
                 aria-label="Remove {row.name}"
                 onclick={() => rows.splice(i, 1)}
               >
-                <Icon name="close" size={7} />
+                <Icon name="close" size={16} />
               </button>
             </span>
           </div>

@@ -347,7 +347,7 @@
     <div class="handshake">
       {#each results.script_errors as scriptError, i (i)}
         <div class="result fail">
-          <span class="mark"><Icon name="warning" size={7} /></span>
+          <span class="mark"><Icon name="warning" size={16} /></span>
           <div>
             <p class="name">Script in {scriptError.origin} failed</p>
             <p class="why">{scriptError.message}</p>
@@ -358,7 +358,7 @@
         <h3 class="bitmap">Checks</h3>
         {#each results.checks as result, i (i)}
           <div class="result" class:fail={!result.passed}>
-            <span class="mark"><Icon name={result.passed ? "check" : "close"} size={7} /></span>
+            <span class="mark"><Icon name={result.passed ? "check" : "close"} size={16} /></span>
             <div>
               <p class="name mono">{result.name}</p>
               {#if result.message}<p class="why">{result.message}</p>{/if}
@@ -373,7 +373,7 @@
             <span class="mark"
               ><Icon
                 name={result.skipped ? "more" : result.passed ? "check" : "close"}
-                size={7}
+                size={16}
               /></span
             >
             <div>

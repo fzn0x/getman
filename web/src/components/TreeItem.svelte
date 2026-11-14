@@ -168,7 +168,7 @@
     ondrop={onDrop}
   >
     {#if node.kind === "folder"}
-      <span class="twisty"><Icon name={open ? "chevronDown" : "chevronRight"} size={7} /></span>
+      <span class="twisty"><Icon name={open ? "chevronDown" : "chevronRight"} size={16} /></span>
       <span class="glyph"><Icon name="folder" /></span>
       <span class="label folder">{node.name}</span>
     {:else}
