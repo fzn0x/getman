@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/getman-dark.png">
-    <img src="docs/images/getman-light.png" width="900" alt="Getman showing a request's checks beside its response: a large 200 on a halftone field, with time, size and 4 of 4 tests passed">
+    <img src="docs/images/getman-light.png" width="900" alt="Getman showing a request's four checks beside its response: 200 OK in green, with the time, size and 4 of 4 tests passed">
   </picture>
 </p>
 
