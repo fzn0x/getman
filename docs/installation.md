@@ -89,8 +89,9 @@ To use `getman` in a terminal, open **Settings › About** in the app and
 choose **Install the getman command**. It creates a link named `getman`
 to the app's own program, in `/usr/local/bin`, or in `~/.local/bin` when
 it cannot write to `/usr/local/bin`. The link follows the app, so the
-command updates with it. A `getman` there that is a file rather than a
-link is left as it is, so one installed another way keeps working.
+command updates with it. The button replaces a `getman` link only when it
+points into a `Getman.app`. A file, or a link to anything else, such as
+Homebrew's, is left as it is, so one installed another way keeps working.
 
 The button is not offered while the app runs from the mounted disk
 image: drag it to **Applications** first.
@@ -190,7 +191,8 @@ sh install.sh
 ```
 
 The Linux build needs glibc; it does not run on musl systems such as
-Alpine. See [GLIBC not found on Linux](troubleshooting.md#glibc-not-found-on-linux)
+Alpine. Releases after 0.3.4 need glibc 2.28 or newer, and 0.3.4 needs
+2.39. See [GLIBC not found on Linux](troubleshooting.md#glibc-not-found-on-linux)
 for which distributions it runs on. In CI, add the directory to the
 job's `PATH`, as in [Running in CI](runner.md#github-actions).
 
@@ -205,9 +207,10 @@ irm https://fzn0x.github.io/getman/install.ps1 | iex
 The script:
 
 1. Asks the GitHub API for the newest release, unless you name a version.
-2. Downloads `getman-<version>-x86_64-pc-windows-msvc.zip` and the
-   release's `SHA256SUMS`, and checks the zip's SHA-256. If it does not
-   match, nothing is installed.
+2. Downloads the release's `SHA256SUMS`, then the zip for your system:
+   `getman-<version>-x86_64-pc-windows-msvc.zip`, or
+   `getman-<version>-aarch64-pc-windows-msvc.zip` on ARM64 Windows. It
+   checks the zip's SHA-256. If it does not match, nothing is installed.
 3. Puts `getman.exe` in `%LOCALAPPDATA%\Programs\getman`. A running
    `getman.exe` is renamed out of the way first, since Windows cannot
    overwrite a running program.
@@ -215,9 +218,11 @@ The script:
    `PATH` of the terminal it runs in. Other terminals that are open
    already need a restart.
 
-It installs the x64 build on ARM64 Windows too, which Windows 11 runs
-through emulation. For a native ARM64 `getman.exe`, use the ARM64
-[desktop app](#windows). There is no build for 32-bit Windows.
+On ARM64 Windows, it installs the native ARM64 build when the release
+has one. Releases up to 0.3.4 have no ARM64 command-line archive, so for
+those the script says so and installs the x64 build, which Windows 11 runs
+through emulation. The [desktop app](#windows) has a native ARM64
+build. There is no build for 32-bit Windows.
 
 The same two variables work, set in the terminal before the script runs:
 
@@ -259,8 +264,10 @@ scoop install fzn0x/getman
 
 The manifest `getman` lives in the bucket
 [fzn0x/scoop-bucket](https://github.com/fzn0x/scoop-bucket), which each
-release updates. It installs the x64 command line and puts `getman` on
-your `PATH` through Scoop's shims.
+release updates. It installs the x64 command line, or the ARM64 one on
+ARM64 Windows, and puts `getman` on your `PATH` through Scoop's shims.
+The ARM64 entry works from the first release that has an ARM64 archive;
+0.3.4 and older have none.
 
 ### Archives
 
@@ -275,6 +282,7 @@ the version:
 | macOS, Apple silicon | `getman-v0.3.4-aarch64-apple-darwin.tar.gz` |
 | macOS, Intel | `getman-v0.3.4-x86_64-apple-darwin.tar.gz` |
 | Windows x64, and ARM64 through emulation | `getman-v0.3.4-x86_64-pc-windows-msvc.zip` |
+| Windows ARM64, native | `getman-<version>-aarch64-pc-windows-msvc.zip`, from the release after 0.3.4 on |
 
 Each holds a folder of the same name with `getman` (`getman.exe` on
 Windows), `README.md`, the licence files and `THIRD_PARTY_NOTICES.md`.

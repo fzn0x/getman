@@ -42,6 +42,13 @@ settings:
   verify_tls: false             # for a self-signed certificate
 ```
 
+TLS works as it does for HTTP requests: `wss://` connections use
+`verify_tls`, `ca_certs` and `client_cert` from the request's settings,
+so a server with a private certificate authority, or one that asks for a
+client certificate, can be reached. See [TLS](http.md#tls) and
+[Client certificates](http.md#client-certificates). Socket.IO over
+WebSocket does the same, directly and through a proxy.
+
 `http://` and `https://` URLs are taken as `ws://` and `wss://`. The
 headers and authentication go with the handshake: Basic, Bearer, API keys
 (in a header or the query) and OAuth 2.0, whose token is fetched first.

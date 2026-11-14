@@ -63,7 +63,9 @@ it opens like any app.
 To use `getman` in a terminal, open **Settings › About** in the app and
 choose **Install the getman command**. It links `/usr/local/bin/getman`,
 or `~/.local/bin/getman` when it cannot write to `/usr/local/bin`, to the
-app.
+app. It replaces an existing `getman` only when that is a link into a
+Getman app. A file, or a link from another install such as Homebrew, is
+left alone.
 
 ### Linux
 

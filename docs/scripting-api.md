@@ -39,7 +39,7 @@ differ:
 | `gm.request` | The request about to be sent; changes are sent | The request, before variables were replaced; changes do nothing |
 | `gm.response` | `undefined` | The response |
 | `gm.messages` | `undefined` | The messages of a WebSocket, event stream or Socket.IO request; `undefined` for others |
-| `gm.execution.skipRequest()` | The request is not sent | The request was sent already, but its result is still marked skipped |
+| `gm.execution.skipRequest()` | The request is not sent | Does nothing: the request was sent already |
 | `gm.info.eventName` | `"prerequest"` | `"test"` |
 | `req.set...` calls | Changes are sent | Changes do nothing |
 | `res`, `responseBody`, `responseCode`, `responseTime`, `responseHeaders` | Not defined | Defined |
@@ -138,7 +138,7 @@ In a pre-request script, what you change is sent.
 | --- | --- | --- |
 | `id` | String | The request's path in the workspace, such as `orders/create.yaml`; empty for an unsaved request |
 | `name` | String | The request's name |
-| `method` | String | The method. A new value is upper-cased |
+| `method` | String | The method. A new HTTP method is upper-cased. A gRPC method name keeps its case |
 | `url` | [URL](#the-url) | The URL. Assign a string to replace it |
 | `headers` | [List](#lists) | The request's headers, with those of its folders and the workspace, disabled ones included. Headers Getman adds when sending, such as for authentication, are not in it |
 | `body` | Object | See [The body](#the-body) |
@@ -221,7 +221,7 @@ field even without `type`. See [Form bodies](scripts.md#form-bodies).
 
 | Request | What `gm.request` is |
 | --- | --- |
-| gRPC | `method` is the method's full name and `body.raw` the message, in JSON. Changes to the URL, headers and message are sent. Do not set `method`: the new value is upper-cased, and method names are case-sensitive |
+| gRPC | `method` is the method's full name and `body.raw` the message, in JSON. Changes to the URL, headers and message are sent. A method name set in `method` keeps the case you give it, since gRPC method names are case-sensitive |
 | WebSocket, event stream and Socket.IO | Changes to the URL and headers are used when connecting. Other changes are ignored |
 
 ## The response
@@ -475,6 +475,11 @@ for its answer.
 | `gm.sendRequest(request)` | A promise of the response. It rejects with an `Error` when the request cannot be sent |
 | `gm.sendRequest(request, callback)` | `undefined`. It calls `callback(error, response)` before it returns |
 
+The time a request waits for its answer counts toward the script's time
+limit. The send gets what is left of it, and when that runs out the
+request is dropped and the script fails with `the script ran longer
+than N s and was stopped`.
+
 Any status is a response: a `404` resolves the promise. The response has
 the members of [`gm.response`](#the-response), `to` included.
 
@@ -509,7 +514,7 @@ cookie jar. See [Sending requests](scripts.md#sending-requests).
 | Member | Returns | Does |
 | --- | --- | --- |
 | `setNextRequest(name)` | | In a run: after this request, go on with the request of the run that has this name or path. `null` ends the iteration. A name that is not in the run ends the iteration with a warning |
-| `skipRequest()` | | In a pre-request script: the request is not sent, and its post-response scripts, checks and captures do not run. It counts as skipped |
+| `skipRequest()` | | In a pre-request script: the request is not sent, and its post-response scripts, checks and captures do not run. It counts as skipped. In a post-response script it does nothing |
 | `stopExecution()` | | This request finishes, with its post-response scripts and checks, and then the run stops |
 | `location` | Array | `[path]`: the request's path in the workspace |
 
@@ -617,8 +622,8 @@ other methods: `console.table` and the like are not functions.
 
 Timers run on a virtual clock: callbacks run in the order of their times,
 without waiting, and a script ends once its code and its timers are
-done. An interval that is never cleared stops after 100,000 callbacks.
-An error thrown in a callback is logged as `Uncaught in timer: ...` and
+done. An interval that is never cleared fails the script with an error
+after 100,000 callbacks; call `clearInterval` once it is done. An error thrown in a callback is logged as `Uncaught in timer: ...` and
 does not fail the script. There is no `clearImmediate`. To wait in real
 time, use `bru.sleep(ms)`.
 
@@ -671,7 +676,8 @@ The response is `{ status, statusText, headers, data, responseTime }`.
 Header names are in lowercase, with repeated headers joined by `, `, and
 `data` is the parsed JSON, or the text. Like `gm.sendRequest`, it
 resolves with any status, takes an optional `callback(error, response)`,
-and does not replace `{{variables}}`.
+and does not replace `{{variables}}`. Its waiting counts toward the
+script's time limit, as for `gm.sendRequest`.
 
 ### req
 
@@ -733,10 +739,10 @@ request and `require` for the [modules](#modules) above.
 
 | Limit | Value |
 | --- | --- |
-| Time | 10 seconds per script. `--script-timeout SECONDS` changes it for `getman run` and `getman send` |
+| Time | 10 seconds per script, waits for `gm.sendRequest` and `bru.sleep` included. `--script-timeout SECONDS` changes it for `getman run` and `getman send` |
 | Memory | 256 MiB for the scripts of one kind |
 | Stack | 1 MiB |
-| Timer callbacks | 100,000 per script |
+| Timer callbacks | 100,000 per script. Past that, the script fails with an error |
 | Modules | 64 for the scripts of one kind, 256 KiB each |
 | Messages of a connection | The first 10,000 |
 

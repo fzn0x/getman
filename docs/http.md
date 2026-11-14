@@ -110,7 +110,8 @@ settings:
 override every file.
 
 WebSocket and Socket.IO connections follow the same settings: an HTTP
-proxy gets a `CONNECT` request, a SOCKS5 one a login.
+proxy gets a `CONNECT` request, a SOCKS5 one a login. They also use the
+request's `verify_tls`, `ca_certs` and `client_cert`, as HTTP requests do.
 
 ## TLS
 

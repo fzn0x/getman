@@ -155,11 +155,13 @@ Creates `getman.yaml` and a `.gitignore` for local files.
 | `--name NAME` | Workspace name. Default: the directory's name |
 | `--example` | Add example requests against a public test API, and two environments |
 
-The `.gitignore` lists `*.local.yaml` and `.getman/`, the files that stay
-on your machine. See [Workspaces](workspaces.md#what-to-commit). `DIR`
-is created when it does not exist. A `getman.yaml` already there stops
-the command, and a `.gitignore` already there is left as it is, so add
-those two lines to it yourself.
+The `.gitignore` lists `*.local.yaml`, `*.local.yml` and `.getman/`, the
+files that stay on your machine. See
+[Workspaces](workspaces.md#what-to-commit). `DIR` is created when it does
+not exist. A `getman.yaml` already there stops the command. A `.gitignore`
+already there keeps its lines, and `init` appends only the entries it
+lacks. The note says whether the file was created, had entries added, or
+already listed them all.
 
 ## getman import
 
@@ -196,16 +198,17 @@ the globals instead.
 | `--indent 2\|4\|tab` | Indent code with two spaces, four spaces or tabs, instead of the language's own habit |
 | `--no-boilerplate` | Leave out the imports and the `main` function, where the language has them (see [Indent and boilerplate](import-export.md#indent-and-boilerplate)) |
 | `-w`, `--workspace DIR` | The workspace |
-| `-e`, `--env NAME` | Environment to fill in variables from; with `--to postman` and no `ITEM`, the environment to export. `GETMAN_ENVIRONMENT` sets it too |
+| `-e`, `--env NAME` | Environment to fill in variables from; with `--to postman` and no `ITEM`, the environment to export. For code, `GETMAN_ENVIRONMENT` sets it too |
 | `--globals` | With `--to postman`, export the globals. Takes no `ITEM` |
 | `--with-secrets` | With `--to postman`, include values from git-ignored local files |
 | `--var NAME=VALUE` | As for `send` |
-| `--script-timeout SECONDS` | Accepted as for `send`; export runs no scripts |
 
 WebSocket, event stream and Socket.IO requests are not written as code;
-connect to them with `getman send`. Because `GETMAN_ENVIRONMENT` counts as
-`-e`, `getman export --to postman` without an `ITEM` exports that
-environment, not the workspace, while the variable is set.
+connect to them with `getman send`. Export runs no scripts, so it has no
+`--script-timeout`. Only code exports read `GETMAN_ENVIRONMENT`, to fill
+in variables. With `--to postman` or `--to openapi` the variable is
+ignored, so `getman export --to postman` without an `ITEM` exports the
+workspace even while it is set. Give `-e` to export an environment.
 
 ## getman mock
 
@@ -238,7 +241,7 @@ standard input and output. Your agent's app starts it; see
 | | |
 | --- | --- |
 | 0 | Success |
-| 1 | `run`: a request failed, or the run stopped early. `send`: the request could not be sent, a script failed, a test or check failed, or a gRPC call ended with a status other than `0 OK`. `import`: some files of a folder could not be imported |
+| 1 | `run`: a request, test or check failed, or the run was stopped early by `--bail` or <kbd>Ctrl</kbd> <kbd>C</kbd>. A run a script ended with `stopExecution()` exits 0 when nothing failed. `send`: the request could not be sent, a script failed, a test or check failed, or a gRPC call ended with a status other than `0 OK`. `import`: some files of a folder could not be imported |
 | 2 | The command could not do its work: bad arguments, no workspace, an unknown environment or target, a file that cannot be read or written |
 | 130 | `send` on a connection: a second <kbd>Ctrl</kbd> <kbd>C</kbd> |
 
@@ -246,7 +249,7 @@ standard input and output. Your agent's app starts it; see
 
 | Variable | |
 | --- | --- |
-| `GETMAN_ENVIRONMENT` | The environment for `run`, `send` and `export`, as `-e` gives it. `-e` wins |
+| `GETMAN_ENVIRONMENT` | The environment for `run`, `send` and code exports, as `-e` gives it. `-e` wins. `export --to postman` ignores it |
 | `GETMAN_<NAME>` | Read in requests as `{{$env.GETMAN_NAME}}`; no other environment variable can be read. See [Variables](variables.md#secrets-from-the-environment) |
 | `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, `NO_PROXY` | The proxy, while a request's proxy setting is the default, `system`. See [Proxies](http.md#proxies) |
 | `NO_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE` | Colour; see below |

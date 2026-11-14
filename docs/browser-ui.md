@@ -68,7 +68,10 @@ workspace. A notice offers **Undo**, and so does <kbd>Ctrl</kbd>
 <kbd>Z</kbd> outside a text field. The **Trash** tab of the sidebar lists
 what was deleted and puts an item back where it was; if something new
 has taken its name, the item comes back with a number. **Empty trash**
-deletes everything in it for good, after asking.
+deletes everything in it for good, after asking. A request's
+`.examples` folder with its example bodies goes to the trash with the
+request, comes back with it, and is deleted with it when you empty the
+trash.
 
 `.getman/` has its own `.gitignore`, so the trash is never committed. The
 [terminal UI](terminal.md) deletes into the same trash.

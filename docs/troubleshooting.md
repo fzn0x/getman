@@ -115,11 +115,15 @@ getman: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.39' not found (require
 ```
 
 The command-line archives, which the install script and Homebrew
-install, are built on Ubuntu 24.04. They need a glibc at least as new as
-the one they were built against: 2.39 for Getman 0.3.4, as in Ubuntu
-24.04 and Debian 13. `ldd --version` shows yours. On an older
-distribution:
+install, need a glibc at least as new as the one they were linked
+against. Getman 0.3.4 was built on Ubuntu 24.04 and needs glibc 2.39, as
+in Ubuntu 24.04 and Debian 13. It does not run on Ubuntu 22.04, Debian 12
+or RHEL 9. The Linux archives of later releases are linked against glibc
+2.28, so they run on RHEL 8 and 9, Debian 11 and Ubuntu 20.04 and newer.
+`ldd --version` shows yours. If your release is 0.3.4 or older, or your
+distribution is older than that:
 
+- install a newer release, if there is one;
 - install the desktop app's [.deb, .rpm or AppImage](installation.md#linux),
   which are built on Ubuntu 22.04 and bring the `getman` command too; or
 - [build from source](installation.md#building-from-source).
@@ -180,8 +184,10 @@ installed, the section says where in place of the button.
 If it fails:
 
 - `<path> is a getman command installed another way; Getman leaves it as
-  it is.` A `getman` that is not a link to the app is already there, such
-  as one from the install script. Remove it, or keep using that one.
+  it is.` A `getman` is already there that is a file, or a link
+  that does not point into a Getman app, such as one from the install
+  script or Homebrew. Getman tries `~/.local/bin` next. Remove the other
+  one, or keep using it.
 - `Could not create <path>: ...` Getman could write to neither
   `/usr/local/bin` nor `~/.local/bin`. Check that you own `~/.local`.
 
@@ -421,7 +427,9 @@ error: Could not connect: client error (Connect): invalid peer certificate: Unkn
 Turning off **Check TLS certificates** is `verify_tls: false` in the
 file; there is no command-line flag for it. See [TLS](http.md#tls), and
 [Client certificates](http.md#client-certificates) for servers that ask
-for one.
+for one. WebSocket and Socket.IO connections use the same settings as HTTP
+requests, so `ca_certs` and `client_cert` fix their certificate errors
+too.
 
 ### Proxies
 

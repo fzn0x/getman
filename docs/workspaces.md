@@ -192,7 +192,8 @@ secrets: [token]
 ```
 
 Beside it, a git-ignored `staging.local.yaml` holds values that are yours
-alone:
+alone. Both files may end in `.yml` instead, and Getman then keeps that
+ending when it saves. A new file gets `.yaml`.
 
 ```yaml
 # environments/staging.local.yaml
@@ -209,6 +210,8 @@ login request's token survives a restart without ever being committed.
 
 | Commit | Keep local |
 | --- | --- |
-| `getman.yaml`, `_folder.yaml`, request files, `*.examples/` (example bodies), `environments/*.yaml` | `*.local.yaml`, `.getman/` (history, past runs, cookies, trash, header presets) |
+| `getman.yaml`, `_folder.yaml`, request files, `*.examples/` (example bodies), `environments/*.yaml` | `*.local.yaml`, `*.local.yml`, `.getman/` (history, past runs, cookies, trash, header presets) |
 
-`getman init` writes a `.gitignore` with exactly those two lines.
+`getman init` writes a `.gitignore` with those entries and `*.local.yml`.
+When a `.gitignore` already exists, it keeps it and adds only the entries
+that are missing.
