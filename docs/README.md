@@ -26,6 +26,7 @@ These pages are also published at <https://fzn0x.github.io/getman/>.
 - [Browser UI](browser-ui.md): tabs, console, history, the trash, header presets
 - [Terminal UI](terminal.md)
 - [Keyboard shortcuts](keyboard-shortcuts.md): the browser, desktop and terminal UIs
+- [Settings](settings.md): preferences, request settings, environment variables
 
 **Reference**
 
