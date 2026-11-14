@@ -299,16 +299,18 @@
     margin-left: auto;
   }
 
+  /* The call is live: a primary dot that breathes. */
   .dot {
-    width: 6px;
-    height: 6px;
-    background: var(--accent);
-    animation: blink 1s steps(2) infinite;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--primary);
+    animation: breathe 1s var(--ease) infinite alternate;
   }
 
-  @keyframes blink {
-    50% {
-      opacity: 0;
+  @keyframes breathe {
+    to {
+      opacity: 0.3;
     }
   }
 
