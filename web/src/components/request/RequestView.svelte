@@ -613,22 +613,23 @@
   .name {
     flex: 1 1 200px;
     min-width: 80px;
-    height: 30px;
-    padding: 0 4px;
-    margin-left: -4px;
+    height: 32px;
+    padding: 0 6px;
+    margin-left: -6px;
     border: 1px solid transparent;
+    border-radius: var(--r-xs);
     background: transparent;
     font-size: var(--fs-title);
-    font-weight: 650;
-    color: var(--ink);
+    font-weight: 500;
+    color: var(--on-surface);
   }
 
   .name:hover {
-    border-color: var(--rule-2);
+    border-color: var(--outline-variant);
   }
 
   .name:focus {
-    border-color: var(--ink);
+    border-color: var(--primary);
     background: var(--field);
   }
 
@@ -648,21 +649,60 @@
     margin-left: auto;
   }
 
+  /* The request line: method and URL share one outlined field with 8px
+     corners; Send is a filled button beside it. */
   .line {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: stretch;
     gap: 0;
     margin: var(--s2) var(--s3) var(--s3) var(--s4);
-    border: 2px solid var(--ink);
-    background: var(--field);
     height: 40px;
+  }
+
+  .method-pick,
+  .url {
+    border: 1px solid var(--outline);
+    background: var(--field);
+    transition: border-color var(--dur-short) var(--ease);
   }
 
   .method-pick {
     position: relative;
     display: flex;
-    border-right: 1px solid var(--rule-2);
+    border-right-color: var(--outline-variant);
+    border-radius: var(--r-sm) 0 0 var(--r-sm);
+  }
+
+  .url {
+    border-left: 0;
+    border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  }
+
+  .line:has(.method-pick:hover, .url:hover) :is(.method-pick, .url) {
+    border-color: var(--on-surface);
+  }
+
+  .line:has(.method-pick:focus-within, .url:focus-within) :is(.method-pick, .url) {
+    border-color: var(--primary);
+    box-shadow:
+      inset 0 1px 0 var(--primary),
+      inset 0 -1px 0 var(--primary);
+  }
+
+  .line:has(.method-pick:focus-within, .url:focus-within) .method-pick {
+    box-shadow:
+      inset 1px 0 0 var(--primary),
+      inset 0 1px 0 var(--primary),
+      inset 0 -1px 0 var(--primary);
+    border-right-color: var(--outline-variant);
+  }
+
+  .line:has(.method-pick:focus-within, .url:focus-within) .url {
+    box-shadow:
+      inset -1px 0 0 var(--primary),
+      inset 0 1px 0 var(--primary),
+      inset 0 -1px 0 var(--primary);
   }
 
   .method-pick select {
@@ -673,8 +713,11 @@
     background: transparent;
     color: inherit;
     font: inherit;
-    font-size: var(--b1);
     cursor: pointer;
+  }
+
+  .method-pick select:focus-visible {
+    outline: none;
   }
 
   .method-pick select option {
@@ -685,10 +728,10 @@
   .method-pick::after {
     content: "";
     position: absolute;
-    right: 10px;
+    right: 11px;
     top: 50%;
-    width: 7px;
-    height: 4px;
+    width: 8px;
+    height: 5px;
     margin-top: -2px;
     background: currentColor;
     clip-path: polygon(0 0, 100% 0, 50% 100%);
@@ -712,32 +755,29 @@
   }
 
   .send {
-    --corner: var(--ink);
     height: auto;
     min-width: 104px;
-    border: 0;
-    border-left: 2px solid var(--ink);
-    font-size: var(--b1);
+    margin-left: var(--s2);
+    padding: 0 var(--s5) 0 var(--s4);
   }
 
   .send.sending {
     opacity: 1;
   }
 
+  /* A small circular progress indicator while the request is out. */
   .scan {
-    width: 22px;
-    height: 7px;
-    background-image: radial-gradient(circle, currentColor 1px, transparent 1.5px);
-    background-size: 4px 4px;
-    animation: scan 0.9s steps(4) infinite;
+    width: 14px;
+    height: 14px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
   }
 
-  @keyframes scan {
-    from {
-      clip-path: inset(0 100% 0 0);
-    }
+  @keyframes spin {
     to {
-      clip-path: inset(0 0 0 0);
+      transform: rotate(1turn);
     }
   }
 
