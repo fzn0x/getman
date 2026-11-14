@@ -220,6 +220,18 @@ const translationOf = (name) => {
 };
 const translations = files.map((file) => file.replace(/\.md$/, "")).filter(translationOf);
 
+// A guide and its translations, each listed with its language for
+// hreflang, so search engines show readers the page in their language.
+const alternatesOf = (name) => {
+  const of = translationOf(name)?.of ?? name;
+  const versions = translations.filter((t) => translationOf(t).of === of);
+  if (!versions.length) return [];
+  return [
+    { lang: "en", href: `${site}docs/${of}.html` },
+    ...versions.map((t) => ({ lang: translationOf(t).lang, href: `${site}docs/${t}.html` })),
+  ];
+};
+
 for (const name of order) {
   if (!files.includes(`${name}.md`))
     throw new Error(`docs/${name}.md is in the sidebar but does not exist`);
@@ -270,6 +282,7 @@ for (const name of ["README", ...order]) {
     previous,
     next: name === "README" ? { href: `${order[0]}.html`, title: titleOf(order[0]) } : next,
     edit: `${repo}/edit/main/docs/${name}.md`,
+    alternates: alternatesOf(name),
   });
   writeFileSync(join(out, "docs", file), html);
   index.push({ title: titleOf(name), url: `docs/${file}`, kind: "page" });
@@ -294,6 +307,7 @@ for (const name of translations) {
     previous: null,
     next: null,
     edit: `${repo}/edit/main/docs/${name}.md`,
+    alternates: alternatesOf(name),
   });
   writeFileSync(join(out, "docs", `${name}.html`), html);
 }
