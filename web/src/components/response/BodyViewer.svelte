@@ -276,6 +276,7 @@
 
   .bar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--s2);
     padding: var(--s2) var(--s3);
