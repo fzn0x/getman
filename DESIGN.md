@@ -220,8 +220,8 @@ Fixed hues at Material's custom-color tones (40 on light, 80 on dark, with 90 an
 
 ### Neutral
 - **Surface** (surface): the page.
-- **Surface containers** (lowest to highest): fields and editors sit on the lowest; menus on the container; dialogs on high; tab strips and quiet fills step between them.
-- **On surface / on surface variant** (on-surface, on-surface-variant): text and secondary text. **Outline** (outline) draws text-field borders and quiet captions; **outline variant** (outline-variant) draws dividers.
+- **Surface containers** (lowest to highest): editors and text panels sit on the low container; menus and popovers on the container; fields and tonal buttons are filled with high, and step to highest on hover; dialogs on high; tab strips step between them.
+- **On surface / on surface variant** (on-surface, on-surface-variant): text and secondary text. **Outline** (outline) draws quiet captions; **outline variant** (outline-variant), mixed to about half strength as `--divider`, draws dividers and rules.
 - **Inverse surface**: snackbars (notices).
 
 ### Named Rules
@@ -230,6 +230,8 @@ Fixed hues at Material's custom-color tones (40 on light, 80 on dark, with 90 an
 **The Meaning-Only Color Rule.** Hue appears only where it encodes something: the main action, selection, a method, a status, a variable, a failure. Decorative color is not used.
 
 **The One Primary Rule.** Each view offers one filled primary button.
+
+**The Quiet Edge Rule.** The layout reads by its surfaces, not by lines. Fields, buttons and segmented controls are filled, not outlined; dividers use `--divider`. A 1px primary edge on focus is the only strong line.
 
 ## Typography
 
@@ -259,7 +261,7 @@ Spacing runs on a 4px base: 4, 8, 12, 16, 24, 32px (`--s1` to `--s6`), with 30px
 
 ## Elevation & Depth
 
-In-flow surfaces are flat and separated by tonal steps of the surface containers and by outline-variant dividers. Only what floats above the page has a shadow, at Material's levels:
+In-flow surfaces are flat and separated by tonal steps of the surface containers and by soft dividers (`--divider`). Only what floats above the page has a shadow, at Material's levels:
 - **Level 1** (`--elevation-1`): a filled button on hover.
 - **Level 2** (`--elevation-2`): menus, autocomplete lists, the timing panel.
 - **Level 3** (`--elevation-3`): dialogs and snackbars.
@@ -268,22 +270,22 @@ Dialogs open over a 32% scrim.
 
 ## Shapes
 
-Material's shape scale (`--r-xs` to `--r-full`): text fields, menus, snackbars and keycaps at 4px; chips, the request line field and badges at 8px; dialogs at 16px; buttons, icon buttons and segmented buttons fully rounded. Rows in lists stay square so they run edge to edge. The selected tab's indicator is a 3px bar with rounded top corners.
+Material's shape scale (`--r-xs` to `--r-full`): menus, snackbars and keycaps at 4px; text fields, chips, the request line field and badges at 8px; dialogs at 16px; buttons, icon buttons and segmented buttons fully rounded. Rows in lists stay square so they run edge to edge. The selected tab's indicator is a 3px bar with rounded top corners.
 
 ## Components
 
 ### Buttons
-- **Outlined** (`.btn`): 30px, full rounding, outline-variant border, primary label, 13px weight 500.
+- **Tonal** (`.btn`): 30px, full rounding, filled with the high surface container, no border, primary label, 13px weight 500.
 - **Filled** (`.btn.primary`): primary fill, on-primary label; level 1 shadow on hover. One per view.
-- **Text** (`.btn.quiet`): no border, primary label.
+- **Text** (`.btn.quiet`): no fill, primary label.
 - **Danger** (`.btn.danger`): error label.
 - **Icon button** (`.icon-btn`): 28px circle, on-surface-variant icon.
 - All show hover and press as a state layer of the label color; disabled at 38% opacity.
 
 ### Text fields
-- **Style:** 30px, 4px corners, 1px outline border on the lowest surface container, 13px text (code face for `.mono`).
-- **Hover / Focus:** the border steps to on-surface on hover and to a 2px primary outline on focus.
-- **Request line:** method and URL share one outlined field with 8px corners (method in the method's color, URL in 14px code with variables in tertiary); Send, Invoke or Connect is a filled button beside it that shows a circular progress indicator while the request is out.
+- **Style:** 30px, 8px corners, filled with the high surface container and no visible border, 13px text (code face for `.mono`).
+- **Hover / Focus:** the fill steps to the highest container on hover; focus draws a 1px primary edge.
+- **Request line:** method and URL share one filled field with 8px corners, split by a divider (method in the method's color, URL in 14px code with variables in tertiary); Send, Invoke or Connect is a filled button beside it that shows a circular progress indicator while the request is out.
 
 ### Checkboxes
 Material's checkbox at 16px: a 2px on-surface-variant outline that fills with primary and shows a white check.
@@ -292,7 +294,7 @@ Material's checkbox at 16px: a 2px on-surface-variant outline that fills with pr
 Material's secondary tabs: 13px labels in on-surface-variant on a strip with an outline-variant divider; the selected one turns on-surface with a 3px primary indicator. Counts follow in tabular figures, failing counts in error.
 
 ### Segmented buttons
-Body type and response view modes: fully rounded groups with outline dividers; the on segment fills with secondary container.
+Body type and response view modes: a fully rounded track filled with the high container, 2px inset; segments have no dividers, and the on segment is a secondary-container pill.
 
 ### Open-request tabs
 A strip on the surface container under the top bar. Tabs have 8px top corners; the active one takes the page's surface and weight 500, so it joins the request below, and the others show a state layer on hover with a short outline-variant divider between them. Unsaved titles set italic; a dirty tab's close mark is primary. A dragged tab lands at a 2px primary line.
