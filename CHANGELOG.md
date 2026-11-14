@@ -6,6 +6,8 @@ All notable changes to Getman are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-11-14
+
 ### Added
 
 - A logo: a G whose round bowl runs into a forward tip, like a request on
@@ -282,7 +284,8 @@ browser UI on `127.0.0.1`, in a terminal UI or run in CI with
 files; checks and captures; JavaScript scripts with the `gm` API (and a
 `pm` alias); import from Postman and cURL, and export as code.
 
-[Unreleased]: https://github.com/fzn0x/getman/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/fzn0x/getman/compare/v0.3.4...HEAD
+[0.3.4]: https://github.com/fzn0x/getman/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/fzn0x/getman/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/fzn0x/getman/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/fzn0x/getman/compare/v0.3.0...v0.3.1
