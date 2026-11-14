@@ -26,6 +26,12 @@ pub(crate) enum Install {
     Deb,
     /// The RPM package.
     Rpm,
+    /// The Flatpak bundle, which repackages the .deb.
+    Flatpak,
+    /// The AUR's getman-bin, which repackages the .deb for pacman.
+    Pacman,
+    /// A build of the repository's Nix flake.
+    Nix,
     /// Anything else, such as a release build copied by hand.
     Other,
 }
@@ -40,6 +46,7 @@ impl Install {
             std::env::consts::OS,
             &exe,
             std::env::var_os("APPIMAGE").is_some(),
+            std::env::var_os("FLATPAK_ID").is_some(),
             Path::exists,
         )
     }
@@ -56,6 +63,13 @@ impl Install {
             Self::Rpm => Some(
                 "Getman was installed from its .rpm package, so your package manager updates it: install the new .rpm from the releases page.",
             ),
+            Self::Flatpak => Some(
+                "Getman was installed as a Flatpak, which doesn't replace itself: install the new .flatpak from the releases page.",
+            ),
+            Self::Pacman => Some(
+                "Getman was installed from the AUR, so your package manager updates it: update getman-bin with your AUR helper.",
+            ),
+            Self::Nix => Some("Getman was built by Nix, so Nix updates it."),
             Self::Portable => Some(
                 "This is the portable copy, which doesn't replace itself: download the new zip from the releases page.",
             ),
@@ -72,19 +86,40 @@ impl Install {
     }
 }
 
+/// dpkg's list of the files of the .deb package.
+const DPKG_LIST: &str = "/var/lib/dpkg/info/getman.list";
+
 /// Tells how a copy was installed: from whether it is a development
 /// build, the bundle type the bundler marked it with, the operating
-/// system, where its executable is and whether it runs as an AppImage.
+/// system, where its executable is, and whether it runs as an AppImage
+/// or in a Flatpak.
 fn detect(
     development: bool,
     bundle: Option<&BundleType>,
     os: &str,
     exe: &Path,
     appimage: bool,
+    flatpak: bool,
     exists: impl Fn(&Path) -> bool,
 ) -> Install {
     if development {
         return Install::Development;
+    }
+    // The Flatpak and the AUR package repackage the .deb, whose mark the
+    // program keeps, so they are told apart first.
+    if os == "linux" {
+        if flatpak {
+            return Install::Flatpak;
+        }
+        if exe.starts_with("/nix/store") {
+            return Install::Nix;
+        }
+        if exe.starts_with("/usr")
+            && exists(Path::new("/var/lib/pacman/local"))
+            && !exists(Path::new(DPKG_LIST))
+        {
+            return Install::Pacman;
+        }
     }
     match bundle {
         Some(BundleType::Deb) => return Install::Deb,
@@ -103,7 +138,7 @@ fn detect(
         // A package whose mark was lost still lives in /usr, which only
         // the package manager writes to.
         "linux" if exe.starts_with("/usr") => {
-            if exists(Path::new("/var/lib/dpkg/info/getman.list")) {
+            if exists(Path::new(DPKG_LIST)) {
                 Install::Deb
             } else {
                 Install::Rpm
@@ -118,7 +153,7 @@ mod tests {
     use super::*;
 
     fn kind(bundle: Option<&BundleType>, os: &str, exe: &str) -> Install {
-        detect(false, bundle, os, Path::new(exe), false, |_| false)
+        detect(false, bundle, os, Path::new(exe), false, false, |_| false)
     }
 
     #[test]
@@ -128,6 +163,7 @@ mod tests {
             Some(&BundleType::Nsis),
             "windows",
             Path::new("C:\\Getman\\getman-desktop.exe"),
+            false,
             false,
             |_| true,
         );
@@ -187,12 +223,47 @@ mod tests {
                 "linux",
                 Path::new("/usr/bin/getman"),
                 false,
+                false,
                 dpkg
             ),
             Install::Deb
         );
         assert_eq!(kind(None, "linux", "/usr/bin/getman"), Install::Rpm);
         assert_eq!(kind(None, "linux", "/home/me/bin/getman"), Install::Other);
+    }
+
+    #[test]
+    fn repackaged_debs_are_told_apart_from_the_deb() {
+        let deb = Some(&BundleType::Deb);
+        let usr = Path::new("/usr/bin/getman");
+        let app = Path::new("/app/bin/getman");
+        let flatpak = detect(false, deb, "linux", app, false, true, |_| false);
+        assert_eq!(flatpak, Install::Flatpak);
+        assert!(
+            flatpak
+                .why_not_updating()
+                .is_some_and(|why| why.contains(".flatpak"))
+        );
+
+        let arch = |path: &Path| path == Path::new("/var/lib/pacman/local");
+        let pacman = detect(false, deb, "linux", usr, false, false, arch);
+        assert_eq!(pacman, Install::Pacman);
+        assert!(
+            pacman
+                .why_not_updating()
+                .is_some_and(|why| why.contains("AUR"))
+        );
+
+        // On a system with both, dpkg's list of the package wins.
+        let both = |path: &Path| arch(path) || path == Path::new(DPKG_LIST);
+        assert_eq!(
+            detect(false, deb, "linux", usr, false, false, both),
+            Install::Deb
+        );
+
+        let nix = kind(None, "linux", "/nix/store/abc-getman-desktop/bin/getman");
+        assert_eq!(nix, Install::Nix);
+        assert!(nix.why_not_updating().is_some());
     }
 
     #[test]
