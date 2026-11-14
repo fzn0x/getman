@@ -39,23 +39,44 @@ function Get-GetmanTarget([string]$architecture) {
 
 $target = Get-GetmanTarget (Get-WindowsArchitecture)
 
+# The line of SHA256SUMS for a file, or nothing.
+function Find-Checksum([string[]]$sums, [string]$file) {
+    $pattern = '\s\*?' + [regex]::Escape($file) + '$'
+    return $sums | Where-Object { $_ -match $pattern } | Select-Object -First 1
+}
+
+# Releases before the ARM64 command line have only the x64 one, which
+# Windows 11 on ARM runs through emulation.
+function Select-GetmanTarget([string]$target, [string[]]$sums, [string]$version) {
+    if ($target -eq 'aarch64-pc-windows-msvc' -and -not (Find-Checksum $sums "getman-$version-$target.zip")) {
+        return 'x86_64-pc-windows-msvc'
+    }
+    return $target
+}
+
 if ($version -eq 'latest') {
     $release = Invoke-RestMethod -UseBasicParsing -Uri "https://api.github.com/repos/$repo/releases/latest" -Headers @{ 'User-Agent' = 'getman-install' }
     $version = $release.tag_name
 }
 
-$name = "getman-$version-$target"
 $base = "https://github.com/$repo/releases/download/$version"
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ('getman-' + [Guid]::NewGuid())
 New-Item -ItemType Directory -Path $tmp | Out-Null
 
 try {
+    Invoke-WebRequest -UseBasicParsing -Uri "$base/SHA256SUMS" -OutFile (Join-Path $tmp 'SHA256SUMS')
+    $sums = Get-Content (Join-Path $tmp 'SHA256SUMS')
+    $chosen = Select-GetmanTarget $target $sums $version
+    if ($chosen -ne $target) {
+        Write-Host "Getman $version has no ARM64 build of the command line; installing the x64 one, which Windows 11 runs through emulation."
+        $target = $chosen
+    }
+    $name = "getman-$version-$target"
+
     Write-Host "Downloading Getman $version for $target"
     Invoke-WebRequest -UseBasicParsing -Uri "$base/$name.zip" -OutFile (Join-Path $tmp "$name.zip")
-    Invoke-WebRequest -UseBasicParsing -Uri "$base/SHA256SUMS" -OutFile (Join-Path $tmp 'SHA256SUMS')
 
-    $pattern = '\s\*?' + [regex]::Escape("$name.zip") + '$'
-    $line = Get-Content (Join-Path $tmp 'SHA256SUMS') | Where-Object { $_ -match $pattern } | Select-Object -First 1
+    $line = Find-Checksum $sums "$name.zip"
     if (-not $line) { throw "$name.zip is not listed in SHA256SUMS." }
     $expected = ($line -split '\s+')[0].ToLowerInvariant()
     $actual = (Get-FileHash -Algorithm SHA256 -Path (Join-Path $tmp "$name.zip")).Hash.ToLowerInvariant()
