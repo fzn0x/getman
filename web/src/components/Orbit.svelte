@@ -79,6 +79,16 @@
     animation-direction: reverse;
   }
 
+  /* Reduced motion keeps every item at its place on the ring; the global
+     rule would otherwise end the animation and drop them in the middle. */
+  @media (prefers-reduced-motion: reduce) {
+    .orbiter {
+      animation: none !important;
+      transform: rotate(calc(var(--angle) * 1deg)) translateY(calc(var(--radius) * 1px))
+        rotate(calc(var(--angle) * -1deg));
+    }
+  }
+
   @keyframes orbit {
     from {
       transform: rotate(calc(var(--angle) * 1deg)) translateY(calc(var(--radius) * 1px))
