@@ -322,6 +322,15 @@ The decoration of the empty workspace and the 401 page: the logo mark on a prima
 ### Motion
 Material's easing and durations: standard `cubic-bezier(0.2, 0, 0, 1)`, emphasized decelerate `cubic-bezier(0.05, 0.7, 0.1, 1)` for things arriving, 150ms for state changes, 250ms for dialogs and snackbars. Reduced motion collapses every animation and transition.
 
+## Website
+
+The documentation site (`site/`) uses the same system: the build puts `tokens.css` before `site/src/site.css`, the fonts and Material Symbols are the app's, and every page reads in light and dark. Reading sizes are larger than the app's: 17px body text, 20px leads, headings in Google Sans Flex at 500.
+
+- **Top bar:** the logo and wordmark, text links with state layers (the current section in secondary container), Material's search bar on the high container, and the theme toggle.
+- **Landing page:** a hero with the orbiting mark, the download for the visitor's system and the install command in an outlined field; the real screenshot in a 16px frame with the level 3 shadow; a bento grid of feature cards (28px corners on the low container) whose mockups replay what the app and the command line really show, each looping while on screen and still under reduced motion; measured facts; a closing download on the primary container.
+- **Docs pages:** a sidebar whose current page is a secondary-container pill, prose capped at 46rem, code blocks and tables on the low container with 12px corners, an on-this-page list with a primary marker, and previous and next as outlined cards.
+- **Search:** a dialog on the high container with 28px corners over a 32% scrim; the selected result is a secondary-container pill.
+
 ## Do's and Don'ts
 
 ### Do:
