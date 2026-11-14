@@ -282,9 +282,13 @@ for (const name of ["README", ...order]) {
     previous,
     next: name === "README" ? { href: `${order[0]}.html`, title: titleOf(order[0]) } : next,
     edit: `${repo}/edit/main/docs/${name}.md`,
+    markdown: `${name}.md`,
     alternates: alternatesOf(name),
   });
   writeFileSync(join(out, "docs", file), html);
+  // The page as Markdown too, for the Copy page button and for readers
+  // that prefer the source, such as AI assistants.
+  writeFileSync(join(out, "docs", `${name}.md`), readFileSync(join(docsDir, `${name}.md`)));
   index.push({ title: titleOf(name), url: `docs/${file}`, kind: "page" });
   for (const heading of doc.headings) {
     index.push({ title: heading.text, url: `docs/${file}#${heading.id}`, kind: titleOf(name) });
@@ -307,9 +311,11 @@ for (const name of translations) {
     previous: null,
     next: null,
     edit: `${repo}/edit/main/docs/${name}.md`,
+    markdown: `${name}.md`,
     alternates: alternatesOf(name),
   });
   writeFileSync(join(out, "docs", `${name}.html`), html);
+  writeFileSync(join(out, "docs", `${name}.md`), readFileSync(join(docsDir, `${name}.md`)));
 }
 
 // The landing page and the rest.
