@@ -30,4 +30,5 @@ These pages are also published at <https://fzn0x.github.io/getman/>.
 
 - [Command line](cli.md)
 - [Scripting API](scripting-api.md): every member a script can use
+- [Workspace file format](workspace-format.md): every file and key
 - [Security and privacy](security.md)

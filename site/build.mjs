@@ -52,7 +52,7 @@ export const sections = [
   },
   {
     title: "Reference",
-    pages: ["cli", "scripting-api", "security"],
+    pages: ["cli", "scripting-api", "workspace-format", "security"],
   },
 ];
 
