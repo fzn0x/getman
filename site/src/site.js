@@ -26,7 +26,6 @@
     } catch {}
     themeButton?.setAttribute("aria-label", themeLabels[theme]);
     themeButton?.setAttribute("title", themeLabels[theme]);
-    drawAll();
   }
   if (themeButton) {
     const current = root.dataset.theme || "system";
@@ -86,45 +85,131 @@
 
   if (mac) for (const key of document.querySelectorAll("[data-mod]")) key.textContent = "⌘";
 
-  // ---- Halftone: dots grow with the response time, as in the app -------------------
+  // ---- Feature mockups on the landing page ----------------------------------------
+  // Each card replays its mockup while it is on screen: one gentle loop with
+  // a hold on the end state. Without script, or with reduced motion, the
+  // cards show their end state and nothing moves.
 
-  const STEP = 6;
-  function draw(svg) {
-    const box = svg.getBoundingClientRect();
-    const width = Math.ceil(box.width);
-    const height = Math.ceil(box.height);
-    if (!width || !height) return;
-    const host = svg.closest("[data-time]") ?? svg;
-    const time = Number(host.dataset.time || svg.dataset.time || 500);
-    const darkness = Math.min(1, Math.max(0, Math.log10(Math.max(time, 1)) / 4));
-    const columns = Math.ceil(width / STEP);
-    const rows = Math.ceil(height / STEP);
-    const parts = [];
-    for (let c = 0; c < columns; c++) {
-      const across = c / Math.max(columns - 1, 1);
-      for (let r = 0; r < rows; r++) {
-        const down = r / Math.max(rows - 1, 1);
-        const falloff = 1 - 0.75 * across + 0.15 * (down - 0.5);
-        const radius = Math.min(
-          STEP / 2,
-          Math.max(0.35, (0.4 + 2.4 * darkness) * Math.max(falloff, 0.12)),
-        );
-        parts.push(
-          `<circle cx="${c * STEP + STEP / 2}" cy="${r * STEP + STEP / 2}" r="${radius.toFixed(2)}"/>`,
-        );
-      }
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function countUp(el, ms = 900) {
+    const to = Number(el.dataset.to);
+    const decimals = String(el.dataset.to).split(".")[1]?.length ?? 0;
+    if (reduce) {
+      el.textContent = to.toFixed(decimals);
+      return;
     }
-    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-    svg.innerHTML = parts.join("");
+    const t0 = performance.now();
+    const tick = (t) => {
+      const p = Math.min((t - t0) / ms, 1);
+      el.textContent = (to * (1 - Math.pow(1 - p, 3))).toFixed(decimals);
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
   }
-  const fields = [...document.querySelectorAll("svg.halftone")];
-  function drawAll() {
-    fields.forEach(draw);
+
+  function typeOut(el, timers, step = 32) {
+    const text = el.dataset.text;
+    el.textContent = "";
+    [...text].forEach((_, i) =>
+      timers.push(setTimeout(() => (el.textContent = text.slice(0, i + 1)), i * step)),
+    );
+    return text.length * step;
   }
-  if (fields.length) {
-    drawAll();
-    const observer = new ResizeObserver(() => drawAll());
-    fields.forEach((svg) => observer.observe(svg.parentElement));
+
+  const demos = {
+    files: { cycle: 7000, play() {} },
+    checks: {
+      cycle: 6500,
+      play(card, timers) {
+        const count = card.querySelector(".count");
+        count.textContent = "0";
+        timers.push(setTimeout(() => countUp(count, 600), 4 * 120 + 300));
+      },
+    },
+    run: {
+      cycle: 8000,
+      play(card, timers) {
+        typeOut(card.querySelector(".typed"), timers);
+      },
+    },
+    import: {
+      cycle: 8000,
+      play(card, timers) {
+        const typed = typeOut(card.querySelector(".typed"), timers, 28);
+        const count = card.querySelector(".count");
+        count.textContent = "0";
+        timers.push(setTimeout(() => countUp(count, 500), typed + 16 * 45 + 200));
+      },
+    },
+    protocols: {
+      cycle: 15000,
+      play(card, timers) {
+        const tabs = [...card.querySelectorAll(".seg")];
+        const panels = [...card.querySelectorAll(".panel")];
+        const show = (n) => {
+          tabs.forEach((t, i) => t.classList.toggle("on", i === n));
+          panels.forEach((p, i) => p.classList.toggle("on", i === n));
+        };
+        show(0);
+        tabs.forEach((_, i) => timers.push(setTimeout(() => show(i), i * 3000)));
+      },
+    },
+  };
+
+  if (!reduce && "IntersectionObserver" in window) {
+    for (const card of document.querySelectorAll("[data-demo]")) {
+      const demo = demos[card.dataset.demo];
+      if (!demo) continue;
+      card.classList.add("armed");
+      let timers = [];
+      let loop = null;
+      const run = () => {
+        timers.forEach(clearTimeout);
+        timers = [];
+        card.classList.remove("on");
+        // One frame with the start state, so the transitions run again.
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            card.classList.add("on");
+            demo.play(card, timers);
+          }),
+        );
+      };
+      const stop = () => {
+        clearInterval(loop);
+        loop = null;
+        timers.forEach(clearTimeout);
+        timers = [];
+      };
+      new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting && !loop) {
+            run();
+            loop = setInterval(run, demo.cycle);
+          } else if (!entry.isIntersecting && loop) {
+            stop();
+          }
+        },
+        { threshold: 0.4 },
+      ).observe(card);
+    }
+  }
+
+  // The measured facts count up once, when they come into view.
+  const facts = [...document.querySelectorAll(".facts .count")];
+  if (facts.length && !reduce && "IntersectionObserver" in window) {
+    const seen = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          countUp(entry.target, 1200);
+          seen.unobserve(entry.target);
+        }
+      },
+      { threshold: 0.6 },
+    );
+    facts.forEach((el) => seen.observe(el));
   }
 
   // ---- The documentation menu on small screens -------------------------------------
