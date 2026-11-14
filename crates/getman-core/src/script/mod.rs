@@ -560,7 +560,7 @@ fn natives<'js>(
             .to_string()
         })?,
     )?;
-    let deadline = Rc::clone(deadline);
+    let sleep_deadline = Rc::clone(deadline);
     native.set(
         "sleep",
         // Never sleeps past the script's time limit: the script is stopped
@@ -568,7 +568,9 @@ fn natives<'js>(
         Function::new(ctx.clone(), move |ctx: Ctx<'_>, ms: f64| {
             let wanted = Duration::try_from_secs_f64(ms.clamp(0.0, 3_600_000.0) / 1000.0)
                 .unwrap_or_default();
-            let left = deadline.get().saturating_duration_since(Instant::now());
+            let left = sleep_deadline
+                .get()
+                .saturating_duration_since(Instant::now());
             std::thread::sleep(wanted.min(left));
             if wanted > left {
                 return Err(Exception::throw_message(&ctx, "interrupted"));
@@ -578,25 +580,42 @@ fn natives<'js>(
     )?;
     let http = host.http.clone();
     let transport = host.transport.clone();
+    let send_deadline = Rc::clone(deadline);
     native.set(
         "send",
-        Function::new(ctx.clone(), move |json: String| -> String {
-            let reply = match (&http, serde_json::from_str::<Outgoing>(&json)) {
-                (None, _) => serde_json::json!({ "error": "gm.sendRequest is not available here" }),
-                (_, Err(e)) => {
-                    serde_json::json!({ "error": format!("the request is not valid: {e}") })
-                }
-                (Some((client, handle)), Ok(outgoing)) => {
-                    match handle.block_on(client.send(&outgoing, transport.clone())) {
-                        Ok(response) => {
-                            serde_json::json!({ "response": ScriptResponse::from(&response) })
-                        }
-                        Err(e) => serde_json::json!({ "error": e.to_string() }),
+        // The engine cannot interrupt a script while it waits here, so the
+        // wait ends at the script's time limit, which stops the script as
+        // `sleep` does.
+        Function::new(
+            ctx.clone(),
+            move |ctx: Ctx<'_>, json: String| -> rquickjs::Result<String> {
+                let reply = match (&http, serde_json::from_str::<Outgoing>(&json)) {
+                    (None, _) => {
+                        serde_json::json!({ "error": "gm.sendRequest is not available here" })
                     }
-                }
-            };
-            reply.to_string()
-        })?,
+                    (_, Err(e)) => {
+                        serde_json::json!({ "error": format!("the request is not valid: {e}") })
+                    }
+                    (Some((client, handle)), Ok(outgoing)) => {
+                        let left = send_deadline
+                            .get()
+                            .saturating_duration_since(Instant::now());
+                        let sent = handle.block_on(tokio::time::timeout(
+                            left,
+                            client.send(&outgoing, transport.clone()),
+                        ));
+                        match sent {
+                            Ok(Ok(response)) => {
+                                serde_json::json!({ "response": ScriptResponse::from(&response) })
+                            }
+                            Ok(Err(e)) => serde_json::json!({ "error": e.to_string() }),
+                            Err(_) => return Err(Exception::throw_message(&ctx, "interrupted")),
+                        }
+                    }
+                };
+                Ok(reply.to_string())
+            },
+        )?,
     )?;
     Ok(native)
 }

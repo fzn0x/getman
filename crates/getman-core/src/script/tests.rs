@@ -486,6 +486,39 @@ async fn scripts_can_send_requests() {
     assert_eq!(output.changes[0].value.as_deref(), Some("ping"));
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn waiting_for_a_sent_request_counts_toward_the_time_limit() {
+    let server = test_server::spawn().await;
+    let host = ScriptHost {
+        http: Some((
+            Arc::new(HttpClient::new()),
+            tokio::runtime::Handle::current(),
+        )),
+        timeout: Duration::from_millis(200),
+        ..ScriptHost::default()
+    };
+    // The server answers after 5 s.
+    let code = format!(
+        r#"await gm.sendRequest("{}"); gm.test("never", () => {{}});"#,
+        server.url("/slow")
+    );
+    let started = Instant::now();
+    let output =
+        tokio::task::spawn_blocking(move || run(&host, &script(&code), &input(Event::PreRequest)))
+            .await
+            .unwrap();
+    assert!(
+        started.elapsed() < Duration::from_secs(3),
+        "{:?}",
+        started.elapsed()
+    );
+    assert_eq!(
+        output.error.map(|e| e.message).as_deref(),
+        Some("the script ran longer than 0.2 s and was stopped")
+    );
+    assert!(output.tests.is_empty());
+}
+
 fn form_input() -> ScriptInput {
     let mut input = input(Event::PreRequest);
     input.request.body = Some(ScriptBody {
