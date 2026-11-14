@@ -6,12 +6,105 @@ All notable changes to Getman are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Getman for Android and iOS. Each app runs Getman's engine and shows the
+  same UI as the desktop app, with one workspace, made with the example
+  requests, in its own storage. See [Mobile apps](docs/installation.md#mobile-apps).
+  - Android: `Getman-android-universal.apk`, one signed APK for ARM64,
+    ARMv7 and x86_64, for Android 8.0 or newer. HTTPS is checked with the
+    phone's own certificate store.
+  - iOS: `Getman-ios.ipa`, unsigned, for iOS 15 or newer. AltStore,
+    SideStore or Sideloadly sign it with your Apple ID when they install it.
+    The Files app shows the workspace under On My iPhone › Getman.
+- Flatpak bundles for Linux x86_64 and aarch64, on the GNOME runtime:
+  `flatpak install --user Getman-linux-x86_64.flatpak`.
+- A Nix flake that builds the command line, and on Linux the desktop app,
+  from source: `nix run github:fzn0x/getman`.
+- A Homebrew cask for the desktop app, beside the formula for the command
+  line: `brew install --cask fzn0x/tap/getman-desktop`.
+- A native `getman.exe` for ARM64 Windows. The install script and Scoop
+  take it on ARM64, and fall back to the x64 build for releases without
+  it.
+- A downloads section for Windows, macOS, Linux, Android and iOS on the
+  [website](https://fzn0x.github.io/getman/) and in the README. A phone
+  sees its own app first.
+- Documentation of every feature, with new pages for
+  [installation](docs/installation.md),
+  [troubleshooting](docs/troubleshooting.md),
+  [keyboard shortcuts](docs/keyboard-shortcuts.md),
+  [settings](docs/settings.md), the [scripting API](docs/scripting-api.md),
+  the [workspace format](docs/workspace-format.md),
+  [development](docs/development.md) and the
+  [architecture](docs/architecture.md). Each page of the documentation
+  site sits on a card, with a Copy page button for its Markdown.
+- The release workflow can push the AUR package `getman-bin`. It does so
+  once the repository has an AUR key, which 0.4.0 does not yet have.
+
 ### Changed
 
 - Getman is now licensed under MIT OR GPL-3.0-or-later, in place of MIT OR
   Apache-2.0. `LICENSE-GPL` holds the GPL text; the Apache-2.0 text moves to
   `LICENSES/Apache-2.0.txt`, for the bundled files under it. Releases up to
   0.3.4 keep MIT OR Apache-2.0.
+- The Linux command line links against glibc 2.28, so it runs on RHEL 8
+  and 9, Debian 11 and Ubuntu 20.04 and newer. 0.3.4 needed glibc 2.39.
+- The browser UI fits phones and tablets. On a narrow screen the top bar
+  folds Import, Cookies and the theme into a menu, the sidebar closes when
+  a request opens, and keyboard hints hide on touch screens, whose controls
+  grow to finger size. Desktop layouts are unchanged.
+- Quieter edges: fields and controls are filled, dividers are softer, and
+  the Runner, folder settings, live connections and the HTML run report
+  follow Material Design 3.
+- The theme button and command cycle system, light and dark, and say which
+  comes next.
+- A run that a script ends with `gm.execution.stopExecution()` exits 0 when
+  nothing failed, and the Runner marks it passed. The JSON report says so
+  in `summary.stopped_by_script`.
+- `getman export` has only its own options. `--script-timeout` is gone,
+  since export runs no scripts, and `GETMAN_ENVIRONMENT` applies to code
+  exports only, so `getman export --to postman` without `-e` exports the
+  workspace.
+- Settings › About names Flatpak, AUR and Nix installs, and how each of
+  them updates, in place of telling them to install a new .deb.
+- The package descriptions for Homebrew, Scoop and winget, and the desktop
+  app's own, describe Getman as an open-source Postman alternative in
+  place of slogans.
+- The desktop updater moves to tauri-plugin-updater 2.14.1 and zip 9,
+  which clears four advisories against the older zip.
+
+### Fixed
+
+- `getman init` adds its entries to an existing `.gitignore` instead of
+  leaving it as it is.
+- Environment files ending in `.yml`, and their `.local.yml` files, are
+  read and saved in place. Before, only `.yaml` worked.
+- YAML numbers and booleans stay as written where Getman expects text:
+  `version: 1.0` stays `1.0`, and `0x10` and `1e3` stay as they are.
+- Deleting a request moves its `.examples` folder to the trash with it, and
+  restoring it brings the folder back.
+- Postman and OpenAPI exports leave out gRPC, WebSocket, event stream and
+  Socket.IO requests, with a warning, instead of writing them as broken
+  HTTP requests.
+- A Hoppscotch import no longer copies saved OAuth 2.0 tokens into
+  request files.
+- WebSocket and Socket.IO connections use the request's `ca_certs` and
+  `client_cert`, as HTTP requests do.
+- Scripts: a gRPC method name set in a script keeps its case,
+  `skipRequest()` in a post-response script does nothing, waits for
+  `gm.sendRequest` and `bru.sleep` count toward the script's time limit,
+  and an interval that is never cleared fails the script after 100,000
+  callbacks.
+- A gRPC call whose stream closes before its first message goes out says
+  why, such as a TLS server refusing to go on without a client
+  certificate, instead of only that the server closed the stream.
+- On macOS, Install the getman command no longer replaces a `getman` link
+  from another install, such as Homebrew's.
+- On a Mac, Option 1 to 9 and Option [ and ] switch tabs again. Option
+  with a digit or a bracket types a symbol there, so they now match the
+  physical key too.
+- The response's JSON filter keeps room for its placeholder when the
+  toolbar wraps.
 
 ## [0.3.4] - 2026-11-14
 
