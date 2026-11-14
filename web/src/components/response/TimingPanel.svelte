@@ -158,11 +158,11 @@
     padding: var(--s3);
     border: 1px solid var(--rule);
     background: var(--field);
-    box-shadow: 0 6px 18px -6px color-mix(in srgb, var(--t10) 35%, transparent);
+    box-shadow: var(--elevation-2);
   }
 
   .panel:focus-visible {
-    outline: 2px dotted var(--ink);
+    outline: 2px solid var(--primary);
     outline-offset: 2px;
   }
 
@@ -216,7 +216,7 @@
   }
 
   .wait {
-    background: var(--ink);
+    background: var(--primary);
   }
 
   .download {

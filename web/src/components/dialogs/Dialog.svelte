@@ -44,10 +44,11 @@
     width: min(var(--width), calc(100vw - 32px));
     max-height: min(80vh, 760px);
     padding: 0;
-    border: 2px solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
-    box-shadow: 0 24px 60px -24px color-mix(in srgb, var(--t10) 55%, transparent);
+    border: 0;
+    border-radius: var(--r-lg);
+    background: var(--surface-container-high);
+    color: var(--on-surface);
+    box-shadow: var(--elevation-3);
   }
 
   dialog.top {
@@ -55,17 +56,11 @@
   }
 
   dialog::backdrop {
-    background: color-mix(in srgb, var(--t0) 40%, transparent);
-    background-image: radial-gradient(
-      circle,
-      color-mix(in srgb, var(--t10) 22%, transparent) 0.8px,
-      transparent 1.2px
-    );
-    background-size: 4px 4px;
+    background: color-mix(in srgb, var(--scrim) 32%, transparent);
   }
 
   dialog[open] {
-    animation: open 160ms steps(3, end);
+    animation: open var(--dur-medium) var(--ease-out);
   }
 
   @keyframes open {
@@ -85,7 +80,6 @@
     display: flex;
     justify-content: flex-end;
     gap: var(--s2);
-    padding: var(--s3) var(--s4);
-    border-top: 1px solid var(--rule-2);
+    padding: var(--s3) var(--s5) var(--s4);
   }
 </style>

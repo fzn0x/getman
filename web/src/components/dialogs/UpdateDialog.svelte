@@ -110,7 +110,7 @@
   .bar span {
     display: block;
     height: 100%;
-    background: var(--ink);
+    background: var(--primary);
   }
 
   .bar.unknown {
