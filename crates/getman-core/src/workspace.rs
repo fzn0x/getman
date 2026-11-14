@@ -40,6 +40,7 @@ pub const ENVIRONMENTS_DIR: &str = "environments";
 pub const STATE_DIR: &str = ".getman";
 
 const LOCAL_SUFFIX: &str = ".local.yaml";
+const LOCAL_SUFFIX_YML: &str = ".local.yml";
 const LOCAL_WORKSPACE_FILE: &str = "getman.local.yaml";
 const SKIPPED_DIRS: &[&str] = &["node_modules", "target"];
 const MAX_DEPTH: usize = 32;
@@ -853,8 +854,18 @@ impl Workspace {
             return Err(Error::InvalidPath(id.to_owned()));
         }
         let dir = self.resolve(ENVIRONMENTS_DIR)?;
-        let shared = self.resolve(&format!("{ENVIRONMENTS_DIR}/{id}.yaml"))?;
-        Ok((shared, dir.join(format!("{id}{LOCAL_SUFFIX}"))))
+        // Files may end in `.yml` as well; a new file gets `.yaml`.
+        let mut shared = self.resolve(&format!("{ENVIRONMENTS_DIR}/{id}.yaml"))?;
+        let shared_yml = self.resolve(&format!("{ENVIRONMENTS_DIR}/{id}.yml"))?;
+        if !shared.exists() && shared_yml.is_file() {
+            shared = shared_yml;
+        }
+        let mut local = dir.join(format!("{id}{LOCAL_SUFFIX}"));
+        let local_yml = dir.join(format!("{id}{LOCAL_SUFFIX_YML}"));
+        if !local.exists() && local_yml.is_file() {
+            local = local_yml;
+        }
+        Ok((shared, local))
     }
 
     // ---- Local state ----------------------------------------------------
@@ -963,7 +974,10 @@ fn peek_request(path: &Path) -> Result<Option<Request>, String> {
 }
 
 fn request_stem(file_name: &str) -> Option<&str> {
-    if file_name.ends_with(LOCAL_SUFFIX) || file_name == FOLDER_FILE {
+    if file_name.ends_with(LOCAL_SUFFIX)
+        || file_name.ends_with(LOCAL_SUFFIX_YML)
+        || file_name == FOLDER_FILE
+    {
         return None;
     }
     file_name
@@ -1380,6 +1394,49 @@ mod tests {
         assert_eq!(ws.read_environment(&new_id).unwrap().local["token"], "t");
         ws.delete_environment(&new_id).unwrap();
         assert_eq!(ws.environments().unwrap(), []);
+    }
+
+    #[test]
+    fn environment_files_may_end_in_yml() {
+        let (dir, ws) = workspace();
+        let envs = dir.path().join("environments");
+        fs::create_dir_all(&envs).unwrap();
+        fs::write(
+            envs.join("staging.yml"),
+            "variables:
+  host: example.com
+",
+        )
+        .unwrap();
+        fs::write(
+            envs.join("staging.local.yml"),
+            "variables:
+  token: abc
+",
+        )
+        .unwrap();
+
+        let list = ws.environments().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].id, "staging");
+        let files = ws.read_environment("staging").unwrap();
+        assert_eq!(files.shared.variables["host"], "example.com");
+        assert_eq!(files.local["token"], "abc");
+
+        let mut vars = Vars::new();
+        vars.insert("extra".into(), "1".into());
+        ws.set_local_environment_vars("staging", &vars).unwrap();
+        assert!(
+            fs::read_to_string(envs.join("staging.local.yml"))
+                .unwrap()
+                .contains("extra")
+        );
+        assert!(!envs.join("staging.yaml").exists());
+        assert!(!envs.join("staging.local.yaml").exists());
+
+        ws.delete_environment("staging").unwrap();
+        assert!(!envs.join("staging.yml").exists());
+        assert!(!envs.join("staging.local.yml").exists());
     }
 
     #[test]
