@@ -318,7 +318,7 @@
   .app {
     display: grid;
     grid-template-columns: var(--sidebar-width) 1px minmax(0, 1fr);
-    grid-template-rows: var(--bar) minmax(0, 1fr) 24px;
+    grid-template-rows: var(--bar) minmax(0, 1fr) var(--foot);
     grid-template-areas:
       "top top top"
       "side handle main"
@@ -410,8 +410,9 @@
   }
 
   .link {
+    align-self: stretch;
     margin: 0 -6px;
-    padding: 2px 6px;
+    padding: 0 6px;
     border: 0;
     border-radius: var(--r-xs);
     background: none;
@@ -441,7 +442,7 @@
     position: fixed;
     z-index: 20;
     top: var(--bar);
-    bottom: 24px;
+    bottom: var(--foot);
     left: 0;
     width: min(320px, 86vw);
   }
@@ -449,7 +450,7 @@
   .scrim {
     position: fixed;
     z-index: 19;
-    inset: var(--bar) 0 24px;
+    inset: var(--bar) 0 var(--foot);
     border: 0;
     background: color-mix(in srgb, var(--scrim) 32%, transparent);
   }

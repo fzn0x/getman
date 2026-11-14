@@ -219,11 +219,11 @@
 
   .grid {
     display: grid;
-    grid-template-columns: minmax(120px, 2fr) minmax(140px, 3fr) 28px;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) var(--icon);
   }
 
   .grid.toggles {
-    grid-template-columns: auto minmax(120px, 2fr) minmax(140px, 3fr) 28px;
+    grid-template-columns: auto minmax(0, 2fr) minmax(0, 3fr) var(--icon);
   }
 
   .head,

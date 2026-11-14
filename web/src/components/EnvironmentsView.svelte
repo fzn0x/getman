@@ -468,12 +468,14 @@
 
   .table {
     display: grid;
-    grid-template-columns: minmax(140px, 1.2fr) minmax(160px, 2fr) minmax(160px, 2fr) 56px 28px;
+    grid-template-columns: minmax(140px, 1.2fr) minmax(160px, 2fr) minmax(160px, 2fr) 56px var(
+        --icon
+      );
     max-width: 1100px;
   }
 
   .table:not(:has(.center)) {
-    grid-template-columns: minmax(140px, 1fr) minmax(200px, 2fr) 28px;
+    grid-template-columns: minmax(140px, 1fr) minmax(200px, 2fr) var(--icon);
   }
 
   .row {
