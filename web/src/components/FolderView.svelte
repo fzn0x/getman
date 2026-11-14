@@ -36,8 +36,9 @@
         aria-label="{root ? 'Workspace' : 'Folder'} name"
         spellcheck="false"
       />
-      <p class="file mono">
-        {root ? "Workspace settings in getman.yaml" : `Folder settings in ${tab.path}/_folder.yaml`}
+      <p class="file">
+        {root ? "Workspace settings in" : "Folder settings in"}
+        <code>{root ? "getman.yaml" : `${tab.path}/_folder.yaml`}</code>
       </p>
     </div>
     <div class="actions">
@@ -164,8 +165,12 @@
 
   .file {
     margin: 0;
-    color: var(--ink-3);
+    color: var(--on-surface-variant);
     font-size: var(--fs-meta);
+  }
+
+  .file code {
+    font-family: var(--font-code);
   }
 
   .name {

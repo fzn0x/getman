@@ -311,7 +311,10 @@ A strip on the surface container under the top bar. Tabs have 8px top corners; t
 Snackbars at the bottom right: inverse surface, 4px corners, level 3 shadow, an 8px status dot and a text action in inverse primary. Errors use the error container.
 
 ### Response header
-The head of every response: a faint tint of the status color over the surface, the status code at 36px in that color with the reason phrase beside it, then Time, First byte, Size, Protocol and Tests as label and value pairs. Time opens the timing panel. While a request is out, an indeterminate linear progress bar runs along the top.
+The head of every response: a faint tint of the status color over the surface, the status code at 36px in that color with the reason phrase beside it, then Time, First byte, Size, Protocol and Tests as label and value pairs. Time opens the timing panel. While a request is out, an indeterminate linear progress bar runs along the top. WebSocket, Server-Sent Events and Socket.IO connections use the same header: the state (Open, Closed) in its color on a faint tint, the handshake facts as pairs, and the linear progress bar while connecting.
+
+### Runner
+The run's results grid has one 16px cell per request and iteration with 4px corners: the highest surface container until it runs, then ok, error or outline for passed, failed or skipped; the chosen cell gets a 2px primary ring. Errors in the runner, a response or a connection sit on the error container.
 
 ### Orbiting mark
 The decoration of the empty workspace and the 401 page: the logo mark on a primary-container disc, with Material Symbols for what Getman does on an inner ring and method marks on an outer one turning the other way (`Orbit.svelte`, a port of Magic UI's Orbiting Circles). Rings are outline-variant hairlines, turns take 36 and 54 seconds, and reduced motion stops them. It shows beside the empty workspace's text only when the main area is at least 880px wide. While the workspace loads, the mark alone breathes in primary.

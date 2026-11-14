@@ -83,15 +83,19 @@
 </section>
 
 <style>
+  /* An outlined card; while the mock runs it takes the primary container. */
   .mock {
     margin: 0 var(--s4) var(--s3);
-    padding: var(--s2) var(--s3);
-    border: 1px solid var(--rule-2);
-    background: var(--field);
+    padding: var(--s2) var(--s2) var(--s2) var(--s4);
+    border: 1px solid var(--outline-variant);
+    border-radius: var(--r-md);
+    background: var(--surface-container-lowest);
   }
 
   .mock.on {
-    border-color: var(--ink);
+    border-color: transparent;
+    background: var(--primary-container);
+    color: var(--on-primary-container);
   }
 
   .line {
@@ -102,7 +106,11 @@
   }
 
   .label {
-    color: var(--ink-3);
+    color: var(--on-surface-variant);
+  }
+
+  .mock.on .label {
+    color: inherit;
   }
 
   .line .btn {
@@ -115,13 +123,14 @@
     gap: var(--s2);
     padding: 2px 4px;
     border: 0;
+    border-radius: var(--r-xs);
     background: none;
-    color: var(--ink);
+    color: inherit;
     font-size: var(--fs-code);
   }
 
   .url:hover {
-    background: var(--sunken);
+    background: color-mix(in srgb, currentColor var(--hover), transparent);
   }
 
   .hint {
