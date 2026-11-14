@@ -101,6 +101,25 @@ pub(crate) struct VarArgs {
     pub(crate) script_timeout: f64,
 }
 
+/// `VarArgs` for `export`, where `GETMAN_ENVIRONMENT` must not stand in
+/// for `-e`: with `--to postman`, `-e` chooses an environment to export,
+/// so the variable would change what is exported. Code exports read the
+/// variable themselves. Export runs no scripts, so there is no
+/// `--script-timeout`.
+#[derive(Debug, Args)]
+pub(crate) struct ExportVarArgs {
+    /// Environment to use, by file name or display name. With
+    /// `--to postman`, the environment to export. Code exports also read
+    /// `GETMAN_ENVIRONMENT`.
+    #[arg(long, short = 'e', value_name = "NAME")]
+    pub(crate) env: Option<String>,
+
+    /// Set a variable for this run, overriding every other value. Repeat
+    /// for more.
+    #[arg(long = "var", value_name = "NAME=VALUE", value_parser = parse_var)]
+    pub(crate) vars: Vec<(String, String)>,
+}
+
 #[derive(Debug, Args)]
 pub(crate) struct NetArgs {
     /// HTTP version for every request, over the files' settings: auto,
@@ -358,7 +377,7 @@ pub(crate) struct ExportArgs {
     pub(crate) workspace: WorkspaceArgs,
 
     #[command(flatten)]
-    pub(crate) vars: VarArgs,
+    pub(crate) vars: ExportVarArgs,
 }
 
 #[derive(Debug, Args)]
@@ -564,6 +583,10 @@ mod tests {
         };
         assert_eq!(args.request.as_deref(), Some("orders"));
         assert_eq!(args.language, "postman");
+        // Export runs no scripts, so it offers no script timeout.
+        assert!(
+            Cli::try_parse_from(["getman", "export", "a.yaml", "--script-timeout", "5"]).is_err()
+        );
         let cli = Cli::try_parse_from([
             "getman",
             "export",
@@ -604,6 +627,20 @@ mod tests {
         assert!(args.no_boilerplate);
         assert!(Cli::try_parse_from(["getman", "export", "a.yaml", "--indent", "3"]).is_err());
         assert!(Cli::try_parse_from(["getman", "export", "--to", "cobol"]).is_err());
+    }
+
+    #[test]
+    fn export_ignores_the_environment_variable() {
+        use clap::CommandFactory;
+        let command = Cli::command();
+        let env_of = |name: &str| {
+            let sub = command.find_subcommand(name).unwrap();
+            let arg = sub.get_arguments().find(|a| a.get_id() == "env").unwrap();
+            arg.get_env().map(ToOwned::to_owned)
+        };
+        assert!(env_of("export").is_none());
+        assert!(env_of("run").is_some());
+        assert!(env_of("send").is_some());
     }
 
     #[test]
