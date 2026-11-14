@@ -203,13 +203,15 @@ the repository: a lost key means users must reinstall to get updates.
 ### Packages
 
 Each release also carries manifests for package managers, written from
-the release's own files by `packaging/render.mjs`: `getman.rb` (Homebrew),
-`getman.json` (Scoop) and `fzn0x.Getman*.yaml` (winget). They hold the
-version, the download URLs and the SHA-256 sums.
+the release's own files by `packaging/render.mjs`: `getman.rb` (Homebrew
+formula), `getman-desktop.rb` (Homebrew cask), `getman.json` (Scoop) and
+`fzn0x.Getman*.yaml` (winget). They hold the version, the download URLs
+and the SHA-256 sums.
 
 | Package manager | How a release gets there |
 | --- | --- |
 | Homebrew: `brew install fzn0x/tap/getman` | The `publish-packages` job in `release.yml` commits `Formula/getman.rb` to [fzn0x/homebrew-tap](https://github.com/fzn0x/homebrew-tap) |
+| Homebrew cask: `brew install --cask fzn0x/tap/getman-desktop` | The same job commits `Casks/getman-desktop.rb`, for `Getman-macos-universal.dmg`. The app is not notarized, so the cask's caveats tell how to allow its first launch |
 | Scoop: `scoop install fzn0x/getman`, after `scoop bucket add fzn0x https://github.com/fzn0x/scoop-bucket` | The same job commits `bucket/getman.json` to [fzn0x/scoop-bucket](https://github.com/fzn0x/scoop-bucket) |
 | winget | By hand: a pull request from a fork of `microsoft/winget-pkgs` adding the three files under `manifests/f/fzn0x/Getman/<version>/`; the first one is reviewed by hand |
 | Flatpak: `flatpak install --user Getman-linux-x86_64.flatpak` | The `flatpak` job in `release.yml` builds `Getman-linux-x86_64.flatpak` and `Getman-linux-aarch64.flatpak` and the release carries them; see below |
@@ -218,7 +220,10 @@ version, the download URLs and the SHA-256 sums.
 
 The job pushes with the repository secret `PACKAGES_TOKEN`, a
 fine-grained personal access token with read and write access to the
-contents of the tap and the bucket. When the token expires, the job fails
+contents of the tap and the bucket. The tap keeps the formula `getman`
+(the command line) and the cask `getman-desktop` (the app) side by side;
+the cask installs `Getman.app` and no `getman` link, so the two do not
+clash. When the token expires, the job fails
 and the release itself is not affected: renew the token, update the
 secret and rerun the job.
 
@@ -292,10 +297,10 @@ flake takes the version from the workspace's `Cargo.toml`, so a release
 needs nothing there.
 
 Try a changed template by hand before a release:
-`brew install --formula ./getman.rb`, `scoop install ./getman.json`,
-`winget validate` on the folder of winget files, and `makepkg` in an
-Arch container on the AUR files. To render them from a release you have
-downloaded:
+`brew install --formula ./getman.rb`, `brew install --cask
+./getman-desktop.rb`, `scoop install ./getman.json`, `winget validate`
+on the folder of winget files, and `makepkg` in an Arch container on the
+AUR files. To render them from a release you have downloaded:
 
 ```sh
 node packaging/render.mjs --tag v0.2.0 --dist downloads --out manifests
