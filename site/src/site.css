@@ -268,6 +268,12 @@ kbd {
   border-color: transparent;
 }
 
+.btn.small {
+  height: 32px;
+  padding: 0 var(--s3);
+  font-size: var(--fs-meta);
+}
+
 .btn.large {
   height: 52px;
   padding: 0 var(--s6) 0 var(--s5);
@@ -1394,7 +1400,8 @@ figure.code.wrap .line {
 }
 
 html:not(.js) .copy,
-html:not(.js) [data-copy-command] {
+html:not(.js) [data-copy-command],
+html:not(.js) .doc-actions {
   display: none;
 }
 
@@ -1496,6 +1503,10 @@ html:not(.js) [data-copy-command] {
   border-radius: var(--r-lg);
   background: var(--card);
   box-shadow: var(--elevation-1);
+}
+
+.doc-actions {
+  margin: calc(var(--s2) * -1) 0 var(--s5);
 }
 
 /* The guide keeps its reading width in the middle of the card. */

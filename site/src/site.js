@@ -39,12 +39,19 @@
 
   // ---- Copying -------------------------------------------------------------------
 
-  async function copy(text, button, label) {
+  // `text` may be a promise, for text fetched on the click. Safari copies
+  // only during the click, so a pending text goes in as a ClipboardItem.
+  async function copy(text, button, label, failed = "Select and copy") {
     try {
-      await navigator.clipboard.writeText(text);
+      if (typeof text !== "string" && window.ClipboardItem) {
+        const blob = text.then((t) => new Blob([t], { type: "text/plain" }));
+        await navigator.clipboard.write([new ClipboardItem({ "text/plain": blob })]);
+      } else {
+        await navigator.clipboard.writeText(await text);
+      }
       flash(button, "Copied");
     } catch {
-      flash(button, "Select and copy");
+      flash(button, failed);
     }
     function flash(target, message) {
       const span = target.querySelector("span") || target;
@@ -69,6 +76,15 @@
       }
       const text = (commands.length ? commands : lines).join("\n");
       copy(text.trim(), button, "Copy");
+      return;
+    }
+    const page = event.target.closest("[data-copy-page]");
+    if (page) {
+      const text = fetch(page.dataset.copyPage).then((response) => {
+        if (!response.ok) throw new Error(`${response.status}`);
+        return response.text();
+      });
+      copy(text, page, "Copy page", "Not copied");
       return;
     }
     const command = event.target.closest("[data-copy-command]");
