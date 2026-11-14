@@ -86,7 +86,7 @@ The commands, with the keys that run them without the palette:
 | Manage environments | |
 | Clear session variables | |
 | Show cookies | |
-| Switch light and dark theme | |
+| Switch theme (system, light or dark, with the next one named) | |
 | Put the response below the request, or beside it | |
 | Keyboard shortcuts | <kbd>?</kbd> |
 | Open a workspace folder (desktop app) | |

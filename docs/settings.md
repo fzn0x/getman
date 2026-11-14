@@ -24,7 +24,7 @@ the same reason; see [Desktop app settings](#desktop-app-settings).
 
 | Preference | Default | Change it with | Storage key |
 | --- | --- | --- | --- |
-| Theme | Follows the system's light or dark mode | The contrast button in the top bar, or **Switch light and dark theme** in the command palette | `getman.theme` |
+| Theme | Follows the system's light or dark mode | The contrast button in the top bar, or **Switch theme** in the command palette. Each use goes to the next of system, light and dark | `getman.theme` |
 | Response position | Beside the request | The layout button in the top bar, or **Put the response below the request** in the palette | `getman.layout` |
 | Sidebar shown | Shown. On a window 900 pixels wide or less, it starts hidden | <kbd>Ctrl</kbd> <kbd>B</kbd>, or the sidebar button | `getman.sidebarOpen` |
 | Sidebar width | 280 pixels, from 200 to 520 | Drag its edge, or focus the edge and press <kbd>←</kbd> <kbd>→</kbd> | `getman.sidebarWidth` |
@@ -34,9 +34,11 @@ the same reason; see [Desktop app settings](#desktop-app-settings).
 | Code indent | Each language's own | **Indent** in **Copy as code** | `getman.codeIndent` |
 | Imports and `main` in code | On | **Imports and main** in **Copy as code** | `getman.codeBoilerplate` |
 
-Once you switch the theme, the UI keeps light or dark and stops following
-the system. To follow the system again, remove `getman.theme` from the
-page's local storage, such as in the browser's developer tools.
+The button and the palette command cycle system, light and dark. Their
+labels name the current theme and the next one, such as **Theme: system.
+Click for light**. While the theme is light or dark, the UI stops
+following the system. Cycle on to system to follow it again. A stored
+value other than `light` or `dark` also means system.
 
 **Keep `{{variables}}`** in **Copy as code** is not kept: it is off each
 time the dialog opens. See [Export as code](import-export.md#export-as-code)
