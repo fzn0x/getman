@@ -29,6 +29,8 @@ this way shows "The request was cancelled." and can be sent again.
 ## Keys
 
 Press <kbd>?</kbd> in the terminal UI to see these.
+[Keyboard shortcuts](keyboard-shortcuts.md#terminal-ui) lists every key,
+including the arrow keys and the ones for typing a line.
 
 ### Anywhere
 
@@ -38,7 +40,7 @@ Press <kbd>?</kbd> in the terminal UI to see these.
 | <kbd>s</kbd> | Send the open request, or connect or call |
 | <kbd>Esc</kbd> or <kbd>x</kbd> | Stop what is running: a request, a connection, a call or a sign-in |
 | <kbd>w</kbd> | Save it |
-| <kbd>e</kbd> / <kbd>E</kbd> | Next or previous environment |
+| <kbd>e</kbd> / <kbd>E</kbd> | Next or previous environment. In the request pane, <kbd>E</kbd> edits instead |
 | <kbd>/</kbd> | Filter requests by name or path |
 | <kbd>r</kbd> | Run the selected folder, or everything |
 | <kbd>R</kbd> | Reload the tree from disk |
@@ -65,7 +67,7 @@ UI's Trash lists them, puts them back and empties it.
 | --- | --- |
 | <kbd>i</kbd> or <kbd>Enter</kbd> | Edit the URL; <kbd>Enter</kbd> sends, <kbd>Esc</kbd> stops editing |
 | <kbd>m</kbd> / <kbd>M</kbd> | Next or previous method |
-| <kbd>1</kbd>–<kbd>5</kbd>, <kbd>[</kbd> <kbd>]</kbd> | Params, headers, body, auth, checks |
+| <kbd>1</kbd> to <kbd>5</kbd>, <kbd>[</kbd> <kbd>]</kbd> | Params, headers, body, auth, checks |
 | <kbd>E</kbd> or <kbd>o</kbd> | Edit that part in your editor |
 | <kbd>b</kbd> | On the auth pane, sign in to OAuth 2.0 with your browser |
 
@@ -74,7 +76,7 @@ UI's Trash lists them, puts them back and empties it.
 | Keys | Does |
 | --- | --- |
 | <kbd>j</kbd> <kbd>k</kbd>, <kbd>PgUp</kbd> <kbd>PgDn</kbd>, <kbd>g</kbd> <kbd>G</kbd> | Scroll |
-| <kbd>1</kbd>–<kbd>4</kbd>, <kbd>[</kbd> <kbd>]</kbd> | Body, headers, tests, console |
+| <kbd>1</kbd> to <kbd>4</kbd>, <kbd>[</kbd> <kbd>]</kbd> | Body, headers, tests, console |
 
 ### WebSocket, Socket.IO and gRPC
 

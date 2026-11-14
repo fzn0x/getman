@@ -2,7 +2,8 @@
 
 `getman` opens the workspace in your browser, on 127.0.0.1. This page
 covers the parts of the UI that save you work day to day. Press
-<kbd>?</kbd> in the UI for every shortcut.
+<kbd>?</kbd> in the UI for the main shortcuts;
+[Keyboard shortcuts](keyboard-shortcuts.md) lists every one.
 
 ## Tabs
 
