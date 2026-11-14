@@ -1,0 +1,154 @@
+/* Material Design 3 color roles for Getman, light and dark.
+   Generated from the seed #3F51B5 (the logo's indigo) with Material Color
+   Utilities 0.4.0: Tonal Spot tones over palettes that keep the seed's
+   chroma, a violet tertiary (hue 312) and fixed hues for status and methods
+   (ok 150, info 245, warn 70, violet 312). Do not edit by hand. */
+
+:root {
+  color-scheme: light;
+  --primary: #4355b9;
+  --on-primary: #ffffff;
+  --primary-container: #dee0ff;
+  --on-primary-container: #293ca0;
+  --secondary: #5b5d72;
+  --on-secondary: #ffffff;
+  --secondary-container: #e0e1f9;
+  --on-secondary-container: #434659;
+  --tertiary: #72508f;
+  --on-tertiary: #ffffff;
+  --tertiary-container: #f1daff;
+  --on-tertiary-container: #593876;
+  --error: #ba1a1a;
+  --on-error: #ffffff;
+  --error-container: #ffdad6;
+  --on-error-container: #93000a;
+  --surface: #fbf8fe;
+  --on-surface: #1b1b20;
+  --on-surface-variant: #454650;
+  --surface-dim: #dbd9df;
+  --surface-bright: #fbf8fe;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f5f2f9;
+  --surface-container: #efedf3;
+  --surface-container-high: #eae7ed;
+  --surface-container-highest: #e4e1e7;
+  --outline: #767681;
+  --outline-variant: #c6c5d1;
+  --inverse-surface: #303035;
+  --inverse-on-surface: #f2f0f6;
+  --inverse-primary: #bac3ff;
+  --scrim: #000000;
+  --shadow: #000000;
+  --ok: #1a6c31;
+  --ok-container: #a3f5aa;
+  --on-ok-container: #002108;
+  --info: #006496;
+  --info-container: #cce5ff;
+  --on-info-container: #001e31;
+  --warn: #865300;
+  --warn-container: #ffddb8;
+  --on-warn-container: #2b1700;
+  --violet: #7848a2;
+  --violet-container: #f1daff;
+  --on-violet-container: #2d004f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --primary: #bac3ff;
+    --on-primary: #08218a;
+    --primary-container: #293ca0;
+    --on-primary-container: #dee0ff;
+    --secondary: #c3c5dd;
+    --on-secondary: #2d2f42;
+    --secondary-container: #434659;
+    --on-secondary-container: #e0e1f9;
+    --tertiary: #dfb7ff;
+    --on-tertiary: #41215d;
+    --tertiary-container: #593876;
+    --on-tertiary-container: #f1daff;
+    --error: #ffb4ab;
+    --on-error: #690005;
+    --error-container: #93000a;
+    --on-error-container: #ffdad6;
+    --surface: #131317;
+    --on-surface: #e4e1e7;
+    --on-surface-variant: #c6c5d1;
+    --surface-dim: #131317;
+    --surface-bright: #39393d;
+    --surface-container-lowest: #0d0e12;
+    --surface-container-low: #1b1b20;
+    --surface-container: #1f1f24;
+    --surface-container-high: #292a2e;
+    --surface-container-highest: #343439;
+    --outline: #90909b;
+    --outline-variant: #454650;
+    --inverse-surface: #e4e1e7;
+    --inverse-on-surface: #303035;
+    --inverse-primary: #4355b9;
+    --scrim: #000000;
+    --shadow: #000000;
+    --ok: #88d990;
+    --ok-container: #00531f;
+    --on-ok-container: #a3f5aa;
+    --info: #91cdff;
+    --info-container: #004b72;
+    --on-info-container: #cce5ff;
+    --warn: #ffb960;
+    --warn-container: #653e00;
+    --on-warn-container: #ffddb8;
+    --violet: #dfb7ff;
+    --violet-container: #5f2f88;
+    --on-violet-container: #f1daff;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --primary: #bac3ff;
+  --on-primary: #08218a;
+  --primary-container: #293ca0;
+  --on-primary-container: #dee0ff;
+  --secondary: #c3c5dd;
+  --on-secondary: #2d2f42;
+  --secondary-container: #434659;
+  --on-secondary-container: #e0e1f9;
+  --tertiary: #dfb7ff;
+  --on-tertiary: #41215d;
+  --tertiary-container: #593876;
+  --on-tertiary-container: #f1daff;
+  --error: #ffb4ab;
+  --on-error: #690005;
+  --error-container: #93000a;
+  --on-error-container: #ffdad6;
+  --surface: #131317;
+  --on-surface: #e4e1e7;
+  --on-surface-variant: #c6c5d1;
+  --surface-dim: #131317;
+  --surface-bright: #39393d;
+  --surface-container-lowest: #0d0e12;
+  --surface-container-low: #1b1b20;
+  --surface-container: #1f1f24;
+  --surface-container-high: #292a2e;
+  --surface-container-highest: #343439;
+  --outline: #90909b;
+  --outline-variant: #454650;
+  --inverse-surface: #e4e1e7;
+  --inverse-on-surface: #303035;
+  --inverse-primary: #4355b9;
+  --scrim: #000000;
+  --shadow: #000000;
+  --ok: #88d990;
+  --ok-container: #00531f;
+  --on-ok-container: #a3f5aa;
+  --info: #91cdff;
+  --info-container: #004b72;
+  --on-info-container: #cce5ff;
+  --warn: #ffb960;
+  --warn-container: #653e00;
+  --on-warn-container: #ffddb8;
+  --violet: #dfb7ff;
+  --violet-container: #5f2f88;
+  --on-violet-container: #f1daff;
+}
