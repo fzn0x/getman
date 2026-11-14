@@ -16,11 +16,24 @@ export function matches(event: KeyboardEvent, combo: string): boolean {
   if (isMac && !want.has("mod") && event.metaKey) return false;
   const pressed = event.key.toLowerCase();
   if (pressed === key) return true;
-  // Alt changes the character on some layouts; fall back to the key's code.
+  // Alt changes the character on some layouts, and Option on a Mac types a
+  // symbol for digits and brackets; fall back to the key's code.
   const code = event.code.toLowerCase();
   return (
-    code === `key${key}` || code === `digit${key}` || (key === "enter" && code === "numpadenter")
+    code === `key${key}` ||
+    code === `digit${key}` ||
+    (key === "[" && code === "bracketleft") ||
+    (key === "]" && code === "bracketright") ||
+    (key === "enter" && code === "numpadenter")
   );
+}
+
+/** The digit 1 to 9 of an Alt press, by the physical key, or null. */
+export function altDigit(event: KeyboardEvent): number | null {
+  if (!event.altKey || event.ctrlKey || event.metaKey) return null;
+  const code = /^Digit([1-9])$/.exec(event.code ?? "");
+  if (code) return Number(code[1]);
+  return /^[1-9]$/.test(event.key) ? Number(event.key) : null;
 }
 
 /** A combo written for people: `Ctrl S`, `Cmd Enter`, `Alt ]`. */
