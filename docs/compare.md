@@ -7,7 +7,7 @@ four others, [Yaak][yaak], [Hoppscotch][hoppscotch], [Bruno][bruno] and
 
 Facts about the other clients were checked against their own repositories,
 documentation, pricing pages and release files on 14 November 2026. Sizes
-are from each one's latest stable release: Getman 0.3.3, Yaak 2026.9.1,
+are from each one's latest stable release: Getman 0.3.4, Yaak 2026.9.1,
 Hoppscotch 2026.10.1, Bruno 4.3.0 and Beam 0.11.0. All of this changes
 often, so follow the links before deciding.
 
@@ -27,7 +27,7 @@ often, so follow the links before deciding.
 | Mock servers | Local, from saved examples ([mocks](examples-and-mocks.md)) | None documented ([docs][yaak-docs]) | [Hosted][hopp-mock]; listed under the Business plan ([pricing][hopp-pricing]) | [Local, in beta][bruno-mock] | None documented ([README][beam-readme]) |
 | MCP server for AI agents | Built in ([AI agents](mcp.md)) | A [plugin][yaak-mcp] | [Needs an account][hopp-mcp]; listed under the Business plan ([pricing][hopp-pricing]) | A [separate project][bruno-mcp] at version 0.1.0 | None documented ([README][beam-readme]) |
 | Telemetry | [None](security.md) | [None][yaak-privacy] | [On by default][hopp-telemetry], with a [switch in Settings][hopp-settings] | An anonymous [daily start event][bruno-telemetry] | [None][beam-readme] |
-| Windows x64 download | 15.3 MiB installer ([release][getman-release]) | 44.6 MiB installer ([release][yaak-release]) | 45.3 MiB installer ([release][hopp-release]) | 117.4 MiB installer ([release][bruno-release]) | 14.1 MiB zip, no installer ([release][beam-release]) |
+| Windows x64 download | 15.4 MiB installer ([release][getman-release]) | 44.6 MiB installer ([release][yaak-release]) | 45.3 MiB installer ([release][hopp-release]) | 117.4 MiB installer ([release][bruno-release]) | 14.1 MiB zip, no installer ([release][beam-release]) |
 | Built with | Rust, Svelte, Tauri | [Rust, React, Tauri][yaak-readme] | [Vue][hopp-vue], [Tauri][hopp-desktop] | [Electron, React][bruno-electron] | [Rust, GPUI][beam-cargo] |
 
 ## Yaak
@@ -127,7 +127,7 @@ and React ([package][bruno-electron]).
 **Where Getman differs:**
 
 - **Size.** Bruno's Windows installer is 117.4 MiB
-  ([release][bruno-release]). Getman's is 15.3 MiB
+  ([release][bruno-release]). Getman's is 15.4 MiB
   ([release][getman-release]): its desktop app draws with the web view
   built into the system, WebView2 on Windows ([desktop app](desktop.md)).
 - **Postman scripts as they are.** Bruno translates `pm` calls into its
@@ -157,7 +157,7 @@ account and no telemetry ([README][beam-readme]).
 
 - **The smallest download here:** a 14.1 MiB zip for Windows and an
   11.4 MiB archive for Apple silicon Macs ([release][beam-release]).
-  Getman's are a 15.3 MiB installer and a 22.1 MiB disk image for both
+  Getman's are a 15.4 MiB installer and a 22.2 MiB disk image for both
   kinds of Mac ([release][getman-release]).
 - **An interface drawn natively** with GPUI ([README][beam-readme]).
 - **Copyleft.** GPL-3.0 keeps derived work open
@@ -280,5 +280,5 @@ getman import hoppscotch-collection.json
 [beam-scripts]: https://github.com/hlcfan/beam/blob/main/docs/POST_REQUEST_SCRIPT_API_REFERENCE.md
 [beam-cargo]: https://github.com/hlcfan/beam/blob/main/Cargo.toml
 [beam-release]: https://github.com/hlcfan/beam/releases/tag/v0.11.0
-[getman-release]: https://github.com/fzn0x/getman/releases/tag/v0.3.3
+[getman-release]: https://github.com/fzn0x/getman/releases/tag/v0.3.4
 [getman-releases]: https://github.com/fzn0x/getman/releases
