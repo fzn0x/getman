@@ -630,6 +630,8 @@ export interface RunSummary {
   duration_ms: number;
   average_response_ms: number;
   stopped: string | null;
+  /** A script ended the run on purpose; runs saved by older versions lack it. */
+  stopped_by_script?: boolean;
   warnings: string[];
 }
 
