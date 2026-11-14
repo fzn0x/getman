@@ -51,10 +51,16 @@ pub fn open_or_create(dir: &Path) -> Result<Workspace, String> {
 pub fn personal() -> Result<Workspace, String> {
     let personal =
         personal_dir().ok_or("cannot find your data directory for the personal workspace")?;
-    if Workspace::discover(&personal).is_some() {
-        return Workspace::open(&personal).map_err(|e| e.to_string());
+    personal_in(&personal)
+}
+
+/// The personal workspace in `personal`, created there with example
+/// requests on first use. The mobile apps keep it in their own documents.
+pub fn personal_in(personal: &Path) -> Result<Workspace, String> {
+    if Workspace::discover(personal).is_some() {
+        return Workspace::open(personal).map_err(|e| e.to_string());
     }
-    let workspace = Workspace::init(&personal, "My workspace").map_err(|e| e.to_string())?;
+    let workspace = Workspace::init(personal, "My workspace").map_err(|e| e.to_string())?;
     crate::examples::add(&workspace).map_err(|e| e.to_string())?;
     crate::style::note(&format!(
         "Created your personal workspace in {}",
