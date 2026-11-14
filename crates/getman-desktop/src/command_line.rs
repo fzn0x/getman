@@ -177,7 +177,10 @@ mod link_tests {
         symlink(&brewed, &brew.join("getman")).unwrap();
 
         // An old Getman link is replaced.
-        assert_eq!(link(&exe, &[stale.clone()]).unwrap(), stale.join("getman"));
+        assert_eq!(
+            link(&exe, std::slice::from_ref(&stale)).unwrap(),
+            stale.join("getman")
+        );
         assert_eq!(
             installed(&exe, &[stale]),
             Some(dir.path().join("stale/getman"))
