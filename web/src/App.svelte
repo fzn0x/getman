@@ -18,7 +18,7 @@
   import { whenSignedOut } from "./lib/api";
   import { consoleView, failedCount, toggleConsole } from "./lib/console.svelte";
   import { startDesktop } from "./lib/desktop.svelte";
-  import { isMac, keyLabel, matches, typing } from "./lib/keys";
+  import { altDigit, isMac, keyLabel, matches, typing } from "./lib/keys";
   import {
     activeTab,
     cancelSend,
@@ -126,8 +126,8 @@
       handle(() => openDialog({ kind: "import", folder: "" }));
     } else if (matches(event, "mod+b")) {
       handle(() => (prefs.sidebarOpen = !prefs.sidebarOpen));
-    } else if (/^[1-9]$/.test(event.key) && event.altKey && !event.ctrlKey && !event.metaKey) {
-      const target = tabs.list[Number(event.key) - 1];
+    } else if (altDigit(event) !== null) {
+      const target = tabs.list[(altDigit(event) ?? 1) - 1];
       if (target) handle(() => selectTab(target.id));
     } else if (matches(event, "mod+j")) {
       handle(() => toggleConsole());
