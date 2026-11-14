@@ -1,0 +1,47 @@
+# Homebrew cask for the Getman desktop app, for the tap fzn0x/homebrew-tap
+# (Casks/getman-desktop.rb). Written for each release by packaging/render.mjs.
+cask "getman-desktop" do
+  version "{{version}}"
+  sha256 "{{sha256:Getman-macos-universal.dmg}}"
+
+  url "https://github.com/{{repo}}/releases/download/v#{version}/Getman-macos-universal.dmg"
+  name "Getman"
+  desc "Open-source Postman alternative written in Rust"
+  homepage "https://fzn0x.github.io/getman/"
+
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
+
+  # The app updates itself, and `brew upgrade` updates it too.
+  depends_on macos: ">= :high_sierra"
+
+  app "Getman.app"
+
+  # Only the folders of the app's own identifier. The default workspace in
+  # ~/Library/Application Support/getman holds the user's requests, so a
+  # zap leaves it.
+  zap trash: [
+    "~/Library/Application Support/io.github.fzn0x.getman",
+    "~/Library/Caches/io.github.fzn0x.getman",
+    "~/Library/HTTPStorages/io.github.fzn0x.getman",
+    "~/Library/Preferences/io.github.fzn0x.getman.plist",
+    "~/Library/Saved Application State/io.github.fzn0x.getman.savedState",
+    "~/Library/WebKit/io.github.fzn0x.getman",
+  ]
+
+  # The app is signed ad hoc, not notarized, so macOS blocks the first
+  # launch; this is what docs/installation.md tells people who install the
+  # disk image by hand.
+  caveats <<~EOS
+    Getman is not notarized by Apple, so macOS can't check it and blocks it
+    the first time you open it. Allow it once in System Settings >
+    Privacy & Security > Open Anyway, or run:
+      xattr -dr com.apple.quarantine #{appdir}/Getman.app
+
+    To use `getman` in a terminal, open Settings > About in the app and
+    choose "Install the getman command". The formula fzn0x/tap/getman
+    installs the command line alone.
+  EOS
+end
