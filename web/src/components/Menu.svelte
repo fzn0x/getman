@@ -158,6 +158,6 @@
   .separator {
     height: 1px;
     margin: 4px 0;
-    background: var(--outline-variant);
+    background: var(--divider);
   }
 </style>

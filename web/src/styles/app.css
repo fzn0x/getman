@@ -83,6 +83,14 @@
   --control: 30px;
   --bar: 44px;
 
+  /* ---- Quiet edges ----------------------------------------------------- */
+  /* The layout reads by its surfaces, not by lines: dividers are the
+     outline-variant role at about half strength, and fields and buttons
+     are filled rather than outlined. Focus still draws the primary color. */
+  --divider: color-mix(in srgb, var(--outline-variant) 55%, transparent);
+  --fill: var(--surface-container-high);
+  --fill-hover: var(--surface-container-highest);
+
   /* ---- Older names, kept as aliases of the roles above ----------------- */
   --paper: var(--surface);
   --field: var(--surface-container-lowest);
@@ -90,9 +98,9 @@
   --ink: var(--on-surface);
   --ink-2: var(--on-surface-variant);
   --ink-3: var(--outline);
-  --rule: var(--outline-variant);
-  --rule-2: var(--outline-variant);
-  --rule-3: var(--surface-container-high);
+  --rule: var(--divider);
+  --rule-2: var(--divider);
+  --rule-3: var(--divider);
   --accent: var(--primary);
   --accent-hover: color-mix(in srgb, var(--primary) 92%, var(--on-primary));
   --accent-ink: var(--on-primary);
@@ -437,7 +445,7 @@ textarea.input {
   align-items: stretch;
   gap: 0;
   min-height: 36px;
-  border-bottom: 1px solid var(--outline-variant);
+  border-bottom: 1px solid var(--divider);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -593,7 +601,7 @@ kbd {
   display: inline-block;
   min-width: 18px;
   padding: 2px 5px;
-  border: 1px solid var(--outline-variant);
+  border: 1px solid var(--divider);
   border-bottom-width: 2px;
   border-radius: var(--r-xs);
   background: var(--surface-container-low);

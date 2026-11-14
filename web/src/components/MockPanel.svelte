@@ -87,7 +87,7 @@
   .mock {
     margin: 0 var(--s4) var(--s3);
     padding: var(--s2) var(--s2) var(--s2) var(--s4);
-    border: 1px solid var(--outline-variant);
+    border: 1px solid var(--divider);
     border-radius: var(--r-md);
     background: var(--surface-container-lowest);
   }

@@ -249,7 +249,7 @@
 
   .chip {
     padding: 2px var(--s2);
-    border: 1px solid var(--outline-variant);
+    border: 1px solid var(--divider);
     border-radius: var(--r-sm);
     background: none;
     color: var(--ink-2);

@@ -383,7 +383,7 @@
     align-items: center;
     gap: var(--s2);
     padding: 0 var(--s3);
-    border-top: 1px solid var(--outline-variant);
+    border-top: 1px solid var(--divider);
     color: var(--on-surface-variant);
     font-weight: 400;
     white-space: nowrap;

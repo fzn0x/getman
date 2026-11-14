@@ -165,7 +165,7 @@
   .specimen {
     --tone: var(--on-surface-variant);
     position: relative;
-    border-bottom: 1px solid var(--outline-variant);
+    border-bottom: 1px solid var(--divider);
     background: color-mix(in srgb, var(--tone) 6%, var(--surface));
     overflow: hidden;
     transition: background-color var(--dur-medium) var(--ease);

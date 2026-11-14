@@ -670,7 +670,7 @@
   .method-pick {
     position: relative;
     display: flex;
-    border-right-color: var(--outline-variant);
+    border-right-color: var(--divider);
     border-radius: var(--r-sm) 0 0 var(--r-sm);
   }
 
@@ -691,18 +691,7 @@
   }
 
   .line:has(.method-pick:focus-within, .url:focus-within) .method-pick {
-    box-shadow:
-      inset 1px 0 0 var(--primary),
-      inset 0 1px 0 var(--primary),
-      inset 0 -1px 0 var(--primary);
-    border-right-color: var(--outline-variant);
-  }
-
-  .line:has(.method-pick:focus-within, .url:focus-within) .url {
-    box-shadow:
-      inset -1px 0 0 var(--primary),
-      inset 0 1px 0 var(--primary),
-      inset 0 -1px 0 var(--primary);
+    border-right-color: var(--divider);
   }
 
   .method-pick select {

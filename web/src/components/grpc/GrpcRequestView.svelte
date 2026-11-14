@@ -705,7 +705,7 @@
     display: flex;
     align-items: center;
     padding: 0 var(--s3);
-    border-right-color: var(--outline-variant) !important;
+    border-right-color: var(--divider) !important;
     border-radius: var(--r-sm) 0 0 var(--r-sm);
     color: var(--on-surface-variant);
   }
@@ -733,7 +733,7 @@
     align-items: center;
     gap: 6px;
     padding: 0 var(--s3);
-    border-left-color: var(--outline-variant) !important;
+    border-left-color: var(--divider) !important;
     border-radius: 0 var(--r-sm) var(--r-sm) 0;
     cursor: pointer;
   }

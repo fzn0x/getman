@@ -225,7 +225,7 @@
   }
 
   .current.none {
-    border-color: var(--outline-variant);
+    border-color: var(--divider);
     background-color: transparent;
     font-weight: 400;
     color: var(--on-surface-variant);
