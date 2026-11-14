@@ -74,7 +74,7 @@
 
   .method {
     padding: 3px 8px;
-    border: 1px solid var(--outline-variant);
+    border: 1px solid var(--divider);
     border-radius: var(--r-sm);
     background: var(--surface-container-lowest);
     white-space: nowrap;

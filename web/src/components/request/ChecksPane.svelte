@@ -248,19 +248,21 @@
     gap: var(--s2);
   }
 
+  /* A suggested check: a filled chip that reads as an offer, quieter than
+     the Add check button beside it. */
   .suggest {
     height: 26px;
     padding: 0 var(--s2);
-    border: 1px dashed var(--outline);
+    border: 0;
     border-radius: var(--r-sm);
-    background: none;
+    background: var(--sunken);
     color: var(--ink-2);
     font-size: var(--fs-meta);
+    transition: background-color var(--dur-short) var(--ease);
   }
 
   .suggest:hover {
-    border-style: solid;
-    border-color: var(--ink);
+    background: var(--fill);
     color: var(--ink);
   }
 </style>

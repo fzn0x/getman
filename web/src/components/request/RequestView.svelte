@@ -625,12 +625,12 @@
   }
 
   .name:hover {
-    border-color: var(--outline-variant);
+    background: var(--fill);
   }
 
   .name:focus {
     border-color: var(--primary);
-    background: var(--field);
+    background: var(--fill);
   }
 
   .state {
@@ -649,8 +649,9 @@
     margin-left: auto;
   }
 
-  /* The request line: method and URL share one outlined field with 8px
-     corners; Send is a filled button beside it. */
+  /* The request line: method and URL share one filled field with 8px
+     corners, split by a divider; Send is a filled button beside it. Focus
+     draws a primary edge around the whole field. */
   .line {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
@@ -662,15 +663,17 @@
 
   .method-pick,
   .url {
-    border: 1px solid var(--outline);
-    background: var(--field);
-    transition: border-color var(--dur-short) var(--ease);
+    border: 1px solid transparent;
+    background: var(--fill);
+    transition:
+      border-color var(--dur-short) var(--ease),
+      background-color var(--dur-short) var(--ease);
   }
 
   .method-pick {
     position: relative;
     display: flex;
-    border-right-color: var(--outline-variant);
+    border-right-color: var(--divider);
     border-radius: var(--r-sm) 0 0 var(--r-sm);
   }
 
@@ -680,29 +683,15 @@
   }
 
   .line:has(.method-pick:hover, .url:hover) :is(.method-pick, .url) {
-    border-color: var(--on-surface);
+    background: var(--fill-hover);
   }
 
   .line:has(.method-pick:focus-within, .url:focus-within) :is(.method-pick, .url) {
     border-color: var(--primary);
-    box-shadow:
-      inset 0 1px 0 var(--primary),
-      inset 0 -1px 0 var(--primary);
   }
 
   .line:has(.method-pick:focus-within, .url:focus-within) .method-pick {
-    box-shadow:
-      inset 1px 0 0 var(--primary),
-      inset 0 1px 0 var(--primary),
-      inset 0 -1px 0 var(--primary);
-    border-right-color: var(--outline-variant);
-  }
-
-  .line:has(.method-pick:focus-within, .url:focus-within) .url {
-    box-shadow:
-      inset -1px 0 0 var(--primary),
-      inset 0 1px 0 var(--primary),
-      inset 0 -1px 0 var(--primary);
+    border-right-color: var(--divider);
   }
 
   .method-pick select {

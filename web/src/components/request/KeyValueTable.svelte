@@ -260,12 +260,12 @@
   }
 
   .row :global(.input:hover) {
-    border-color: var(--rule-2);
+    background: var(--fill);
   }
 
   .row :global(.input:focus) {
-    border-color: var(--ink);
-    background: var(--field);
+    border-color: var(--primary);
+    background: var(--fill);
   }
 
   /* With variables marked, the field behind the input carries its colour. */
@@ -274,7 +274,7 @@
   }
 
   .row :global(.var-input.marked:focus-within) {
-    background: var(--field);
+    background: var(--fill);
   }
 
   .row :global(.var-input.marked .input:focus) {

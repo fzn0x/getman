@@ -169,14 +169,15 @@
     height: var(--control);
     margin-left: var(--s4);
     padding: 0 var(--s2);
-    border: 1px solid var(--rule-2);
-    background: var(--field);
+    border: 1px solid transparent;
+    background: var(--fill);
     color: var(--ink-3);
     text-align: left;
+    transition: background-color var(--dur-short) var(--ease);
   }
 
   .find:hover {
-    border-color: var(--ink);
+    background: var(--fill-hover);
     color: var(--ink-2);
   }
 
@@ -225,7 +226,7 @@
   }
 
   .current.none {
-    border-color: var(--outline-variant);
+    border-color: var(--divider);
     background-color: transparent;
     font-weight: 400;
     color: var(--on-surface-variant);
@@ -245,7 +246,11 @@
   }
 
   .environment:hover .current {
-    border-color: var(--ink);
+    background-color: color-mix(
+      in srgb,
+      var(--on-secondary-container) var(--hover),
+      var(--secondary-container)
+    );
   }
 
   @media (max-width: 720px) {

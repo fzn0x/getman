@@ -257,7 +257,7 @@
     min-width: 0;
     height: 36px;
     padding: 4px var(--s1) 0;
-    border-bottom: 1px solid var(--outline-variant);
+    border-bottom: 1px solid var(--divider);
     background: var(--surface-container);
   }
 
@@ -295,7 +295,7 @@
     top: 9px;
     bottom: 9px;
     width: 1px;
-    background: var(--outline-variant);
+    background: var(--divider);
   }
 
   .item.active {

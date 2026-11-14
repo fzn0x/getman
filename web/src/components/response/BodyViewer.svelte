@@ -283,32 +283,31 @@
     min-width: 0;
   }
 
-  /* Material's segmented buttons, at compact height. */
+  /* Segmented buttons at compact height: a filled track, and the chosen
+     mode as a tonal pill inside it, with no lines between. */
   .modes {
     display: flex;
     flex: none;
-    border: 1px solid var(--outline);
+    gap: 2px;
+    padding: 2px;
     border-radius: var(--r-full);
-    overflow: hidden;
+    background: var(--fill);
   }
 
   .modes button {
-    height: 26px;
+    height: 24px;
     padding: 0 10px;
     border: 0;
-    border-right: 1px solid var(--outline);
+    border-radius: var(--r-full);
     background: none;
-    color: var(--on-surface);
+    color: var(--on-surface-variant);
     font-size: var(--fs-meta);
     font-weight: 500;
   }
 
   .modes button:hover:not(:disabled, .on) {
     background: color-mix(in srgb, var(--on-surface) var(--hover), transparent);
-  }
-
-  .modes button:last-child {
-    border-right: 0;
+    color: var(--on-surface);
   }
 
   .modes button.on {

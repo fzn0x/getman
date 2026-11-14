@@ -186,12 +186,12 @@
   }
 
   .name:hover {
-    border-color: var(--rule-2);
+    background: var(--fill);
   }
 
   .name:focus {
-    border-color: var(--ink);
-    background: var(--field);
+    border-color: var(--primary);
+    background: var(--fill);
   }
 
   .actions {

@@ -457,7 +457,7 @@
 
   .error {
     padding: var(--s3) var(--s4);
-    border-bottom: 1px solid var(--outline-variant);
+    border-bottom: 1px solid var(--divider);
     background: var(--error-container);
     color: var(--on-error-container);
   }

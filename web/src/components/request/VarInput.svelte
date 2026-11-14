@@ -308,7 +308,13 @@
   }
 
   .var-input.marked {
-    background: var(--field);
+    border-radius: var(--r-sm);
+    background: var(--fill);
+    transition: background-color var(--dur-short) var(--ease);
+  }
+
+  .var-input.marked:hover {
+    background: var(--fill-hover);
   }
 
   .var-input input {
@@ -370,7 +376,7 @@
     padding: 2px 0;
     list-style: none;
     border: 1px solid var(--rule);
-    background: var(--field);
+    background: var(--surface-container);
     box-shadow: var(--elevation-2);
     font-family: var(--font-code);
     font-size: var(--fs-code);
@@ -412,7 +418,7 @@
     max-width: 320px;
     padding: var(--s2);
     border: 1px solid var(--rule);
-    background: var(--field);
+    background: var(--surface-container);
     box-shadow: var(--elevation-2);
   }
 

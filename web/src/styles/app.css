@@ -83,16 +83,25 @@
   --control: 30px;
   --bar: 44px;
 
+  /* ---- Quiet edges ----------------------------------------------------- */
+  /* The layout reads by its surfaces, not by lines: dividers are the
+     outline-variant role at about half strength, and fields and buttons
+     are filled rather than outlined. Focus still draws the primary color. */
+  --divider: color-mix(in srgb, var(--outline-variant) 55%, transparent);
+  --fill: var(--surface-container-high);
+  --fill-hover: var(--surface-container-highest);
+
   /* ---- Older names, kept as aliases of the roles above ----------------- */
   --paper: var(--surface);
-  --field: var(--surface-container-lowest);
+  /* Editors and panels that hold text: one quiet step off the page. */
+  --field: var(--surface-container-low);
   --sunken: var(--surface-container);
   --ink: var(--on-surface);
   --ink-2: var(--on-surface-variant);
   --ink-3: var(--outline);
-  --rule: var(--outline-variant);
-  --rule-2: var(--outline-variant);
-  --rule-3: var(--surface-container-high);
+  --rule: var(--divider);
+  --rule-2: var(--divider);
+  --rule-3: var(--divider);
   --accent: var(--primary);
   --accent-hover: color-mix(in srgb, var(--primary) 92%, var(--on-primary));
   --accent-ink: var(--on-primary);
@@ -244,8 +253,9 @@ a {
 
 /* ---- Buttons --------------------------------------------------------------- */
 
-/* Outlined by default; .primary is filled, .quiet is a text button. A state
-   layer (a translucent wash of the label color) shows hover and press. */
+/* Tonal by default (filled, no outline); .primary is filled with the primary
+   color, .quiet is a text button. A state layer (a translucent wash of the
+   label color) shows hover and press. */
 .btn {
   --label: var(--primary);
   --layer: transparent;
@@ -255,9 +265,9 @@ a {
   gap: var(--s2);
   height: var(--control);
   padding: 0 var(--s4);
-  border: 1px solid var(--outline-variant);
+  border: 1px solid transparent;
   border-radius: var(--r-full);
-  background: linear-gradient(var(--layer), var(--layer)) transparent;
+  background: linear-gradient(var(--layer), var(--layer)) var(--fill);
   color: var(--label);
   font-family: var(--font-ui);
   font-size: var(--fs-ui);
@@ -296,7 +306,7 @@ a {
 
 .btn.quiet {
   padding: 0 var(--s3);
-  border-color: transparent;
+  background-color: transparent;
 }
 
 .btn.danger {
@@ -337,14 +347,14 @@ a {
   height: var(--control);
   min-width: 0;
   padding: 0 10px;
-  border: 1px solid var(--outline);
-  border-radius: var(--r-xs);
-  background: var(--field);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background-color: var(--fill);
   color: var(--on-surface);
   font-size: var(--fs-ui);
   transition:
     border-color var(--dur-short) var(--ease),
-    box-shadow var(--dur-short) var(--ease);
+    background-color var(--dur-short) var(--ease);
 }
 
 .input::placeholder,
@@ -355,14 +365,13 @@ textarea::placeholder {
 
 .input:hover,
 .select:hover {
-  border-color: var(--on-surface);
+  background-color: var(--fill-hover);
 }
 
 .input:focus,
 .select:focus,
 textarea:focus {
   border-color: var(--primary);
-  box-shadow: inset 0 0 0 1px var(--primary);
 }
 
 .input.mono {
@@ -437,7 +446,7 @@ textarea.input {
   align-items: stretch;
   gap: 0;
   min-height: 36px;
-  border-bottom: 1px solid var(--outline-variant);
+  border-bottom: 1px solid var(--divider);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -593,7 +602,7 @@ kbd {
   display: inline-block;
   min-width: 18px;
   padding: 2px 5px;
-  border: 1px solid var(--outline-variant);
+  border: 1px solid var(--divider);
   border-bottom-width: 2px;
   border-radius: var(--r-xs);
   background: var(--surface-container-low);
