@@ -36,7 +36,7 @@ engine runs behind the desktop app, the browser UI, the terminal UI and
 `getman run`, so a request behaves the same in each. It imports Postman
 collections and runs `pm` scripts.
 
-[Install](#install) · [Documentation](https://fzn0x.github.io/getman/) ·
+[Downloads](#downloads) · [Install](#install) · [Documentation](https://fzn0x.github.io/getman/) ·
 [Command line](docs/cli.md) · [Moving from Postman](docs/why-getman.md#moving-over) ·
 [Changelog](CHANGELOG.md) · [Bahasa Indonesia](README-ID.md)
 
@@ -53,6 +53,42 @@ getman tui                                    # or the terminal UI
 
 `--example` adds requests against [JSONPlaceholder](https://jsonplaceholder.typicode.com),
 a free test API. See [Getting started](docs/getting-started.md).
+
+## Downloads
+
+| Platform | Download | Other ways |
+| --- | --- | --- |
+| Windows | [Setup, x64](https://github.com/fzn0x/getman/releases/latest/download/Getman-windows-x64-setup.exe) · [Setup, ARM64](https://github.com/fzn0x/getman/releases/latest/download/Getman-windows-arm64-setup.exe) | MSI, portable zip, `scoop install fzn0x/getman` |
+| macOS | [Disk image](https://github.com/fzn0x/getman/releases/latest/download/Getman-macos-universal.dmg), Apple silicon and Intel | `brew install --cask fzn0x/tap/getman-desktop` (see below) |
+| Linux | [AppImage, x86_64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-x86_64.AppImage) · [AppImage, aarch64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-aarch64.AppImage) | .deb, .rpm, Flatpak, AUR, Nix (see below) |
+| Android | `Getman-android-universal.apk` on the [releases page](https://github.com/fzn0x/getman/releases) | Signed APK, installed directly |
+| iOS | `Getman-ios.ipa` on the [releases page](https://github.com/fzn0x/getman/releases) | Sideloaded with AltStore, SideStore or Sideloadly |
+
+<!-- PROVISIONAL: the Android and iOS files, the Flatpak, AUR, Nix and
+cask commands below and the mobile notes start with the release after
+0.3.4. Confirm each name and command against that release. -->
+
+Android, iOS, Flatpak, AUR, Nix and the Homebrew cask start with the
+release after 0.3.4. The other files are on every release, and these
+links always fetch the newest one.
+
+- **Android:** open the APK on the phone and allow installs from that
+  source when Android asks.
+- **iOS:** the IPA is not signed, and there is no App Store version.
+  AltStore, SideStore or Sideloadly sign it with your Apple ID and
+  install it. A free Apple ID must refresh the app every 7 days.
+- **Linux, more formats:**
+
+  ```sh
+  flatpak install --user Getman-linux-x86_64.flatpak   # or the aarch64 file
+  yay -S getman-bin                                    # Arch Linux, from the AUR
+  nix run github:fzn0x/getman                          # Nix, without installing
+  ```
+
+- **macOS, Homebrew:** `brew install --cask fzn0x/tap/getman-desktop`
+
+[Installation](docs/installation.md) covers each of them, with updating
+and removing.
 
 ## Install
 
