@@ -29,7 +29,7 @@ front end is a thin layer over it:
 | `crates/getman-mobile` | The Android and iOS apps, on Tauri 2 |
 | `web/` | The browser UI, built into the binary |
 | `docs/`, `site/` | These pages, and the site built from them |
-| `packaging/` | Templates for the Homebrew, Scoop, winget and Flatpak manifests |
+| `packaging/` | Templates for the Homebrew, Scoop, winget, Flatpak and AUR manifests |
 
 The root `Cargo.toml` makes the crates one workspace. Its
 `default-members` leave the desktop and phone apps out, so the rest
@@ -369,6 +369,7 @@ Pushing a `v*` tag runs `.github/workflows/release.yml`:
 | `ios` | An unsigned `.ipa` for iPhone and iPad, which people sign with their own Apple ID when they sideload it |
 | `release` | The release notes from the version's section of `CHANGELOG.md`, `latest.json` for the updater, the package manifests from `packaging/render.mjs` and `SHA256SUMS`, then the GitHub release itself |
 | `publish-packages` | Commits the Homebrew formula to `fzn0x/homebrew-tap` and the Scoop manifest to `fzn0x/scoop-bucket` |
+| `publish-aur` | Pushes `PKGBUILD` and `.SRCINFO` for `getman-bin` to the AUR, when the `AUR_SSH_PRIVATE_KEY` secret is set and the release is not a pre-release |
 
 The Linux command-line builds go through `cargo zigbuild` and link against
 glibc 2.28, whatever the runner has. The desktop update files are signed,
