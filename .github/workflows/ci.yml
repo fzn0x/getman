@@ -168,8 +168,7 @@ jobs:
   snippets:
     name: Snippets in ${{ matrix.name }}
     needs: getman
-    # setup-swift v2 does not support Ubuntu 26.04 yet.
-    runs-on: ${{ matrix.os || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -185,7 +184,7 @@ jobs:
           - { name: Java, langs: java }
           - { name: Kotlin, langs: kotlin }
           - { name: "C#", langs: csharp }
-          - { name: Swift, langs: swift, os: ubuntu-24.04 }
+          - { name: Swift, langs: swift }
           - { name: PHP, langs: php }
           - { name: Ruby, langs: ruby }
           - { name: Dart, langs: dart }
