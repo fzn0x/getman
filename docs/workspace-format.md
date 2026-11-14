@@ -155,7 +155,7 @@ The tables on this page give each key one of these types:
 - Keys of type string take an unquoted number or boolean exactly as
   written, also inside an `auth` or `body` block: `scope: 5` and
   `version: 1.0` are fine.
-- The first time Getman saves a file, an unquoted number in a text field
+- When Getman saves the file, an unquoted number in a text field
   gains quotes: `version: 1.0` is written back as `version: '1.0'`. The
   value is the same.
 - Keys that take a number or a boolean still read them as such, so

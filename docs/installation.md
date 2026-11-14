@@ -221,8 +221,8 @@ The script:
 On ARM64 Windows, it installs the native ARM64 build when the release
 has one. Releases up to 0.3.4 have no ARM64 command-line archive, so for
 those the script says so and installs the x64 build, which Windows 11 runs
-through emulation. The [desktop app](#windows) has an ARM64 build for
-every release. There is no build for 32-bit Windows.
+through emulation. The [desktop app](#windows) has a native ARM64
+build. There is no build for 32-bit Windows.
 
 The same two variables work, set in the terminal before the script runs:
 

@@ -477,8 +477,10 @@ for its answer.
 
 The time a request waits for its answer counts toward the script's time
 limit. The send gets what is left of it, and when that runs out the
-request is dropped and the script fails with the usual `the script ran
-longer than N s` error. Any status is a response: a `404` resolves the promise. The response has
+request is dropped and the script fails with `the script ran longer
+than N s and was stopped`.
+
+Any status is a response: a `404` resolves the promise. The response has
 the members of [`gm.response`](#the-response), `to` included.
 
 `request` is a URL, or an object:

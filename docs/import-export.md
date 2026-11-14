@@ -426,6 +426,6 @@ relative to the servers, and a workspace with no `baseUrl` at all,
 whose server is then `/`.
 
 Both formats describe HTTP requests. gRPC, WebSocket, event stream and
-Socket.IO requests are left out of both, with a warning that names the
-request, such as `Chat: Postman collections cannot hold a WebSocket
-request; it was left out`.
+Socket.IO requests are left out of both, with a warning for each, such
+as `chat.yaml: Postman collections cannot hold a WebSocket request; it
+was left out`.
