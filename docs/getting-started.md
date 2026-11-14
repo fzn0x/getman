@@ -46,7 +46,7 @@ They update it with `brew upgrade getman` and `scoop update getman`.
 **The desktop and mobile apps:** Windows, macOS, Linux, Android and iOS
 have apps too. [Installation](installation.md#desktop-app) lists every
 file and package, and covers [Android](installation.md#android) and
-[iOS](installation.md#ios), which start with the release after 0.3.4.
+[iOS](installation.md#ios), which start with 0.4.0.
 
 **By hand:** download the archive for your system from the
 [releases page](https://github.com/fzn0x/getman/releases), unpack it and

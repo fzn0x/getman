@@ -54,14 +54,14 @@ getman tui                                    # atau UI terminal
 | --- | --- | --- |
 | Windows | [Setup, x64](https://github.com/fzn0x/getman/releases/latest/download/Getman-windows-x64-setup.exe) · [Setup, ARM64](https://github.com/fzn0x/getman/releases/latest/download/Getman-windows-arm64-setup.exe) | MSI, zip portabel, `scoop install fzn0x/getman` |
 | macOS | [Disk image](https://github.com/fzn0x/getman/releases/latest/download/Getman-macos-universal.dmg), Apple silicon dan Intel | `brew install --cask fzn0x/tap/getman-desktop` (lihat di bawah) |
-| Linux | [AppImage, x86_64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-x86_64.AppImage) · [AppImage, aarch64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-aarch64.AppImage) | .deb, .rpm, Flatpak, AUR, Nix (lihat di bawah) |
+| Linux | [AppImage, x86_64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-x86_64.AppImage) · [AppImage, aarch64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-aarch64.AppImage) | .deb, .rpm, Flatpak, Nix (lihat di bawah) |
 | Android | `Getman-android-universal.apk` di [halaman rilis](https://github.com/fzn0x/getman/releases) | APK bertanda tangan, dipasang langsung |
 | iOS | `Getman-ios.ipa` di [halaman rilis](https://github.com/fzn0x/getman/releases) | Di-sideload dengan AltStore, SideStore atau Sideloadly |
 
-Android, iOS, Flatpak, AUR dan cask Homebrew mulai ada di rilis setelah
-0.3.4. File lainnya ada di setiap rilis, dan tautan ini selalu mengambil
-yang terbaru. Nix membangun flake repositori, jadi selalu menjalankan kode
-terbaru di `main`.
+Android, iOS, Flatpak dan cask Homebrew mulai ada di 0.4.0. File lainnya
+ada di setiap rilis, dan tautan ini selalu mengambil yang terbaru. Nix
+membangun flake repositori, jadi selalu menjalankan kode terbaru di
+`main`. Paket AUR `getman-bin` belum diterbitkan.
 
 - **Android:** buka APK di ponsel dan izinkan pemasangan dari sumber itu
   saat Android bertanya.
@@ -73,7 +73,6 @@ terbaru di `main`.
 
   ```sh
   flatpak install --user Getman-linux-x86_64.flatpak   # atau file aarch64
-  yay -S getman-bin                                    # Arch Linux, dari AUR
   nix run github:fzn0x/getman                          # Nix, tanpa memasang
   ```
 
@@ -114,7 +113,7 @@ curl -fsSL https://fzn0x.github.io/getman/install.sh | sh
 irm https://fzn0x.github.io/getman/install.ps1 | iex
 ```
 
-Script tersebut mengunduh rilis terbaru untuk sistem kamu, mencocokkannya dengan `SHA256SUMS` milik rilis itu, lalu meng-install `getman` untuk user kamu: di `~/.local/bin` pada Linux dan macOS, dan di `%LOCALAPPDATA%\Programs\getman` pada Windows. Atur `GETMAN_VERSION` (misalnya `v0.3.4`) untuk meng-install rilis tertentu, atau `GETMAN_INSTALL_DIR` untuk memilih direktorinya.
+Script tersebut mengunduh rilis terbaru untuk sistem kamu, mencocokkannya dengan `SHA256SUMS` milik rilis itu, lalu meng-install `getman` untuk user kamu: di `~/.local/bin` pada Linux dan macOS, dan di `%LOCALAPPDATA%\Programs\getman` pada Windows. Atur `GETMAN_VERSION` (misalnya `v0.4.0`) untuk meng-install rilis tertentu, atau `GETMAN_INSTALL_DIR` untuk memilih direktorinya.
 
 Dengan package manager:
 

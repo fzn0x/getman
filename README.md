@@ -60,14 +60,14 @@ a free test API. See [Getting started](docs/getting-started.md).
 | --- | --- | --- |
 | Windows | [Setup, x64](https://github.com/fzn0x/getman/releases/latest/download/Getman-windows-x64-setup.exe) · [Setup, ARM64](https://github.com/fzn0x/getman/releases/latest/download/Getman-windows-arm64-setup.exe) | MSI, portable zip, `scoop install fzn0x/getman` |
 | macOS | [Disk image](https://github.com/fzn0x/getman/releases/latest/download/Getman-macos-universal.dmg), Apple silicon and Intel | `brew install --cask fzn0x/tap/getman-desktop` (see below) |
-| Linux | [AppImage, x86_64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-x86_64.AppImage) · [AppImage, aarch64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-aarch64.AppImage) | .deb, .rpm, Flatpak, AUR, Nix (see below) |
+| Linux | [AppImage, x86_64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-x86_64.AppImage) · [AppImage, aarch64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-aarch64.AppImage) | .deb, .rpm, Flatpak, Nix (see below) |
 | Android | `Getman-android-universal.apk` on the [releases page](https://github.com/fzn0x/getman/releases) | Signed APK, installed directly |
 | iOS | `Getman-ios.ipa` on the [releases page](https://github.com/fzn0x/getman/releases) | Sideloaded with AltStore, SideStore or Sideloadly |
 
-Android, iOS, Flatpak, AUR and the Homebrew cask start with the release
-after 0.3.4. The other files are on every release, and these links always
-fetch the newest one. Nix builds the repository's flake, so it runs the
-newest code on `main`.
+Android, iOS, Flatpak and the Homebrew cask start with 0.4.0. The other
+files are on every release, and these links always fetch the newest one.
+Nix builds the repository's flake, so it runs the newest code on `main`.
+The AUR package `getman-bin` is not published yet.
 
 - **Android:** open the APK on the phone and allow installs from that
   source when Android asks.
@@ -78,7 +78,6 @@ newest code on `main`.
 
   ```sh
   flatpak install --user Getman-linux-x86_64.flatpak   # or the aarch64 file
-  yay -S getman-bin                                    # Arch Linux, from the AUR
   nix run github:fzn0x/getman                          # Nix, without installing
   ```
 
@@ -133,7 +132,7 @@ The scripts download the latest release for your system, check it
 against the release's `SHA256SUMS` and install `getman` for your user:
 in `~/.local/bin` on Linux and macOS, and in
 `%LOCALAPPDATA%\Programs\getman` on Windows. Set `GETMAN_VERSION` (such
-as `v0.3.4`) to install a given release, or `GETMAN_INSTALL_DIR` to
+as `v0.4.0`) to install a given release, or `GETMAN_INSTALL_DIR` to
 choose the directory.
 
 With a package manager:

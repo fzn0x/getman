@@ -131,9 +131,9 @@ For ARM64, take the files with `aarch64` or `arm64` in their names. The
 desktop files are built on Ubuntu 22.04, so they run on distributions with
 the same glibc or a newer one.
 
-The Flatpak, the AUR package and the Homebrew cask start with the
-release after 0.3.4. Releases up to 0.3.4 have none of them. The Nix flake
-builds from the repository.
+The Flatpak and the Homebrew cask start with 0.4.0; releases before it
+have neither. The AUR package is not published yet. The Nix flake builds
+from the repository.
 
 ### Flatpak
 
@@ -159,8 +159,10 @@ app may open workspaces anywhere in your home folder.
 
 ### AUR
 
-On Arch Linux and its relatives, install the binary package from the AUR
-with an AUR helper such as `yay`:
+`getman-bin` is not on the AUR yet: the release workflow publishes it
+once the project has an AUR key. Until then, use the AppImage, the
+Flatpak or Nix on Arch Linux. Once it is there, install it with an AUR
+helper such as `yay`:
 
 ```sh
 yay -S getman-bin
@@ -208,7 +210,7 @@ command** in **Settings › About**.
 
 ## Mobile apps
 
-The Android and iOS apps start with the release after 0.3.4. Like the
+The Android and iOS apps start with 0.4.0. Like the
 desktop app, each runs Getman's engine inside the app and shows the same
 UI: requests, checks, scripts, environments and runs all work on the
 phone.
@@ -308,13 +310,13 @@ environment variables change what it does:
 
 | Variable | Default | Does |
 | --- | --- | --- |
-| `GETMAN_VERSION` | `latest` | The release to install, by its tag with the `v`, such as `v0.3.4` |
+| `GETMAN_VERSION` | `latest` | The release to install, by its tag with the `v`, such as `v0.4.0` |
 | `GETMAN_INSTALL_DIR` | `~/.local/bin` | The directory to put `getman` in |
 
 Set them for `sh`, after the pipe:
 
 ```sh
-curl -fsSL https://fzn0x.github.io/getman/install.sh | GETMAN_VERSION=v0.3.4 sh
+curl -fsSL https://fzn0x.github.io/getman/install.sh | GETMAN_VERSION=v0.4.0 sh
 curl -fsSL https://fzn0x.github.io/getman/install.sh | GETMAN_INSTALL_DIR="$HOME/bin" sh
 curl -fsSL https://fzn0x.github.io/getman/install.sh | sudo GETMAN_INSTALL_DIR=/usr/local/bin sh
 ```
@@ -335,8 +337,7 @@ sh install.sh
 ```
 
 The Linux build needs glibc; it does not run on musl systems such as
-Alpine. Releases after 0.3.4 need glibc 2.28 or newer, and 0.3.4 needs
-2.39. See [GLIBC not found on Linux](troubleshooting.md#glibc-not-found-on-linux)
+Alpine. From 0.4.0 on it needs glibc 2.28 or newer; 0.3.4 needs 2.39. See [GLIBC not found on Linux](troubleshooting.md#glibc-not-found-on-linux)
 for which distributions it runs on. In CI, add the directory to the
 job's `PATH`, as in [Running in CI](runner.md#github-actions).
 
@@ -363,8 +364,8 @@ The script:
    already need a restart.
 
 On ARM64 Windows, it installs the native ARM64 build when the release
-has one. Releases up to 0.3.4 have no ARM64 command-line archive, so for
-those the script says so and installs the x64 build, which Windows 11 runs
+has one. Releases before 0.4.0 have no ARM64 command-line archive, so
+for those the script says so and installs the x64 build, which Windows 11 runs
 through emulation. The [desktop app](#windows) has a native ARM64
 build. There is no build for 32-bit Windows.
 
@@ -372,11 +373,11 @@ The same two variables work, set in the terminal before the script runs:
 
 | Variable | Default | Does |
 | --- | --- | --- |
-| `GETMAN_VERSION` | `latest` | The release to install, by its tag with the `v`, such as `v0.3.4` |
+| `GETMAN_VERSION` | `latest` | The release to install, by its tag with the `v`, such as `v0.4.0` |
 | `GETMAN_INSTALL_DIR` | `%LOCALAPPDATA%\Programs\getman` | The folder to put `getman.exe` in, which is added to your user `PATH` |
 
 ```powershell
-$env:GETMAN_VERSION = 'v0.3.4'
+$env:GETMAN_VERSION = 'v0.4.0'
 irm https://fzn0x.github.io/getman/install.ps1 | iex
 ```
 
@@ -410,8 +411,8 @@ The manifest `getman` lives in the bucket
 [fzn0x/scoop-bucket](https://github.com/fzn0x/scoop-bucket), which each
 release updates. It installs the x64 command line, or the ARM64 one on
 ARM64 Windows, and puts `getman` on your `PATH` through Scoop's shims.
-The ARM64 entry works from the first release that has an ARM64 archive;
-0.3.4 and older have none.
+The ARM64 entry works from 0.4.0 on; 0.3.4 and older have no ARM64
+archive.
 
 ### Archives
 
@@ -421,12 +422,12 @@ the version:
 
 | System | Archive |
 | --- | --- |
-| Linux x86_64 | `getman-v0.3.4-x86_64-unknown-linux-gnu.tar.gz` |
-| Linux ARM64 | `getman-v0.3.4-aarch64-unknown-linux-gnu.tar.gz` |
-| macOS, Apple silicon | `getman-v0.3.4-aarch64-apple-darwin.tar.gz` |
-| macOS, Intel | `getman-v0.3.4-x86_64-apple-darwin.tar.gz` |
-| Windows x64, and ARM64 through emulation | `getman-v0.3.4-x86_64-pc-windows-msvc.zip` |
-| Windows ARM64, native | `getman-<version>-aarch64-pc-windows-msvc.zip`, from the release after 0.3.4 on |
+| Linux x86_64 | `getman-v0.4.0-x86_64-unknown-linux-gnu.tar.gz` |
+| Linux ARM64 | `getman-v0.4.0-aarch64-unknown-linux-gnu.tar.gz` |
+| macOS, Apple silicon | `getman-v0.4.0-aarch64-apple-darwin.tar.gz` |
+| macOS, Intel | `getman-v0.4.0-x86_64-apple-darwin.tar.gz` |
+| Windows x64 | `getman-v0.4.0-x86_64-pc-windows-msvc.zip` |
+| Windows ARM64 | `getman-v0.4.0-aarch64-pc-windows-msvc.zip`; releases before 0.4.0 have only the x64 one, which ARM64 Windows runs through emulation |
 
 Each holds a folder of the same name with `getman` (`getman.exe` on
 Windows), `README.md`, the licence files and `THIRD_PARTY_NOTICES.md`.
@@ -434,7 +435,7 @@ Put the program in a directory on your `PATH`.
 On Linux and macOS:
 
 ```sh
-version=v0.3.4
+version=v0.4.0
 target=x86_64-unknown-linux-gnu
 curl -fsSLO "https://github.com/fzn0x/getman/releases/download/$version/getman-$version-$target.tar.gz"
 tar -xzf "getman-$version-$target.tar.gz"
@@ -486,7 +487,7 @@ if ($line.Split(' ')[0] -eq $actual) { 'OK' } else { 'MISMATCH' }
 
 `releases/latest/download/SHA256SUMS` belongs to the newest release. For
 a file from an older one, take that release's, such as
-`https://github.com/fzn0x/getman/releases/download/v0.3.4/SHA256SUMS`.
+`https://github.com/fzn0x/getman/releases/download/v0.4.0/SHA256SUMS`.
 
 The `.sig` files and `latest.json` in a release are for the desktop
 app's updater, which checks each update's signature itself. You need
@@ -502,7 +503,7 @@ nothing of them to install by hand.
 | .deb | `sudo apt install ./getman-desktop_amd64.deb` with the newer file |
 | .rpm | `sudo dnf install ./getman-desktop.x86_64.rpm` with the newer file |
 | Flatpak | `flatpak install --user` with the newer file |
-| AUR | `yay -Syu` |
+| AUR | `yay -Syu`, once `getman-bin` is published |
 | Nix | `nix profile upgrade getman`, or `getman-desktop`. `nix run` builds the newest code each time |
 | Homebrew cask | `brew upgrade --cask getman-desktop`, or the app updates itself |
 | Android | Install the newer APK over the old one |
