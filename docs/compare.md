@@ -7,7 +7,7 @@ four others, [Yaak][yaak], [Hoppscotch][hoppscotch], [Bruno][bruno] and
 
 Facts about the other clients were checked against their own repositories,
 documentation, pricing pages and release files on 14 November 2026. Sizes
-are from each one's latest stable release: Getman 0.3.2, Yaak 2026.9.1,
+are from each one's latest stable release: Getman 0.3.3, Yaak 2026.9.1,
 Hoppscotch 2026.10.1, Bruno 4.3.0 and Beam 0.11.0. All of this changes
 often, so follow the links before deciding.
 
@@ -157,7 +157,7 @@ account and no telemetry ([README][beam-readme]).
 
 - **The smallest download here:** a 14.1 MiB zip for Windows and an
   11.4 MiB archive for Apple silicon Macs ([release][beam-release]).
-  Getman's are a 15.3 MiB installer and a 22.2 MiB disk image for both
+  Getman's are a 15.3 MiB installer and a 22.1 MiB disk image for both
   kinds of Mac ([release][getman-release]).
 - **An interface drawn natively** with GPUI ([README][beam-readme]).
 - **Copyleft.** GPL-3.0 keeps derived work open
@@ -280,5 +280,5 @@ getman import hoppscotch-collection.json
 [beam-scripts]: https://github.com/hlcfan/beam/blob/main/docs/POST_REQUEST_SCRIPT_API_REFERENCE.md
 [beam-cargo]: https://github.com/hlcfan/beam/blob/main/Cargo.toml
 [beam-release]: https://github.com/hlcfan/beam/releases/tag/v0.11.0
-[getman-release]: https://github.com/fzn0x/getman/releases/tag/v0.3.2
+[getman-release]: https://github.com/fzn0x/getman/releases/tag/v0.3.3
 [getman-releases]: https://github.com/fzn0x/getman/releases
