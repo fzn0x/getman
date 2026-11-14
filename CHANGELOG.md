@@ -6,6 +6,42 @@ All notable changes to Getman are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A logo: a G whose round bowl runs into a forward tip, like a request on
+  its way out, in indigo. The
+  [README](https://github.com/fzn0x/getman/blob/main/README.md) opens with
+  it, the browser tab shows it, and the desktop app uses it for its icons.
+- The empty workspace and the page a browser shows without the token
+  picture the logo with what Getman speaks circling it. It is a Svelte port
+  of Magic UI's Orbiting Circles (MIT), and it holds still when the system
+  asks for reduced motion.
+
+### Changed
+
+- The browser UI and the desktop app are redesigned in Material Design 3.
+  One color scheme comes from the logo's indigo, in light and dark; Google
+  Sans Flex and Google Sans Code replace the bitmap face; Material Symbols
+  replace the pixel icons; and selection and hover show as tonal fills
+  instead of inverting to black. The request line, the response header,
+  the open-request tabs, the status bar, menus, dialogs and notices follow
+  the new design.
+- The [documentation site](https://fzn0x.github.io/getman/) has the same
+  design, with a landing page whose feature cards replay what Getman really
+  shows, and it links translated guides to each other for search engines.
+  The README and the site show screenshots of the new design.
+- The browser UI built into `getman` and the desktop app is 49 KiB larger
+  compressed, 407 KiB instead of 358 KiB: the two new fonts add 64 KiB and
+  the icons and styles 7 KiB, and the bitmap face it no longer needs takes
+  22 KiB off.
+
+### Fixed
+
+- Below about 1280 px wide, the response toolbar and, in the Body tab, the
+  body types and the Beautify and Minify row could not shrink. They pushed
+  their pane past its edge, so the last buttons and the right side of both
+  editors were cut off. They now wrap.
+
 ## [0.3.3] - 2026-11-14
 
 ### Added
