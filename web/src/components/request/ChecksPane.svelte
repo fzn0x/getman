@@ -80,7 +80,7 @@
                   class:fail={!result.passed}
                   title={result.message ?? "Passed"}
                 >
-                  <Icon name={result.passed ? "check" : "close"} size={7} />
+                  <Icon name={result.passed ? "check" : "close"} size={16} />
                 </span>
               {/if}
             </span>
@@ -119,7 +119,7 @@
             </span>
             <span role="cell">
               <button class="icon-btn" aria-label="Remove this check" onclick={() => remove(i)}>
-                <Icon name="close" size={7} />
+                <Icon name="close" size={16} />
               </button>
             </span>
           </div>

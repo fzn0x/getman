@@ -214,7 +214,7 @@
           title={dirty ? "Unsaved changes" : `Close (${keyLabel("alt+w").join(" ")})`}
           onclick={() => closeTab(tab.id)}
         >
-          <span class="mark"><Icon name={dirty ? "dot" : "close"} size={7} /></span>
+          <span class="mark"><Icon name={dirty ? "dot" : "close"} size={16} /></span>
         </button>
       </div>
     {/each}

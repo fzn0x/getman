@@ -151,7 +151,7 @@
                 aria-label="Remove {row.name || 'this row'}"
                 onclick={() => remove(i)}
               >
-                <Icon name="close" size={7} />
+                <Icon name="close" size={16} />
               </button>
             {/if}
           </span>

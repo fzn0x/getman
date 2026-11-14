@@ -246,7 +246,7 @@
         onclick={() => (planOpen = !planOpen)}
         aria-controls="plan-{tab.id}"
       >
-        <Icon name={planOpen ? "chevronDown" : "chevronRight"} size={7} />
+        <Icon name={planOpen ? "chevronDown" : "chevronRight"} size={16} />
         <span class="bitmap">Requests</span>
         <span class="bitmap muted">{ticked}/{tab.plan.length}</span>
       </button>
@@ -408,7 +408,7 @@
               onclick={() => (tab.selected = tab.selected === i ? -1 : i)}
             >
               <span class="mark" class:bad aria-hidden="true"
-                ><Icon name={bad ? "close" : "check"} size={7} /></span
+                ><Icon name={bad ? "close" : "check"} size={16} /></span
               >
               <span
                 class="method {methodClass(
@@ -444,7 +444,7 @@
                 {#each [...execution.checks, ...execution.tests] as test, j (j)}
                   <p class="test" class:fail={!test.passed}>
                     <span class="tick" aria-hidden="true"
-                      ><Icon name={test.passed ? "check" : "close"} size={7} /></span
+                      ><Icon name={test.passed ? "check" : "close"} size={16} /></span
                     >
                     {test.name}{#if test.message}<span class="msg"> — {test.message}</span>{/if}
                   </p>
@@ -494,7 +494,7 @@
               title="Show this run's results"
             >
               <span class="mark" class:bad={!good} aria-label={good ? "passed" : "failed"}
-                ><Icon name={good ? "check" : "close"} size={7} /></span
+                ><Icon name={good ? "check" : "close"} size={16} /></span
               >
               <span class="name">{runWhat(past.about, ws.name)}</span>
               <span class="muted env">{past.about.environment ?? ""}</span>

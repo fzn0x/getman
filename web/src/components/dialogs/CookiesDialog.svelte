@@ -110,14 +110,14 @@
                   aria-label="Edit {cookie.name}"
                   onclick={() => edit(cookie)}
                 >
-                  <Icon name="pencil" size={7} />
+                  <Icon name="pencil" size={16} />
                 </button>
                 <button
                   class="icon-btn"
                   aria-label="Remove {cookie.name}"
                   onclick={() => void remove(cookie)}
                 >
-                  <Icon name="close" size={7} />
+                  <Icon name="close" size={16} />
                 </button>
               </td>
             </tr>

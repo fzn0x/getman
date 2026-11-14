@@ -43,28 +43,22 @@ import {
 } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 import { trimUrl, URL_PATTERN } from "./bytes";
-import { iconRects, type IconName } from "./icons";
+import { iconPath, type IconName } from "./icons";
 import { shownValue } from "./variables";
 
-/** A pixel icon as a DOM node, for places outside Svelte. */
-function pixelIcon(name: IconName): HTMLElement {
+/** An icon as a DOM node, for places outside Svelte. */
+function domIcon(name: IconName): HTMLElement {
   const wrapper = document.createElement("span");
   wrapper.className = "cm-gm-fold";
   const ns = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("viewBox", "0 0 7 7");
-  svg.setAttribute("width", "7");
-  svg.setAttribute("height", "7");
+  svg.setAttribute("viewBox", "0 -960 960 960");
+  svg.setAttribute("width", "14");
+  svg.setAttribute("height", "14");
   svg.setAttribute("fill", "currentColor");
-  svg.setAttribute("shape-rendering", "crispEdges");
-  for (const rect of iconRects(name)) {
-    const node = document.createElementNS(ns, "rect");
-    node.setAttribute("x", String(rect.x));
-    node.setAttribute("y", String(rect.y));
-    node.setAttribute("width", String(rect.w));
-    node.setAttribute("height", "1");
-    svg.append(node);
-  }
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", iconPath(name));
+  svg.append(path);
   wrapper.append(svg);
   return wrapper;
 }
@@ -484,7 +478,7 @@ export function baseExtensions(options: SetupOptions): Extension[] {
       extensions.push(
         lineNumbers(),
         highlightActiveLineGutter(),
-        foldGutter({ markerDOM: (open) => pixelIcon(open ? "chevronDown" : "chevronRight") }),
+        foldGutter({ markerDOM: (open) => domIcon(open ? "chevronDown" : "chevronRight") }),
       );
     }
   }

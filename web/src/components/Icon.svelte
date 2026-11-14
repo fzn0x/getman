@@ -1,28 +1,25 @@
 <script lang="ts">
-  import { iconRects, type IconName } from "../lib/icons";
+  import { iconPath, type IconName } from "../lib/icons";
 
   interface Props {
     name: IconName;
-    /** Rendered size in px; keep to multiples of 7 so pixels stay crisp. */
-    size?: 7 | 14 | 21;
+    /** Rendered size in px. Material Symbols are drawn for 20 and 24; 16
+        suits the small marks inside rows and tabs. */
+    size?: number;
   }
 
-  let { name, size = 14 }: Props = $props();
-  const rects = $derived(iconRects(name));
+  let { name, size = 18 }: Props = $props();
 </script>
 
 <svg
   class="icon"
-  viewBox="0 0 7 7"
+  viewBox="0 -960 960 960"
   width={size}
   height={size}
-  shape-rendering="crispEdges"
   fill="currentColor"
   aria-hidden="true"
 >
-  {#each rects as rect, i (i)}
-    <rect x={rect.x} y={rect.y} width={rect.w} height="1" />
-  {/each}
+  <path d={iconPath(name)} />
 </svg>
 
 <style>

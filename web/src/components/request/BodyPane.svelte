@@ -185,7 +185,7 @@
                       body.fields = body.fields.filter((_, j) => j !== i);
                   }}
                 >
-                  <Icon name="close" size={7} />
+                  <Icon name="close" size={16} />
                 </button>
               </span>
             </div>
