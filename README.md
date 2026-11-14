@@ -352,8 +352,9 @@ taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 Licensed under either of the [Apache License, Version 2.0](LICENSE-APACHE)
 or the [MIT license](LICENSE-MIT), at your option. Contributions are
-accepted under the same terms. The Departure Mono font in `web/public/fonts`
-is under the SIL Open Font License; see its licence file there.
+accepted under the same terms. The fonts in `web/public/fonts` are under the
+SIL Open Font License and the icons are Material Symbols under the Apache
+License; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Postman is a trademark of Postman, Inc. Getman is not affiliated with or
 endorsed by Postman.
