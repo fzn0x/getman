@@ -262,15 +262,17 @@
     min-height: 0;
   }
 
+  /* A filled track with the chosen type as a tonal pill inside, as the
+     response's view modes. */
   .types {
     display: flex;
     flex-wrap: wrap;
-    gap: 0;
-    border: 1px solid var(--outline);
+    gap: 2px;
+    padding: 2px;
     /* Half the 28px row: a pill on one line, rounded corners when the
        types wrap onto two. */
     border-radius: 14px;
-    overflow: hidden;
+    background: var(--fill);
     width: max-content;
     max-width: 100%;
   }
@@ -278,20 +280,16 @@
   .type {
     display: grid;
     place-items: center;
-    height: 28px;
+    height: 24px;
     padding: 0 12px;
-    border-right: 1px solid var(--outline);
-    color: var(--on-surface);
+    border-radius: 12px;
+    color: var(--on-surface-variant);
     font-weight: 500;
     cursor: pointer;
   }
 
-  .type:last-child {
-    border-right: 0;
-  }
-
   .type:hover {
-    background: var(--sunken);
+    background: color-mix(in srgb, var(--on-surface) var(--hover), transparent);
     color: var(--ink);
   }
 

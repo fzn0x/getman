@@ -651,12 +651,12 @@
   }
 
   .name:hover {
-    border-color: var(--rule-2);
+    background: var(--fill);
   }
 
   .name:focus {
-    border-color: var(--ink);
-    background: var(--field);
+    border-color: var(--primary);
+    background: var(--fill);
   }
 
   .state {
@@ -683,18 +683,20 @@
     height: 40px;
   }
 
-  /* Kind, address and TLS share one outlined field, as in the HTTP
-     request line; Invoke sits beside it. */
+  /* Kind, address and TLS share one filled field, as in the HTTP request
+     line; Invoke sits beside it. */
   .kind,
   .address,
   .tls {
-    border: 1px solid var(--outline);
-    background: var(--field);
-    transition: border-color var(--dur-short) var(--ease);
+    border: 1px solid transparent;
+    background: var(--fill);
+    transition:
+      border-color var(--dur-short) var(--ease),
+      background-color var(--dur-short) var(--ease);
   }
 
   .line:has(.address:hover) :is(.kind, .address, .tls) {
-    border-color: var(--on-surface);
+    background: var(--fill-hover);
   }
 
   .line:has(.address:focus-within) :is(.kind, .address, .tls) {

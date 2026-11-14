@@ -157,7 +157,7 @@
     gap: var(--s2);
     padding: var(--s3);
     border: 1px solid var(--rule);
-    background: var(--field);
+    background: var(--surface-container);
     box-shadow: var(--elevation-2);
   }
 
