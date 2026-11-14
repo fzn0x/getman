@@ -427,7 +427,8 @@ fn run_engine(
 }
 
 /// Runs queued promise jobs and timers until the script's promise settles
-/// and nothing is left to do.
+/// and nothing is left to do. A script whose timers fire more than
+/// [`MAX_TICKS`] times, such as an interval never cleared, fails.
 fn settle<'js>(
     ctx: &Ctx<'js>,
     promise: &Promise<'js>,
@@ -435,24 +436,33 @@ fn settle<'js>(
     origin: &str,
     host: &ScriptHost,
 ) -> Result<(), String> {
-    for _ in 0..MAX_TICKS {
+    let mut ticks = 0;
+    loop {
         while ctx.execute_pending_job() {}
         match tick.call::<_, bool>(()).catch(ctx) {
             Ok(true) => {}
             Ok(false) => break,
             Err(caught) => return Err(describe(ctx, caught, origin, host)),
         }
+        ticks += 1;
+        if ticks > MAX_TICKS {
+            return Err(format!(
+                "the script's timers fired more than {MAX_TICKS} times, so it was stopped; clear an interval with clearInterval once it is done"
+            ));
+        }
     }
     match promise.state() {
         PromiseState::Resolved => Ok(()),
-        PromiseState::Rejected => match promise.result::<rquickjs::Value<'_>>().map(|r| r.catch(ctx)) {
+        PromiseState::Rejected => match promise
+            .result::<rquickjs::Value<'_>>()
+            .map(|r| r.catch(ctx))
+        {
             Some(Err(caught)) => Err(describe(ctx, caught, origin, host)),
             _ => Err("the script failed".into()),
         },
-        PromiseState::Pending => Err(
-            "the script never finished: it awaits something that never settles, or a timer that keeps firing"
-                .into(),
-        ),
+        PromiseState::Pending => {
+            Err("the script never finished: it awaits something that never settles".into())
+        }
     }
 }
 

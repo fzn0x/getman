@@ -356,6 +356,26 @@ fn async_code_and_timers_run_to_completion() {
 }
 
 #[test]
+fn an_interval_that_is_never_cleared_fails_the_script() {
+    let output = pre("setInterval(() => {}, 10);");
+    let message = output.error.map(|e| e.message).unwrap_or_default();
+    assert!(
+        message.contains("more than 100000 times") && message.contains("clearInterval"),
+        "{message:?}"
+    );
+
+    let output = pre(r"
+        let n = 0;
+        const id = setInterval(() => { if (++n === 3) clearInterval(id); }, 10);
+        gm.test('cleared', async () => {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            gm.expect(n).to.equal(3);
+        });
+    ");
+    assert_all_pass(&output);
+}
+
+#[test]
 fn crypto_matches_known_vectors() {
     let output = post(
         r#"
