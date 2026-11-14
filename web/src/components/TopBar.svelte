@@ -260,6 +260,13 @@
     text-overflow: ellipsis;
   }
 
+  /* The label is as tall as the touch-sized field, so its text centres in it. */
+  @media (pointer: coarse) {
+    .current {
+      line-height: calc(var(--control) - 2px);
+    }
+  }
+
   .current.none {
     border-color: var(--divider);
     background-color: transparent;
