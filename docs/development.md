@@ -149,7 +149,7 @@ npm run tauri -- ios build --debug --target aarch64-sim        # for the simulat
 ```
 
 QuickJS's bindings are generated at build time for phones, which needs
-`BINDGEN_EXTRA_CLANG_ARGS` to name the target's system headers. See
+`BINDGEN_EXTRA_CLANG_ARGS_<target>` to name the target's system headers and, on Android, its API level. See
 [CONTRIBUTING.md](https://github.com/fzn0x/getman/blob/main/CONTRIBUTING.md#the-mobile-apps)
 for the variables, and for what the Android project in `gen/android`
 changes from Tauri's.

@@ -67,7 +67,10 @@ jobs:
         working-directory: crates/getman-mobile
         run: |
           export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
-          export BINDGEN_EXTRA_CLANG_ARGS="--sysroot=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          # Newer NDK headers refuse a target without an API level, so
+          # bindgen gets the app's minimum, 26.
+          sysroot="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          export BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android="--sysroot=$sysroot --target=aarch64-linux-android26"
           npm run tauri -- android build --ci --apk --target aarch64
           find gen/android/app/build/outputs/apk -name '*.apk' -exec ls -l {} +
       - uses: actions/upload-artifact@v7

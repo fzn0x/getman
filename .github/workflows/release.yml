@@ -307,7 +307,12 @@ jobs:
           export GETMAN_ANDROID_KEY_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
           export GETMAN_ANDROID_KEY_ALIAS=getman
           export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
-          export BINDGEN_EXTRA_CLANG_ARGS="--sysroot=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          # Newer NDK headers refuse a target without an API level, so
+          # bindgen gets the app's minimum, 26.
+          sysroot="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          export BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android="--sysroot=$sysroot --target=aarch64-linux-android26"
+          export BINDGEN_EXTRA_CLANG_ARGS_armv7_linux_androideabi="--sysroot=$sysroot --target=armv7a-linux-androideabi26"
+          export BINDGEN_EXTRA_CLANG_ARGS_x86_64_linux_android="--sysroot=$sysroot --target=x86_64-linux-android26"
           npm run tauri -- android build --ci --apk --target aarch64 armv7 x86_64
           apk=$(find gen/android/app/build/outputs/apk -name '*-release.apk' | head -n 1)
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)/apksigner" verify --print-certs "$apk"

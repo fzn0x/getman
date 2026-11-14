@@ -137,12 +137,13 @@ no `web/dist` to read.
 
 For Android, install the Android SDK with the NDK, and Java 17 or newer.
 Set `ANDROID_HOME`, `NDK_HOME` and `JAVA_HOME`, and point bindgen at the
-NDK's headers:
+NDK's headers, with a target that names the app's minimum API level,
+26, as newer NDKs require:
 
 ```sh
 cd crates/getman-mobile
 npm ci
-export BINDGEN_EXTRA_CLANG_ARGS="--sysroot=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+export BINDGEN_EXTRA_CLANG_ARGS_x86_64_linux_android="--sysroot=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot --target=x86_64-linux-android26"
 npm run tauri -- android build --debug --apk --target x86_64   # for the emulator
 ```
 
