@@ -75,6 +75,9 @@ export const prefs = $state({
   split: load<number>("split", 0.5),
 });
 
+/** True while the sidebar covers the page instead of sitting beside it. */
+export const viewport = $state({ overlay: false });
+
 export function setTheme(theme: Theme): void {
   prefs.theme = theme;
   try {
@@ -391,6 +394,8 @@ export function tabTitle(tab: Tab): string {
 
 function focusTab(id: string): void {
   tabs.active = id;
+  // Choosing a request in the sidebar overlay is done with it: show the request.
+  if (viewport.overlay) prefs.sidebarOpen = false;
   persistTabs();
   void refreshVariables();
 }

@@ -149,7 +149,9 @@
       </dl>
     {:else if !execution && !sending}
       <p class="hint">
-        Press {#each keyLabel("mod+enter") as key (key)}<kbd>{key}</kbd>{" "}{/each}or {action}.
+        Press <span class="keyhint"
+          >{#each keyLabel("mod+enter") as key (key)}<kbd>{key}</kbd>{" "}{/each}or
+        </span>{action}.
       </p>
     {/if}
   </div>

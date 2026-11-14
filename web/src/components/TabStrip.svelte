@@ -354,6 +354,12 @@
     font-style: italic;
   }
 
+  @media (pointer: coarse) {
+    .strip {
+      height: 44px;
+    }
+  }
+
   .close {
     display: grid;
     place-items: center;

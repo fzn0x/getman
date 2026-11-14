@@ -132,7 +132,7 @@
       bind:this={filterInput}
       onkeydown={onFilterKey}
     />
-    <kbd aria-hidden="true">/</kbd>
+    <kbd class="keyhint" aria-hidden="true">/</kbd>
   </div>
 
   <div class="switch-row">

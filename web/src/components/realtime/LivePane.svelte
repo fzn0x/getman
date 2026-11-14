@@ -250,8 +250,9 @@
         <div class="empty-log">
           {#if conn.status === "idle" || conn.status === "closed"}
             <p>
-              {tab.draft.kind === "sse" ? "Events" : "Messages"} show here as they arrive. Press Connect,
-              or <kbd>{keyLabel("mod+enter").join(" ")}</kbd>.
+              {tab.draft.kind === "sse" ? "Events" : "Messages"} show here as they arrive. Press Connect<span
+                class="keyhint">, or <kbd>{keyLabel("mod+enter").join(" ")}</kbd></span
+              >.
             </p>
           {:else}
             <p>Waiting for the first message…</p>

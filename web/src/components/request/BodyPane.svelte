@@ -355,7 +355,7 @@
 
   .multipart {
     display: grid;
-    grid-template-columns: auto minmax(100px, 2fr) 90px minmax(160px, 4fr) 28px;
+    grid-template-columns: auto minmax(0, 2fr) 90px minmax(0, 4fr) var(--icon);
   }
 
   .mrow {

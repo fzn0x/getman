@@ -887,7 +887,9 @@
     line-height: 1.6;
   }
 
-  @media (max-width: 900px) {
+  /* Stacked unless the window is short: a phone on its side keeps the two
+     side by side, since a stack leaves each half a few lines. */
+  @media (max-width: 900px) and (min-height: 501px) {
     .panes {
       grid-template-columns: minmax(0, 1fr);
       grid-template-rows: minmax(0, 1fr) 1px minmax(0, 1fr);
@@ -896,7 +898,9 @@
     .divider {
       cursor: row-resize;
     }
+  }
 
+  @media (max-width: 900px) {
     .title {
       padding-left: var(--s3);
     }

@@ -215,7 +215,7 @@
     grid-template-columns: 10px 30px minmax(0, 1fr) auto;
     align-items: center;
     gap: 4px;
-    height: 28px;
+    height: var(--row, 28px);
     padding-left: calc(var(--s2) + var(--depth) * 14px);
     padding-right: var(--s1);
     color: var(--ink);

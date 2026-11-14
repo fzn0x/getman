@@ -278,7 +278,7 @@
             {#if entry.detail}<span class="detail">{entry.detail}</span>{/if}
           </span>
           {#if entry.keys}
-            <span class="keys"
+            <span class="keys keyhint"
               >{#each keyLabel(entry.keys) as key (key)}<kbd>{key}</kbd>{/each}</span
             >
           {/if}

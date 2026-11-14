@@ -12,6 +12,7 @@
   } from "../lib/store.svelte";
   import DesktopActions from "./DesktopActions.svelte";
   import Icon from "./Icon.svelte";
+  import Menu, { type MenuItem } from "./Menu.svelte";
 
   let environmentSelect: HTMLSelectElement;
   let seen = signals.focusEnvironment;
@@ -23,6 +24,27 @@
       environmentSelect?.showPicker?.();
     }
   });
+
+  // On a phone the less-used buttons fold into this menu.
+  let more = $state<{ x: number; y: number } | null>(null);
+  const moreItems = $derived<MenuItem[]>([
+    {
+      label: "Import",
+      icon: "import",
+      action: () => openDialog({ kind: "import", folder: "" }),
+    },
+    { label: "Cookies", icon: "cookie", action: () => openDialog({ kind: "cookies" }) },
+    {
+      label: themeLabel(prefs.theme),
+      icon: "contrast",
+      action: () => setTheme(nextTheme(prefs.theme)),
+    },
+  ]);
+
+  function openMore(event: MouseEvent): void {
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    more = { x: rect.right, y: rect.bottom + 4 };
+  }
 
   function onEnvironment(event: Event): void {
     const value = (event.currentTarget as HTMLSelectElement).value;
@@ -55,10 +77,14 @@
     <span class="word">Getman</span>
   </div>
 
-  <button class="find" onclick={() => openDialog({ kind: "palette" })}>
+  <button
+    class="find"
+    aria-label="Find requests and commands"
+    onclick={() => openDialog({ kind: "palette" })}
+  >
     <Icon name="search" />
     <span>Find requests and commands</span>
-    <span class="keys">
+    <span class="keys keyhint">
       {#each keyLabel("mod+k") as key (key)}<kbd>{key}</kbd>{/each}
     </span>
   </button>
@@ -88,7 +114,7 @@
     </label>
 
     <button
-      class="icon-btn"
+      class="icon-btn wide"
       aria-label="Import"
       title="Import a cURL command or Postman export ({keyLabel('alt+i').join(' ')})"
       onclick={() => openDialog({ kind: "import", folder: "" })}
@@ -96,7 +122,7 @@
       <Icon name="import" />
     </button>
     <button
-      class="icon-btn"
+      class="icon-btn wide"
       aria-label="Cookies"
       title="Cookies"
       onclick={() => openDialog({ kind: "cookies" })}
@@ -104,7 +130,7 @@
       <Icon name="cookie" />
     </button>
     <button
-      class="icon-btn"
+      class="icon-btn wide stacked-hides"
       aria-label={prefs.layout === "columns"
         ? "Stack the response below"
         : "Put the response beside"}
@@ -114,16 +140,29 @@
       <Icon name={prefs.layout === "columns" ? "stack" : "split"} />
     </button>
     <button
-      class="icon-btn"
+      class="icon-btn wide"
       aria-label={themeLabel(prefs.theme)}
       title={themeLabel(prefs.theme)}
       onclick={() => setTheme(nextTheme(prefs.theme))}
     >
       <Icon name="contrast" />
     </button>
+    <button
+      class="icon-btn phone"
+      aria-label="More"
+      aria-haspopup="menu"
+      title="Import, cookies, theme"
+      onclick={openMore}
+    >
+      <Icon name="more" />
+    </button>
     <DesktopActions />
   </div>
 </header>
+
+{#if more}
+  <Menu items={moreItems} x={more.x} y={more.y} label="More" onClose={() => (more = null)} />
+{/if}
 
 <style>
   .top {
@@ -221,6 +260,13 @@
     text-overflow: ellipsis;
   }
 
+  /* The label is as tall as the touch-sized field, so its text centres in it. */
+  @media (pointer: coarse) {
+    .current {
+      line-height: calc(var(--control) - 2px);
+    }
+  }
+
   .current.none {
     border-color: var(--divider);
     background-color: transparent;
@@ -249,6 +295,17 @@
     );
   }
 
+  .phone {
+    display: none;
+  }
+
+  /* The response always sits below at this width, so there is nothing to switch. */
+  @media (max-width: 900px) and (min-height: 501px) {
+    .stacked-hides {
+      display: none;
+    }
+  }
+
   @media (max-width: 720px) {
     .find span:not(.keys),
     .keys,
@@ -258,11 +315,39 @@
 
     .find {
       flex: 0 0 auto;
+      justify-content: center;
+      width: var(--control);
       margin-left: 0;
+      padding: 0;
+    }
+
+    .wide {
+      display: none;
+    }
+
+    .phone {
+      display: inline-grid;
+    }
+
+    /* Let the environment name give way, so the bar never forces the page wider. */
+    .right {
+      min-width: 0;
+      flex: 0 1 auto;
+    }
+
+    .environment {
+      min-width: 0;
+      margin-right: 0;
+      padding-right: var(--s1);
+      border-right: 0;
     }
 
     .current {
-      max-width: 116px;
+      max-width: 96px;
+    }
+
+    .mark {
+      padding-right: 0;
     }
   }
 </style>

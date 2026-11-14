@@ -24,15 +24,15 @@
       <div class="actions">
         <button class="btn primary" onclick={() => newRequest()}>
           <Icon name="plus" /> New request
-          <span class="hint">{keyLabel("alt+n").join(" ")}</span>
+          <span class="hint keyhint">{keyLabel("alt+n").join(" ")}</span>
         </button>
         <button class="btn" onclick={() => openDialog({ kind: "palette" })}>
           <Icon name="search" /> Find
-          <span class="hint">{keyLabel("mod+k").join(" ")}</span>
+          <span class="hint keyhint">{keyLabel("mod+k").join(" ")}</span>
         </button>
         <button class="btn" onclick={() => openDialog({ kind: "import", folder: "" })}>
           <Icon name="import" /> Import
-          <span class="hint">{keyLabel("alt+i").join(" ")}</span>
+          <span class="hint keyhint">{keyLabel("alt+i").join(" ")}</span>
         </button>
       </div>
 

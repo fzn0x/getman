@@ -82,6 +82,10 @@
 
   --control: 30px;
   --bar: 44px;
+  /* The square icon buttons; fingers get more. */
+  --icon: 28px;
+  --foot: 24px;
+  --row: 28px;
 
   /* ---- Quiet edges ----------------------------------------------------- */
   /* The layout reads by its surfaces, not by lines: dividers are the
@@ -316,9 +320,10 @@ a {
 .icon-btn {
   --layer: transparent;
   display: inline-grid;
+  flex: none;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: var(--icon);
+  height: var(--icon);
   padding: 0;
   border: 0;
   border-radius: var(--r-full);
@@ -620,5 +625,52 @@ kbd {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---- Touch screens --------------------------------------------------------- */
+
+/* No keyboard, so no key hints. A phone reports no hover and a coarse
+   primary pointer; a touch laptop keeps its trackpad as primary and so keeps
+   its hints. */
+@media (hover: none) and (pointer: coarse) {
+  .keyhint {
+    display: none !important;
+  }
+}
+
+/* Fingers need about 40px targets, and iOS zooms into any field under 16px.
+   Desktop sizes above stay as they are. */
+@media (pointer: coarse) {
+  :root {
+    --control: 40px;
+    --icon: 40px;
+    --foot: 36px;
+    --row: 40px;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  .tablist {
+    min-height: 40px;
+  }
+
+  /* Components size their own small buttons and fields for a mouse. A floor
+     on the height reaches them all without editing each; important is the
+     only way past their scoped rules. */
+  button:not(.sr-only):not(.link),
+  select,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(.sr-only),
+  [role="tab"] {
+    min-height: 40px !important;
+  }
+
+  .close,
+  .more {
+    min-width: 40px;
   }
 }
