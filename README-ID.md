@@ -31,7 +31,7 @@
 
 Getman adalah API client untuk HTTP/1.1, HTTP/2, HTTP/3, gRPC, WebSocket, Server-Sent Events dan Socket.IO. Sebuah workspace adalah folder berisi file YAML, satu per request, yang kamu commit dan review bersama kode yang diujinya. Satu mesin yang sama menjalankan aplikasi desktop, UI browser, UI terminal, dan `getman run`, jadi sebuah request berperilaku sama di mana pun. Getman bisa meng-import Postman collection dan menjalankan script `pm`.
 
-[Install](#install) · [Dokumentasi](https://fzn0x.github.io/getman/) ·
+[Unduhan](#unduhan) · [Install](#install) · [Dokumentasi](https://fzn0x.github.io/getman/) ·
 [Command line](docs/cli.md) · [Pindah dari Postman](docs/why-getman.md#moving-over) ·
 [Changelog](CHANGELOG.md) · [English](README.md)
 
@@ -47,6 +47,40 @@ getman tui                                    # atau UI terminal
 ```
 
 `--example` menambahkan request ke [JSONPlaceholder](https://jsonplaceholder.typicode.com), API uji coba yang gratis. Lihat [Memulai](docs/getting-started-ID.md).
+
+## Unduhan
+
+| Platform | Unduh | Cara lain |
+| --- | --- | --- |
+| Windows | [Setup, x64](https://github.com/fzn0x/getman/releases/latest/download/Getman-windows-x64-setup.exe) · [Setup, ARM64](https://github.com/fzn0x/getman/releases/latest/download/Getman-windows-arm64-setup.exe) | MSI, zip portabel, `scoop install fzn0x/getman` |
+| macOS | [Disk image](https://github.com/fzn0x/getman/releases/latest/download/Getman-macos-universal.dmg), Apple silicon dan Intel | `brew install --cask fzn0x/tap/getman-desktop` (lihat di bawah) |
+| Linux | [AppImage, x86_64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-x86_64.AppImage) · [AppImage, aarch64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-aarch64.AppImage) | .deb, .rpm, Flatpak, AUR, Nix (lihat di bawah) |
+| Android | `Getman-android-universal.apk` di [halaman rilis](https://github.com/fzn0x/getman/releases) | APK bertanda tangan, dipasang langsung |
+| iOS | `Getman-ios.ipa` di [halaman rilis](https://github.com/fzn0x/getman/releases) | Di-sideload dengan AltStore, SideStore atau Sideloadly |
+
+Android, iOS, Flatpak, AUR dan cask Homebrew mulai ada di rilis setelah
+0.3.4. File lainnya ada di setiap rilis, dan tautan ini selalu mengambil
+yang terbaru. Nix membangun flake repositori, jadi selalu menjalankan kode
+terbaru di `main`.
+
+- **Android:** buka APK di ponsel dan izinkan pemasangan dari sumber itu
+  saat Android bertanya.
+- **iOS:** IPA tidak ditandatangani, dan tidak ada versi App Store.
+  AltStore, SideStore atau Sideloadly menandatanganinya dengan Apple ID
+  kamu lalu memasangnya. Apple ID gratis harus menyegarkan aplikasi
+  setiap 7 hari.
+- **Linux, format lain:**
+
+  ```sh
+  flatpak install --user Getman-linux-x86_64.flatpak   # atau file aarch64
+  yay -S getman-bin                                    # Arch Linux, dari AUR
+  nix run github:fzn0x/getman                          # Nix, tanpa memasang
+  ```
+
+- **macOS, Homebrew:** `brew install --cask fzn0x/tap/getman-desktop`
+
+[Instalasi](docs/installation.md)
+membahas masing-masing, termasuk pembaruan dan penghapusan.
 
 ## Install
 

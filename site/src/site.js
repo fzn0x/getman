@@ -97,6 +97,44 @@
     }
   });
 
+  // ---- Downloads: one system at a time, the visitor's first ---------------------
+  // Without script every panel shows. Here the segmented control picks one.
+
+  const picker = document.querySelector("[data-dl-tabs]");
+  if (picker) {
+    const tabs = [...picker.querySelectorAll("[data-tab]")];
+    const panels = [...document.querySelectorAll("[data-panel]")];
+    const select = (id, focus = false) => {
+      for (const tab of tabs) {
+        const on = tab.dataset.tab === id;
+        tab.classList.toggle("on", on);
+        tab.setAttribute("aria-selected", String(on));
+        tab.tabIndex = on ? 0 : -1;
+        if (on && focus) tab.focus();
+      }
+      for (const panel of panels) panel.classList.toggle("on", panel.dataset.panel === id);
+    };
+    const mine = tabs.some((t) => t.dataset.tab === root.dataset.system)
+      ? root.dataset.system
+      : tabs[0].dataset.tab;
+    select(mine);
+    picker.addEventListener("click", (event) => {
+      const tab = event.target.closest("[data-tab]");
+      if (tab) select(tab.dataset.tab);
+    });
+    picker.addEventListener("keydown", (event) => {
+      const at = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
+      const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+      if (step) {
+        event.preventDefault();
+        select(tabs[(at + step + tabs.length) % tabs.length].dataset.tab, true);
+      } else if (event.key === "Home" || event.key === "End") {
+        event.preventDefault();
+        select(tabs[event.key === "Home" ? 0 : tabs.length - 1].dataset.tab, true);
+      }
+    });
+  }
+
   // ---- Keys say Cmd on a Mac -----------------------------------------------------
 
   if (mac) for (const key of document.querySelectorAll("[data-mod]")) key.textContent = "⌘";

@@ -5,20 +5,17 @@
 
 import { bar, footer, head, orbitMark, palette } from "./layout.mjs";
 import { icon } from "./icons.mjs";
+import { available, commandReady, platforms } from "./downloads.mjs";
 
 // The head script names the visitor's system on <html data-system>, and
-// site.css hides what is for other systems. "other" is for phones, tablets
-// and pages read without script.
-const systems = [
-  { system: "windows", name: "Windows", file: "Getman-windows-x64-setup.exe" },
-  { system: "macos", name: "macOS", file: "Getman-macos-universal.dmg" },
-  { system: "linux", name: "Linux", file: "Getman-linux-x86_64.AppImage" },
-];
+// site.css hides what is for other systems. "other" is for other systems
+// and pages read without script. The files come from downloads.mjs.
+const systems = platforms.map((p) => ({ system: p.id, name: p.name, entry: p.main[0] }));
 
 const commands = [
   { systems: "windows", text: "irm https://fzn0x.github.io/getman/install.ps1 | iex" },
   {
-    systems: "macos linux other",
+    systems: "macos linux android ios other",
     text: "curl -fsSL https://fzn0x.github.io/getman/install.sh | sh",
   },
 ];
@@ -223,7 +220,67 @@ const facts = [
   { value: 18, unit: "languages", label: "to export a request as code" },
 ];
 
-export function landing({ root, assets, site, repo, pages }) {
+// ---- Downloads ---------------------------------------------------------------
+// One panel per system. Without script all five show, one after the other;
+// with it, a segmented control shows the visitor's system first.
+
+function downloadsSection({ repo, released }) {
+  const href = (file) => `${repo}/releases/latest/download/${file}`;
+  const soonLabel = "Coming with the next release";
+
+  const link = (item, cls) =>
+    available(item, released)
+      ? `<a class="btn ${cls}" href="${href(item.file)}">${cls.includes("large") ? icon("download") : ""}<span>${item.label}</span></a>`
+      : `<span class="btn ${cls} is-soon" title="${item.file}"><span>${item.label}</span><span class="soon-tag">Next release</span></span>`;
+
+  const panel = (p) => {
+    const mainSoon = p.main.every((m) => !available(m, released));
+    const actions = mainSoon
+      ? `<span class="btn large is-soon" title="${p.main[0].file}"><span>${soonLabel}</span></span>`
+      : p.main.map((m) => link(m, m.tonal ? "large" : "large filled")).join("");
+    const files = p.files.length
+      ? `<div class="dl-block"><p class="dl-label">Other files</p><ul class="dl-chips">${p.files
+          .map((f) => `<li>${link(f, "small")}</li>`)
+          .join("")}</ul></div>`
+      : "";
+    const steps = p.steps
+      ? `<div class="dl-block"><p class="dl-label">Install</p><ol class="dl-steps">${p.steps.map((t) => `<li>${t}</li>`).join("")}</ol></div>`
+      : "";
+    const commands = p.commands.length
+      ? `<div class="dl-block"><p class="dl-label">Command line and package managers</p><div class="dl-commands">${p.commands
+          .map((c) => {
+            const ready = commandReady(c, released);
+            return `<div class="command dl-cmd${ready ? "" : " is-soon"}"><span class="command-label">${c.label}</span>${ready ? "" : '<span class="soon-tag">Next release</span>'}<code data-command>${breakable(c.text)}</code><button class="btn text" type="button" data-copy-command>${icon("copy")}<span>Copy</span></button></div>`;
+          })
+          .join("")}</div></div>`
+      : "";
+    const side = steps + commands;
+    return `<article class="dl-panel" id="dl-${p.id}" role="tabpanel" aria-labelledby="tab-${p.id}" data-panel="${p.id}">
+      <div class="dl-main">
+        <h3>${p.name}</h3>
+        <p class="dl-req">${p.requires}</p>
+        <div class="dl-actions">${actions}</div>
+        <p class="dl-note">${p.note}</p>
+        ${files}
+      </div>
+      ${side ? `<div class="dl-side">${side}</div>` : ""}
+    </article>`;
+  };
+
+  return `<section class="downloads" id="downloads" aria-labelledby="downloads-title">
+  <h2 id="downloads-title">Downloads for every system</h2>
+  <p class="section-lead">The desktop app runs on Windows, macOS and Linux. The Android and iOS apps send and test requests from a phone. Every file is on the <a href="${repo}/releases">releases page</a> too.</p>
+  <div class="segmented dl-tabs" role="tablist" aria-label="System" data-dl-tabs>${platforms
+    .map(
+      (p) =>
+        `<button class="seg" type="button" role="tab" id="tab-${p.id}" aria-controls="dl-${p.id}" aria-selected="false" tabindex="-1" data-tab="${p.id}">${p.name}</button>`,
+    )
+    .join("")}</div>
+  <div class="dl-panels">${platforms.map(panel).join("")}</div>
+</section>`;
+}
+
+export function landing({ root, assets, site, repo, pages, released = null }) {
   const title = "Getman: fast, open-source Postman alternative in Rust";
   const description =
     "Getman is an open-source Postman alternative, written in Rust. Requests are YAML files in your repository, sent from a desktop app, a browser, a terminal or CI, over HTTP/1.1, HTTP/2, HTTP/3, gRPC, WebSocket, SSE and Socket.IO.";
@@ -234,7 +291,7 @@ export function landing({ root, assets, site, repo, pages }) {
     description,
     url: site,
     applicationCategory: "DeveloperApplication",
-    operatingSystem: "Windows, macOS, Linux",
+    operatingSystem: "Windows, macOS, Linux, Android, iOS",
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
     license: [`${repo}/blob/main/LICENSE-MIT`, `${repo}/blob/main/LICENSE-GPL`],
     downloadUrl: `${repo}/releases/latest`,
@@ -244,14 +301,18 @@ export function landing({ root, assets, site, repo, pages }) {
   };
   const jsonLd = `<script type="application/ld+json">${JSON.stringify(app).replace(/</g, "\\u003c")}</script>`;
 
+  // A file the latest release lacks sends the visitor to the downloads
+  // section, which says it is coming.
   const buttons = systems
-    .map(
-      ({ system, name, file }) =>
-        `<a class="btn filled large" href="${repo}/releases/latest/download/${file}" data-for="${system}">${icon("download")}<span>Download for ${name}</span></a>`,
-    )
+    .map(({ system, name, entry }) => {
+      const to = available(entry, released)
+        ? `${repo}/releases/latest/download/${entry.file}`
+        : "#downloads";
+      return `<a class="btn filled large" href="${to}" data-for="${system}">${icon("download")}<span>Download for ${name}</span></a>`;
+    })
     .join("");
   const files = systems
-    .map(({ system, file }) => `<code data-for="${system}">${file}</code>`)
+    .map(({ system, entry }) => `<code data-for="${system}">${entry.file}</code>`)
     .join("");
   // The desktop guide is linked once the build has it.
   const guide = pages.includes("desktop")
@@ -261,8 +322,8 @@ export function landing({ root, assets, site, repo, pages }) {
       ${buttons}
       <a class="btn filled large" href="${repo}/releases/latest" data-for="other">${icon("download")}<span>Download</span></a>
       <p class="download-note">
-        ${files}<span data-for="other">For Windows, macOS and Linux</span>
-        <span class="download-links"><a href="${repo}/releases" data-for="windows macos linux">Other downloads</a>${guide}</span>
+        ${files}<span data-for="other">For Windows, macOS, Linux, Android and iOS</span>
+        <span class="download-links"><a href="#downloads" data-for="windows macos linux android ios">Other downloads</a>${guide}</span>
       </p>
     </div>`;
 
@@ -310,6 +371,8 @@ ${bar({ root, current: "" })}
   </div>
   <p class="more"><a href="${root}docs/why-getman.html">How Getman compares with Postman</a> · <a href="${root}docs/compare.html">and with other API clients</a></p>
 </section>
+
+${downloadsSection({ repo, released })}
 
 <section class="closing" aria-labelledby="closing">
   <h2 id="closing">Download Getman</h2>

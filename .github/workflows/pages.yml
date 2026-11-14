@@ -3,6 +3,10 @@ name: Docs
 # Builds the documentation site from docs/ and site/ and publishes it to
 # GitHub Pages from main. Pull requests that touch the documentation build
 # it too, so a broken link to a page or a bad heading fails before merge.
+# The landing page links the files of the latest release, so the site is
+# rebuilt when the Release workflow finishes. A release made with
+# GITHUB_TOKEN does not start other workflows by its release events, but
+# a finished workflow run does.
 
 on:
   push:
@@ -20,6 +24,9 @@ on:
       - site/**
       - web/src/styles/tokens.css
       - .github/workflows/pages.yml
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -32,6 +39,7 @@ concurrency:
 jobs:
   build:
     name: Build the site
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -51,6 +59,9 @@ jobs:
       - name: Build
         working-directory: site
         run: npm run build
+        env:
+          # Reads the latest release's file names, with a higher rate limit.
+          GITHUB_TOKEN: ${{ github.token }}
       - uses: actions/upload-pages-artifact@v5
         with:
           path: site/dist

@@ -291,7 +291,8 @@ change one.
 ## What CI runs
 
 `.github/workflows/ci.yml` runs on every pull request and on every push
-to `main`. A newer push to the same branch cancels the run before it.
+to `main`. A newer push to a pull request cancels its run before it. Runs
+on `main` always finish, so each commit there shows how it went.
 
 | Job | Runs |
 | --- | --- |
