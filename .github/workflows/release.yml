@@ -41,8 +41,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Pinned, like the ARM runner, so the binary links against the same
-          # glibc on every release instead of whatever ubuntu-latest becomes.
+          # The Linux builds link against glibc 2.28 through zig (see below),
+          # whatever the runner's own glibc is.
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
           - os: ubuntu-24.04-arm
@@ -66,7 +66,21 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
-      - run: cargo build --release --locked --package getman --target ${{ matrix.target }}
+      # On Linux, cargo-zigbuild links against glibc 2.28 instead of the
+      # runner's, so the command line runs on RHEL 8 and 9, Debian 11 and
+      # Ubuntu 20.04 and newer. The binary lands in the usual target folder.
+      - if: runner.os == 'Linux'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - if: runner.os == 'Linux'
+        run: |
+          pip install cargo-zigbuild==0.24.1 ziglang==0.13.0
+          python -c "import os, ziglang; print(os.path.dirname(ziglang.__file__))" >> "$GITHUB_PATH"
+      - if: runner.os == 'Linux'
+        run: cargo zigbuild --release --locked --package getman --target ${{ matrix.target }}.2.28
+      - if: runner.os != 'Linux'
+        run: cargo build --release --locked --package getman --target ${{ matrix.target }}
       - name: Package
         shell: bash
         run: |
