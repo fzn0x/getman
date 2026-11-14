@@ -331,7 +331,7 @@ The documentation site (`site/`) uses the same system: the build puts `tokens.cs
 
 - **Top bar:** the logo and wordmark, text links with state layers (the current section in secondary container), Material's search bar on the high container, and the theme toggle.
 - **Landing page:** a hero with the orbiting mark, the download for the visitor's system and the install command in an outlined field; the real screenshot in a 16px frame with the level 3 shadow; a bento grid of feature cards (28px corners on the low container) whose mockups replay what the app and the command line really show, each looping while on screen and still under reduced motion; measured facts; a closing download on the primary container.
-- **Docs pages:** a sidebar whose current page is a secondary-container pill, prose capped at 46rem, code blocks and tables on the low container with 12px corners, an on-this-page list with a primary marker, and previous and next as outlined cards.
+- **Docs pages:** the guide on an outlined card with 16px corners and the level 1 shadow, over a tinted page (light: the low container under the lowest; dark: the lowest container under the surface), with the sidebar and the on-this-page list on the tint beside it. The sidebar's current page is a secondary-container pill; the prose is capped at 46rem in the middle of the card, with a small outlined Copy page button under the lead; code blocks and tables sit on the low container with 12px corners; the on-this-page list has a primary marker; previous and next are outlined cards.
 - **Search:** a dialog on the high container with 28px corners over a 32% scrim; the selected result is a secondary-container pill.
 
 ## Do's and Don'ts

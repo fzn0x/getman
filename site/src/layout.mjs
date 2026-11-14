@@ -227,6 +227,12 @@ export function page(p) {
       })),
     },
   ]);
+  // Copy page sits under the title and the paragraph that leads the guide.
+  const actions = `<p class="doc-actions"><button class="btn small" type="button" data-copy-page="${p.markdown}">${icon("copy", 16)}<span>Copy page</span></button></p>`;
+  const body = p.body.replace(
+    /^(\s*<h1>[\s\S]*?<\/h1>\s*(?:<p>[\s\S]*?<\/p>)?)/,
+    (lead) => `${lead}\n${actions}`,
+  );
   return `${head({ ...p, extra: data })}
 <body class="doc-page">
 ${bar({ root: p.root, current: p.title === "Why Getman" ? "why" : "docs" })}
@@ -240,7 +246,7 @@ ${bar({ root: p.root, current: p.title === "Why Getman" ? "why" : "docs" })}
   </nav>
   <main id="content" class="doc">
     <article class="prose">
-${p.body}
+${body}
     </article>
     <nav class="pager" aria-label="Previous and next">${pager}</nav>
     <p class="edit"><a href="${p.edit}" rel="noopener">Edit this page on GitHub</a></p>
