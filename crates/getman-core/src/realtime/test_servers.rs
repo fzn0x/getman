@@ -1,10 +1,14 @@
 //! The local WebSocket server the realtime tests connect to.
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use futures_util::{SinkExt as _, StreamExt as _};
 use serde_json::{Value, json};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpListener, TcpStream};
+use tokio_rustls::TlsAcceptor;
+use tokio_rustls::server::TlsStream;
 use tokio_tungstenite::accept_hdr_async;
 use tokio_tungstenite::tungstenite::Message as Frame;
 use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
@@ -27,6 +31,33 @@ where
     addr
 }
 
+/// Like [`listen`], over TLS with the [`test_server::pki`] server
+/// certificate, refusing clients without a certificate from its CA when
+/// `require_client_cert` is set. Failed handshakes are dropped.
+///
+/// [`test_server::pki`]: crate::test_server::pki
+pub(super) async fn listen_tls<F, Fut>(require_client_cert: bool, session: F) -> SocketAddr
+where
+    F: Fn(TlsStream<TcpStream>) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = ()> + Send + 'static,
+{
+    use crate::test_server::{pki, server_tls};
+    let mut config = server_tls(pki(), require_client_cert);
+    config.alpn_protocols = vec![b"http/1.1".to_vec()];
+    let acceptor = TlsAcceptor::from(Arc::new(config));
+    let session = Arc::new(session);
+    listen(move |stream| {
+        let acceptor = acceptor.clone();
+        let session = Arc::clone(&session);
+        async move {
+            if let Ok(stream) = acceptor.accept(stream).await {
+                session(stream).await;
+            }
+        }
+    })
+    .await
+}
+
 /// A WebSocket server. It first sends what the handshake carried, as JSON,
 /// then echoes every message, except these texts: `close` closes with
 /// 4001 "bye", `ping` sends a ping (the pong is reported back), `flood`
@@ -37,7 +68,12 @@ pub(super) async fn websocket() -> SocketAddr {
     listen(echo).await
 }
 
-async fn echo(stream: TcpStream) {
+/// The [`websocket`] server over TLS; see [`listen_tls`].
+pub(super) async fn websocket_tls(require_client_cert: bool) -> SocketAddr {
+    listen_tls(require_client_cert, echo).await
+}
+
+async fn echo<S: AsyncRead + AsyncWrite + Unpin>(stream: S) {
     let mut seen = Value::Null;
     #[allow(clippy::result_large_err)]
     let callback = |request: &Request, mut response: Response| {

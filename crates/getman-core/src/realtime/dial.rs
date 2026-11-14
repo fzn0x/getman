@@ -1,6 +1,6 @@
 //! Reaching the server of a WebSocket or Socket.IO connection: straight
 //! to it, or through the proxy the request's settings call for, with TLS
-//! on top for `wss` and `https`.
+//! on top for `wss` and `https`, set up by the request's TLS settings.
 //!
 //! HTTP requests go through reqwest, which handles proxies. These
 //! connections are opened here, with the rules the [`tunnel`] module
@@ -37,7 +37,9 @@ pub(super) async fn connect(url: &Url, transport: &Transport) -> Result<Box<dyn 
     let stream = tunnel::open(
         destination,
         proxy.as_ref(),
-        || tls::config(transport.verify_tls),
+        // TLS to the proxy itself; the client certificate is for the
+        // server behind it.
+        || tls::config(transport, false),
         None,
     )
     .await
@@ -45,7 +47,7 @@ pub(super) async fn connect(url: &Url, transport: &Transport) -> Result<Box<dyn 
     if !secure {
         return Ok(stream);
     }
-    tunnel::secure(stream, host, tls::config(transport.verify_tls)?, None)
+    tunnel::secure(stream, host, tls::config(transport, true)?, None)
         .await
         .map_err(failed)
 }

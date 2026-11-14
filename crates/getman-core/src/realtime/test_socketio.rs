@@ -18,7 +18,7 @@ use std::time::Duration;
 use base64::Engine as _;
 use futures_util::{SinkExt as _, StreamExt as _};
 use serde_json::{Value, json};
-use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+use tokio::io::{AsyncRead, AsyncReadExt as _, AsyncWrite, AsyncWriteExt as _};
 use tokio::net::TcpStream;
 use tokio::sync::{Notify, mpsc};
 use tokio_tungstenite::accept_hdr_async;
@@ -26,7 +26,7 @@ use tokio_tungstenite::tungstenite::Message as Frame;
 use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
 use tokio_tungstenite::tungstenite::http::StatusCode;
 
-use super::test_servers::listen;
+use super::test_servers::{listen, listen_tls};
 
 /// Which ways to the server are open.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -117,6 +117,23 @@ pub(super) async fn server(transports: Transports) -> SocketIoServer {
         next: AtomicU32::new(1),
     });
     let addr = listen(move |stream| connection(stream, Arc::clone(&hub))).await;
+    SocketIoServer { addr, seen }
+}
+
+/// A WebSocket-only server over TLS, with the test certificates of
+/// [`listen_tls`].
+pub(super) async fn server_tls(require_client_cert: bool) -> SocketIoServer {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let hub = Arc::new(Hub {
+        transports: Transports::Websocket,
+        seen: Arc::clone(&seen),
+        sessions: Mutex::new(HashMap::new()),
+        next: AtomicU32::new(1),
+    });
+    let addr = listen_tls(require_client_cert, move |stream| {
+        websocket_session(stream, Arc::clone(&hub))
+    })
+    .await;
     SocketIoServer { addr, seen }
 }
 
@@ -293,7 +310,7 @@ async fn http_session(mut stream: TcpStream, hub: Arc<Hub>) {
 
 // ---- WebSocket ---------------------------------------------------------------------
 
-async fn websocket_session(stream: TcpStream, hub: Arc<Hub>) {
+async fn websocket_session<S: AsyncRead + AsyncWrite + Unpin>(stream: S, hub: Arc<Hub>) {
     let mut sid = None;
     let seen = Arc::clone(&hub.seen);
     let transports = hub.transports;

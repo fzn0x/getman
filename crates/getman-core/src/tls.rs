@@ -234,11 +234,11 @@ pub(crate) fn version_name(version: reqwest::tls::Version) -> Option<&'static st
 }
 
 /// The rustls configuration for connections Getman opens itself rather
-/// than through reqwest (HTTP/3 over QUIC), set up the way reqwest sets
-/// up its own: the ring provider, the operating system's verifier plus the
-/// extra authorities in `ca_certs` (PEM text), no checking at all when
-/// `verify` is false, and `identity` for servers that ask for a client
-/// certificate. `alpn` lists the protocols to offer.
+/// than through reqwest (HTTP/3 over QUIC, WebSocket and Socket.IO), set
+/// up the way reqwest sets up its own: the ring provider, the operating
+/// system's verifier plus the extra authorities in `ca_certs` (PEM text),
+/// no checking at all when `verify` is false, and `identity` for servers
+/// that ask for a client certificate. `alpn` lists the protocols to offer.
 pub(crate) fn client_config(
     verify: bool,
     ca_certs: &[Vec<u8>],

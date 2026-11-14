@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 
 use super::test_socketio::{self, Transports};
 use super::*;
-use crate::model::{KeyValue, Proxy, Scripts, Settings};
+use crate::model::{ClientCert, KeyValue, Proxy, Scripts, Settings};
 use crate::test_server;
 use crate::workspace::Workspace;
 
@@ -1002,6 +1002,119 @@ async fn websocket_sends_and_stores_cookies_unless_told_not_to() {
     executor.http.set_cookie(&theme_cookie()).unwrap();
     let mut session = open(&executor, &request, Options::default());
     assert_eq!(greeting(&mut session).await["cookie"], "");
+}
+
+/// Writes the test CA and client certificate into the workspace at `dir`.
+fn write_certificates(dir: &std::path::Path) {
+    let pki = test_server::pki();
+    std::fs::create_dir_all(dir.join("certs")).unwrap();
+    std::fs::write(dir.join("certs/ca.pem"), &pki.ca_pem).unwrap();
+    std::fs::write(dir.join("certs/me.pem"), &pki.client_cert_pem).unwrap();
+    std::fs::write(dir.join("certs/me.key"), &pki.client_key_pem).unwrap();
+    std::fs::write(dir.join("certs/me.p12"), &pki.client_p12).unwrap();
+}
+
+fn pem_client_cert() -> ClientCert {
+    ClientCert {
+        cert: "certs/me.pem".into(),
+        key: "certs/me.key".into(),
+        ..ClientCert::default()
+    }
+}
+
+/// The error a connection ended with.
+async fn failure(session: &mut Session) -> String {
+    let events = until(session, is_closed).await;
+    events
+        .iter()
+        .find_map(|e| match &e.kind {
+            EventKind::Error { message } => Some(message.clone()),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("no error in {events:#?}"))
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn websocket_trusts_the_certificate_authorities_in_the_settings() {
+    let addr = test_servers::websocket_tls(false).await;
+    let (dir, executor) = setup();
+    write_certificates(dir.path());
+    let mut request = Request {
+        kind: RequestKind::Websocket,
+        url: format!("wss://{addr}/chat"),
+        ..Request::default()
+    };
+
+    // The system does not know the test CA.
+    let error = failure(&mut open(&executor, &request, Options::default())).await;
+    assert!(error.contains("certificate"), "{error}");
+
+    request.settings.ca_certs = Some(vec!["certs/ca.pem".into()]);
+    let mut session = open(&executor, &request, Options::default());
+    assert_eq!(greeting(&mut session).await["path"], "/chat");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn websocket_presents_the_client_certificate_in_the_settings() {
+    let addr = test_servers::websocket_tls(true).await;
+    let (dir, executor) = setup();
+    write_certificates(dir.path());
+    let mut request = Request {
+        kind: RequestKind::Websocket,
+        url: format!("wss://{addr}/chat"),
+        settings: Settings {
+            ca_certs: Some(vec!["certs/ca.pem".into()]),
+            ..Settings::default()
+        },
+        ..Request::default()
+    };
+
+    // Trusting the CA is not enough: the server asks for a certificate.
+    // How the refusal shows depends on the operating system.
+    failure(&mut open(&executor, &request, Options::default())).await;
+
+    for cert in [
+        pem_client_cert(),
+        ClientCert {
+            pkcs12: "certs/me.p12".into(),
+            passphrase: test_server::P12_PASSPHRASE.into(),
+            ..ClientCert::default()
+        },
+    ] {
+        request.settings.client_cert = Some(cert);
+        let mut session = open(&executor, &request, Options::default());
+        assert_eq!(greeting(&mut session).await["path"], "/chat");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn socket_io_over_wss_uses_the_certificates_in_the_settings() {
+    let server = test_socketio::server_tls(true).await;
+    let (dir, executor) = setup();
+    write_certificates(dir.path());
+    let mut request = Request {
+        kind: RequestKind::Socketio,
+        url: format!("https://{}", server.addr),
+        socketio: SocketIoSettings {
+            namespace: "/chat".into(),
+            auth: r#"{"token": "secret"}"#.into(),
+            transport: SocketIoTransport::Websocket,
+            ..SocketIoSettings::default()
+        },
+        ..Request::default()
+    };
+    let error = failure(&mut open(&executor, &request, Options::default())).await;
+    assert!(error.contains("certificate"), "{error}");
+
+    request.settings.ca_certs = Some(vec!["certs/ca.pem".into()]);
+    request.settings.client_cert = Some(pem_client_cert());
+    let mut session = open(&executor, &request, Options::default());
+    let events = until(&mut session, |e| received(e).is_some()).await;
+    assert_eq!(opened_with(&events), 101);
+    assert_eq!(
+        notes(&events),
+        ["Joined namespace /chat as socket socket-1"]
+    );
 }
 
 fn passed(results: &[crate::checks::TestResult]) -> bool {
