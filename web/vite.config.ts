@@ -23,7 +23,8 @@ export default defineConfig({
   },
   build: {
     target: "es2022",
-    outDir: "dist",
+    // compress.mjs packs this into dist/, which getman builds in.
+    outDir: "build",
     assetsInlineLimit: 0,
     chunkSizeWarningLimit: 1200,
   },

@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node compress.mjs",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings && prettier --check .",
     "format": "prettier --write .",

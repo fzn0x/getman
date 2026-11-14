@@ -3,6 +3,7 @@
 
 # Web UI
 /web/node_modules/
+/web/build/
 /web/dist/
 
 # Documentation site
