@@ -269,7 +269,7 @@ function downloadsSection({ repo, released }) {
 
   return `<section class="downloads" id="downloads" aria-labelledby="downloads-title">
   <h2 id="downloads-title">Downloads for every system</h2>
-  <p class="section-lead">The desktop app runs on Windows, macOS and Linux. The Android and iOS apps bring your workspaces to a phone. Every file is on the <a href="${repo}/releases">releases page</a> too.</p>
+  <p class="section-lead">The desktop app runs on Windows, macOS and Linux. The Android and iOS apps send and test requests from a phone. Every file is on the <a href="${repo}/releases">releases page</a> too.</p>
   <div class="segmented dl-tabs" role="tablist" aria-label="System" data-dl-tabs>${platforms
     .map(
       (p) =>

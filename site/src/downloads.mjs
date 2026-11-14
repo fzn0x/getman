@@ -82,10 +82,9 @@ export const platforms = [
   {
     id: "android",
     name: "Android",
-    requires: "Android phones and tablets, one APK for every device",
+    requires: "Android 8.0 or newer, one APK for every device",
     main: [{ label: "Download for Android", ...soon("Getman-android-universal.apk") }],
-    note: "The APK is signed and installs directly, without Google Play.",
-    // PROVISIONAL steps, to confirm.
+    note: "The APK is signed and installs directly, without Google Play. The app keeps one workspace in its own storage.",
     steps: [
       "Download the APK on the phone.",
       "Open it, and allow installs from this source when Android asks.",
@@ -97,13 +96,13 @@ export const platforms = [
   {
     id: "ios",
     name: "iOS",
-    requires: "iPhone and iPad, installed by sideloading",
+    requires: "iOS 15 or newer, installed by sideloading",
     main: [{ label: "Download for iOS", ...soon("Getman-ios.ipa") }],
     note: "The IPA is unsigned and there is no App Store version. A free Apple ID must refresh the app every 7 days.",
-    // PROVISIONAL steps, to confirm.
     steps: [
       "Download the IPA.",
       "Open it in AltStore, SideStore or Sideloadly, which sign it with your Apple ID.",
+      "On iOS 16 or newer, turn on Developer Mode when iOS asks.",
       "Refresh the app from the same tool every 7 days.",
     ],
     files: [],

@@ -185,18 +185,22 @@ The cask `getman-desktop` lives in the same tap as the formula
 
 ## Mobile apps
 
-The Android and iOS apps start with the release after 0.3.4. They open
-the same workspaces as the desktop app.
+The Android and iOS apps start with the release after 0.3.4. Like the
+desktop app, each runs Getman's engine inside the app and shows the same
+UI: requests, checks, scripts, environments and runs all work on the
+phone.
 
-<!-- PLACEHOLDER: the file names, steps and paths of the mobile apps are
-provisional. The details of what runs on a phone and where workspaces
-live are still to come. -->
+A phone has no folders to open, so each app keeps one workspace, **My
+workspace**, in its own storage. It starts with the example requests.
+Copy your own request files into it to use them on the phone. The start
+page shows where it is.
 
 ### Android
 
 Download `Getman-android-universal.apk` from the
-[releases page](https://github.com/fzn0x/getman/releases) on the phone,
-or on a computer, and open it. It is one signed APK for every device.
+[releases page](https://github.com/fzn0x/getman/releases), on the phone
+or on a computer. It is one signed APK for ARM64, ARMv7 and x86_64
+devices, and needs Android 8.0 or newer.
 
 1. Open the APK. When Android asks, allow installs from the app you
    opened it with, such as your browser or file manager.
@@ -208,37 +212,44 @@ From a computer, with USB debugging on:
 adb install Getman-android-universal.apk
 ```
 
-**Updating.** TODO: how the app updates. Until then, install the newer
-APK over the old one.
+**Updating.** The app does not update itself. Install the newer APK over
+the old one: every release is signed with the same key, so Android keeps
+the app's workspace.
 
 **Uninstalling.** Touch and hold the app, then choose **Uninstall**, or
-use **Settings › Apps**.
+use **Settings › Apps**. This deletes the workspace too, so copy out what
+you want to keep first.
 
-**Where workspaces live.** TODO: the folder or storage the Android app
-keeps its workspaces in.
+**Where the workspace lives.** In the app's folder on the shared storage:
+`Android/data/io.github.fzn0x.getman/files/Documents/My workspace`. A
+computer connected over USB sees it under the phone's internal storage.
 
 ### iOS
 
 Download `Getman-ios.ipa` from the
-[releases page](https://github.com/fzn0x/getman/releases). It is not
-signed, and there is no App Store version. You install it by
-sideloading: AltStore, SideStore or Sideloadly sign it with your Apple ID
-and put it on the device.
+[releases page](https://github.com/fzn0x/getman/releases). It runs on
+iPhone and iPad with iOS 15 or newer. It is not signed, and there is no
+App Store version: you install it by sideloading. AltStore, SideStore or
+Sideloadly sign it with your Apple ID and put it on the device.
 
 1. Install AltStore, SideStore or Sideloadly by its own instructions.
 2. Open `Getman-ios.ipa` with it and sign in with your Apple ID.
-3. On the device, trust the developer profile if iOS asks.
+3. On iOS 16 or newer, turn on **Developer Mode** when iOS asks, in
+   **Settings › Privacy & Security**.
 
 A free Apple ID signs an app for 7 days. Refresh the app from the same
 tool before the week ends, or it stops opening until you do.
 
-**Updating.** Sideload the newer `Getman-ios.ipa` over the old app. TODO:
-confirm that it keeps the data.
+**Updating.** The app does not update itself. Sideload the newer
+`Getman-ios.ipa` with the same tool and Apple ID: it replaces the app and
+keeps its workspace.
 
 **Uninstalling.** Touch and hold the app, then choose **Remove App**.
+This deletes the workspace too.
 
-**Where workspaces live.** TODO: the folder the iOS app keeps its
-workspaces in, and how to reach it from the Files app.
+**Where the workspace lives.** In the app's documents. The Files app
+shows them under **On My iPhone › Getman** (or On My iPad), where you can
+copy request files in and out.
 
 ## Command line
 
@@ -471,7 +482,7 @@ nothing of them to install by hand.
 | AUR | `yay -Syu getman-bin`, from the release after 0.3.4 |
 | Nix | Run `nix run github:fzn0x/getman` again to run the flake's current version |
 | Homebrew cask | `brew upgrade --cask getman-desktop`, from the release after 0.3.4 |
-| Android | Install the newer APK over the old one. TODO: in-app updates |
+| Android | Install the newer APK over the old one |
 | iOS | Sideload the newer IPA, and refresh the app every 7 days with a free Apple ID |
 | Portable zip | Download the new zip and unpack it in place of the old one |
 | Install script | Run the script again |
