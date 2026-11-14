@@ -1400,6 +1400,34 @@ html:not(.js) [data-copy-command] {
 
 /* ---- Documentation ---------------------------------------------------------------- */
 
+/* A guide reads on a card that sits on a tinted page, with the navigation
+   and the page outline on the tint beside it. In the dark the page is the
+   darkest surface and the card one step up, so code blocks still stand out. */
+:root {
+  --page: var(--surface-container-low);
+  --card: var(--surface-container-lowest);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: var(--surface-container-lowest);
+    --card: var(--surface);
+  }
+}
+
+:root[data-theme="dark"] {
+  --page: var(--surface-container-lowest);
+  --card: var(--surface);
+}
+
+.doc-page {
+  background: var(--page);
+}
+
+.doc-page .bar {
+  background: color-mix(in srgb, var(--page) 88%, transparent);
+}
+
 .docs {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr) 220px;
@@ -1412,7 +1440,7 @@ html:not(.js) [data-copy-command] {
   top: var(--bar);
   max-height: calc(100vh - var(--bar));
   overflow-y: auto;
-  padding: var(--s5) var(--s3) var(--s6) var(--gutter);
+  padding: var(--s5) var(--s5) var(--s6) var(--gutter);
 }
 
 .sidebar-toggle {
@@ -1462,7 +1490,18 @@ html:not(.js) [data-copy-command] {
 
 .doc {
   min-width: 0;
-  padding: var(--s6) var(--s7) var(--s8);
+  margin: var(--s5) 0 var(--s7);
+  padding: var(--s7);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--elevation-1);
+}
+
+/* The guide keeps its reading width in the middle of the card. */
+.doc > * {
+  max-width: 46rem;
+  margin-inline: auto;
 }
 
 .toc {
@@ -1471,7 +1510,7 @@ html:not(.js) [data-copy-command] {
   align-self: start;
   max-height: calc(100vh - var(--bar));
   overflow-y: auto;
-  padding: var(--s6) var(--gutter) var(--s6) 0;
+  padding: var(--s5) var(--gutter) var(--s6) var(--s6);
 }
 
 .toc .nav-label {
@@ -1839,7 +1878,7 @@ h3:hover .anchor {
   }
 
   .doc {
-    padding-right: var(--gutter);
+    margin-right: var(--gutter);
   }
 }
 
@@ -1898,7 +1937,7 @@ h3:hover .anchor {
     max-height: none;
     padding: 0 var(--gutter);
     border-bottom: 1px solid var(--outline-variant);
-    background: var(--surface);
+    background: var(--page);
   }
 
   .js .sidebar-toggle {
@@ -1939,7 +1978,8 @@ h3:hover .anchor {
   }
 
   .doc {
-    padding: var(--s6) var(--gutter) var(--s8);
+    margin: var(--s3) var(--s3) var(--s6);
+    padding: var(--s6) var(--s5) var(--s7);
   }
 
   .anchor {
