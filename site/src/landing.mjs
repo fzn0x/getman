@@ -250,7 +250,7 @@ function downloadsSection({ repo, released }) {
       ? `<div class="dl-block"><p class="dl-label">Command line and package managers</p><div class="dl-commands">${p.commands
           .map((c) => {
             const ready = commandReady(c, released);
-            return `<div class="command dl-cmd${ready ? "" : " is-soon"}"><span class="command-label">${c.label}</span>${ready ? "" : '<span class="soon-tag">Next release</span>'}<code data-command>${breakable(c.text)}</code><button class="btn text" type="button" data-copy-command>${icon("copy")}<span>Copy</span></button></div>`;
+            return `<div class="command dl-cmd${ready ? "" : " is-soon"}"><span class="command-label">${c.label}</span>${ready ? "" : `<span class="soon-tag">${c.pending ?? "Next release"}</span>`}<code data-command>${breakable(c.text)}</code><button class="btn text" type="button" data-copy-command>${icon("copy")}<span>Copy</span></button></div>`;
           })
           .join("")}</div></div>`
       : "";
