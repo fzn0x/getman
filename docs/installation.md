@@ -277,8 +277,8 @@ the version:
 | Windows x64, and ARM64 through emulation | `getman-v0.3.4-x86_64-pc-windows-msvc.zip` |
 
 Each holds a folder of the same name with `getman` (`getman.exe` on
-Windows), `README.md`, `LICENSE-MIT`, `LICENSE-APACHE` and
-`THIRD_PARTY_NOTICES.md`. Put the program in a directory on your `PATH`.
+Windows), `README.md`, the licence files and `THIRD_PARTY_NOTICES.md`.
+Put the program in a directory on your `PATH`.
 On Linux and macOS:
 
 ```sh

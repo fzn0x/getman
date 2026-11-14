@@ -251,7 +251,7 @@ node .github/scripts/check-npm-licenses.mjs
 `cargo deny check` reads `deny.toml`. It checks the Rust dependencies,
 with all features on, for known advisories and their licences, and
 allows crates from crates.io only. A new dependency
-must have a licence compatible with MIT OR Apache-2.0. If an advisory
+must have a permissive licence, one of those `deny.toml` allows. If an advisory
 does not apply to Getman, allow it in `deny.toml` and say why, as the
 existing entries do.
 
