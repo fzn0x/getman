@@ -528,7 +528,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/* \
             --verify-tag --notes-file notes.md --title "$GITHUB_REF_NAME"
 
-  # Puts the release's Homebrew formula in the tap fzn0x/homebrew-tap and
+  # Puts the release's Homebrew formula and cask in the tap fzn0x/homebrew-tap and
   # its Scoop manifest in the bucket fzn0x/scoop-bucket. The secret
   # PACKAGES_TOKEN is a fine-grained personal access token with read and
   # write access to the contents of those two repositories. winget takes a
@@ -544,7 +544,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir manifests \
-            --pattern getman.rb --pattern getman.json
+            --pattern getman.rb --pattern getman-desktop.rb --pattern getman.json
       # gh clones with the token; this lets git push with it too.
       - name: Let git use the token
         env:
@@ -556,9 +556,12 @@ jobs:
         run: |
           gh repo clone fzn0x/homebrew-tap tap
           mkdir -p tap/Formula && cp manifests/getman.rb tap/Formula/getman.rb
-          git -C tap add Formula/getman.rb
+          # The cask of the desktop app sits beside the formula of the
+          # command line; the two do not touch each other's files.
+          mkdir -p tap/Casks && cp manifests/getman-desktop.rb tap/Casks/getman-desktop.rb
+          git -C tap add Formula/getman.rb Casks/getman-desktop.rb
           if git -C tap diff --cached --quiet; then
-            echo "The tap already has this formula."
+            echo "The tap already has this formula and cask."
           else
             git -C tap -c user.name=fzn0x -c user.email=fncolon@pm.me \
               commit -m "getman $GITHUB_REF_NAME"
