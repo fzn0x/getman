@@ -1,7 +1,7 @@
 # Homebrew formula for the getman command, for the tap fzn0x/homebrew-tap
 # (Formula/getman.rb). Written for each release by packaging/render.mjs.
 class Getman < Formula
-  desc "Local-first, account-free API client: a Postman alternative"
+  desc "Open-source Postman alternative written in Rust"
   homepage "https://fzn0x.github.io/getman/"
   version "{{version}}"
   license any_of: ["MIT", "GPL-3.0-or-later"]

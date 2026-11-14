@@ -10,8 +10,8 @@ PackageUrl: https://fzn0x.github.io/getman/
 License: MIT OR GPL-3.0-or-later
 LicenseUrl: https://github.com/{{repo}}/blob/{{tag}}/README.md#license
 Copyright: Copyright (c) fzn0x
-ShortDescription: A local-first, account-free API client
-Description: Send requests, test APIs and run collections from plain YAML files in your repository. No account, no cloud.
+ShortDescription: An open-source Postman alternative, written in Rust
+Description: An open-source Postman alternative, written in Rust. Requests are YAML files in your repository, sent from a desktop app, a browser, a terminal or CI.
 Moniker: getman
 Tags:
   - api

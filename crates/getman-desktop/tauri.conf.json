@@ -15,8 +15,8 @@
     "homepage": "https://fzn0x.github.io/getman/",
     "license": "MIT OR GPL-3.0-or-later",
     "category": "DeveloperTool",
-    "shortDescription": "A local-first API client",
-    "longDescription": "Send requests, test APIs and run collections from plain YAML files in your repository. No account, no cloud.",
+    "shortDescription": "Open-source Postman alternative",
+    "longDescription": "An open-source Postman alternative, written in Rust. Requests are YAML files in your repository, sent from a desktop app, a browser, a terminal or CI.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
