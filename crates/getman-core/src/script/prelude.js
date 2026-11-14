@@ -1322,8 +1322,9 @@
       setNextRequest(name) {
         out.next_request = name === null || name === undefined ? null : String(name);
       },
+      // Only before the request is sent; afterwards there is nothing to skip.
       skipRequest() {
-        out.skip_request = true;
+        if (input.event === "pre_request") out.skip_request = true;
       },
       // The request in hand finishes; the rest of the run does not start.
       stopExecution() {

@@ -1419,6 +1419,25 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn skipping_after_the_response_leaves_the_request_sent() {
+        let server = test_server::spawn().await;
+        let (_dir, executor) = setup();
+        let request = Request {
+            url: server.url("/echo"),
+            scripts: Scripts {
+                pre_request: String::new(),
+                post_response: "gm.execution.skipRequest();".into(),
+            },
+            ..Request::default()
+        };
+        let execution = executor
+            .execute(None, &request, &mut Context::default())
+            .await;
+        assert!(!execution.skipped);
+        assert_eq!(execution.response.unwrap().status, 200);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn scripts_edit_the_fields_of_form_bodies_before_sending() {
         let server = test_server::spawn().await;
         let (_dir, executor) = setup();

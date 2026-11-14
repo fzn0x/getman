@@ -426,6 +426,10 @@ fn flow_control_is_reported() {
     assert_eq!(output.next_request, None);
     let output = post("gm.test.skip('later', () => {});");
     assert!(output.tests[0].skipped);
+    // The request was sent before post-response scripts run.
+    let output = post("gm.execution.skipRequest(); bru.runner.skipRequest();");
+    assert!(output.error.is_none(), "{:?}", output.error);
+    assert!(!output.skip_request);
 }
 
 #[test]
