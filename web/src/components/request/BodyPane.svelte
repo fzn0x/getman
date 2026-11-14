@@ -255,6 +255,7 @@
 <style>
   .body-pane {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
     gap: var(--s3);
     height: 100%;
@@ -266,7 +267,9 @@
     flex-wrap: wrap;
     gap: 0;
     border: 1px solid var(--outline);
-    border-radius: var(--r-full);
+    /* Half the 28px row: a pill on one line, rounded corners when the
+       types wrap onto two. */
+    border-radius: 14px;
     overflow: hidden;
     width: max-content;
     max-width: 100%;
@@ -321,8 +324,9 @@
 
   .toolbar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: var(--s2);
+    gap: var(--s1) var(--s2);
   }
 
   .toolbar > .muted {
