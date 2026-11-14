@@ -680,17 +680,34 @@
     grid-template-columns: auto minmax(0, 1fr) auto auto;
     align-items: stretch;
     margin: var(--s2) var(--s3) var(--s2) var(--s4);
-    border: 2px solid var(--ink);
-    background: var(--field);
     height: 40px;
+  }
+
+  /* Kind, address and TLS share one outlined field, as in the HTTP
+     request line; Invoke sits beside it. */
+  .kind,
+  .address,
+  .tls {
+    border: 1px solid var(--outline);
+    background: var(--field);
+    transition: border-color var(--dur-short) var(--ease);
+  }
+
+  .line:has(.address:hover) :is(.kind, .address, .tls) {
+    border-color: var(--on-surface);
+  }
+
+  .line:has(.address:focus-within) :is(.kind, .address, .tls) {
+    border-color: var(--primary);
   }
 
   .kind {
     display: flex;
     align-items: center;
     padding: 0 var(--s3);
-    border-right: 1px solid var(--rule-2);
-    color: var(--ink-2);
+    border-right-color: var(--outline-variant) !important;
+    border-radius: var(--r-sm) 0 0 var(--r-sm);
+    color: var(--on-surface-variant);
   }
 
   .address {
@@ -698,6 +715,8 @@
     align-items: center;
     min-width: 0;
     padding: 0 var(--s3);
+    border-left: 0;
+    border-right: 0;
     font-size: 14px;
   }
 
@@ -714,18 +733,17 @@
     align-items: center;
     gap: 6px;
     padding: 0 var(--s3);
-    border-left: 1px solid var(--rule-2);
+    border-left-color: var(--outline-variant) !important;
+    border-radius: 0 var(--r-sm) var(--r-sm) 0;
     cursor: pointer;
   }
 
   .invoke,
   .stop {
-    --corner: var(--ink);
     height: auto;
     min-width: 104px;
-    border: 0;
-    border-left: 2px solid var(--ink);
-    font-size: var(--b1);
+    margin-left: var(--s2);
+    padding: 0 var(--s5) 0 var(--s4);
   }
 
   .schema {
