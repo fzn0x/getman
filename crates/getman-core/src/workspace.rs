@@ -1228,6 +1228,40 @@ mod tests {
     }
 
     #[test]
+    fn numbers_written_by_hand_load_and_save_as_text() {
+        let (dir, ws) = workspace();
+        fs::write(
+            dir.path().join("signed.yaml"),
+            "method: POST\nurl: https://api.example.com\nheaders:\n  - name: X-Version\n    value: 0x10\nbody:\n  type: text\n  content: 42.0\nauth:\n  type: oauth1\n  consumer_key: key\n  version: 1.0\n",
+        )
+        .unwrap();
+        let tree = ws.tree().unwrap();
+        let Node::Request { error, method, .. } = &tree[0] else {
+            panic!("expected a request, got {tree:?}")
+        };
+        assert_eq!(*error, None);
+        assert_eq!(method, "POST");
+        let request = ws.read_request("signed.yaml").unwrap();
+        assert_eq!(request.headers[0].value, "0x10");
+        let crate::model::Body::Text { content, .. } = &request.body else {
+            panic!("expected text, got {:?}", request.body)
+        };
+        assert_eq!(content, "42.0");
+        let crate::model::Auth::Oauth1(oauth) = &request.auth else {
+            panic!("expected oauth1, got {:?}", request.auth)
+        };
+        assert_eq!(oauth.version, "1.0");
+
+        ws.write_request("signed.yaml", &request).unwrap();
+        let saved = fs::read_to_string(dir.path().join("signed.yaml")).unwrap();
+        assert!(saved.contains("version: '1.0'"), "{saved}");
+        assert_eq!(ws.read_request("signed.yaml").unwrap(), request);
+        ws.write_request("signed.yaml", &request).unwrap();
+        let again = fs::read_to_string(dir.path().join("signed.yaml")).unwrap();
+        assert_eq!(again, saved);
+    }
+
+    #[test]
     fn paths_cannot_leave_the_workspace() {
         let (_dir, ws) = workspace();
         for bad in [
