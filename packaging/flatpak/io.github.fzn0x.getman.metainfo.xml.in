@@ -2,7 +2,7 @@
 <component type="desktop-application">
   <id>io.github.fzn0x.getman</id>
   <name>Getman</name>
-  <summary>A local-first, account-free API client</summary>
+  <summary>Open-source Postman alternative</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT OR GPL-3.0-or-later</project_license>
   <developer id="io.github.fzn0x">
@@ -11,7 +11,7 @@
   <url type="homepage">https://fzn0x.github.io/getman/</url>
   <url type="bugtracker">https://github.com/{{repo}}/issues</url>
   <description>
-    <p>Send requests, test APIs and run collections from plain YAML files in your repository. No account, no cloud.</p>
+    <p>An open-source Postman alternative, written in Rust. Requests are YAML files in your repository, sent from a desktop app, a browser, a terminal or CI.</p>
   </description>
   <launchable type="desktop-id">io.github.fzn0x.getman.desktop</launchable>
   <provides>

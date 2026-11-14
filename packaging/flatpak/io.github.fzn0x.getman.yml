@@ -63,7 +63,7 @@ modules:
           [Desktop Entry]
           Type=Application
           Name=Getman
-          Comment=A local-first API client
+          Comment=Open-source Postman alternative
           Categories=Development;
           Icon=io.github.fzn0x.getman
           Exec=getman desktop
