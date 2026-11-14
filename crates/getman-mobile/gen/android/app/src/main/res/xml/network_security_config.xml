@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Plain HTTP stays allowed, as it is for Android apps that target older
+     versions. Two things need it:
+     - The webview loads the UI from Getman's own server on 127.0.0.1.
+     - Android's certificate check, which Getman's HTTPS requests use,
+       fetches revocation lists over plain HTTP. They are signed, and many
+       authorities, Let's Encrypt and Google among them, publish only those.
+       Without plain HTTP every such certificate reads as revoked.
+     Getman's own requests are sent by its Rust code, which this file does
+     not govern. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
