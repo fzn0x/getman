@@ -32,6 +32,7 @@ pub mod tls;
 mod tunnel;
 pub mod vars;
 pub mod workspace;
+pub mod yaml;
 
 pub use error::{Error, Result};
 pub use model::{Auth, Body, Environment, Folder, KeyValue, Request, Settings, Vars};

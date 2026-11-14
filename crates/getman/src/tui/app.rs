@@ -1729,13 +1729,13 @@ pub(crate) fn apply(request: &mut Request, pane: RequestPane, text: &str) -> Res
                         }
                     }
                 }
-                _ => serde_yaml_ng::from_str(text)
+                _ => getman_core::yaml::from_str(text)
                     .map_err(|e| format!("the body is not valid: {e}"))?,
             };
         }
         RequestPane::Auth => {
-            request.auth =
-                serde_yaml_ng::from_str(text).map_err(|e| format!("the auth is not valid: {e}"))?;
+            request.auth = getman_core::yaml::from_str(text)
+                .map_err(|e| format!("the auth is not valid: {e}"))?;
         }
         RequestPane::Checks => request.checks = lines().map(|l| l.trim().to_owned()).collect(),
     }
@@ -1791,5 +1791,33 @@ mod tests {
         apply(&mut request, RequestPane::Params, "b=1\n# c=2\nd=3\n").unwrap();
         assert_eq!(request.url, "https://x.test/a?b=1&d=3");
         assert_eq!(request.disabled_params[0].name, "c");
+    }
+
+    #[test]
+    fn edited_auth_and_body_keep_numbers_as_written() {
+        let mut request = Request {
+            body: Body::Form { fields: Vec::new() },
+            ..Request::default()
+        };
+        apply(
+            &mut request,
+            RequestPane::Auth,
+            "type: oauth1\nconsumer_key: key\nversion: 1.0\n",
+        )
+        .unwrap();
+        let Auth::Oauth1(oauth) = &request.auth else {
+            panic!("expected oauth1, got {:?}", request.auth);
+        };
+        assert_eq!(oauth.version, "1.0");
+        apply(
+            &mut request,
+            RequestPane::Body,
+            "type: form\nfields:\n  - name: amount\n    value: 1.50\n",
+        )
+        .unwrap();
+        let Body::Form { fields } = &request.body else {
+            panic!("expected a form, got {:?}", request.body);
+        };
+        assert_eq!(fields[0].value, "1.50");
     }
 }

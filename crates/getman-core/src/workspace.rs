@@ -932,12 +932,12 @@ pub fn slugify(name: &str) -> String {
 pub(crate) fn read_yaml<T: DeserializeOwned>(path: &Path) -> Result<T> {
     let text = fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
     if text.trim().is_empty() {
-        return serde_yaml_ng::from_str("{}").map_err(|source| Error::Yaml {
+        return crate::yaml::from_str("{}").map_err(|source| Error::Yaml {
             path: path.to_owned(),
             source,
         });
     }
-    serde_yaml_ng::from_str(&text).map_err(|source| Error::Yaml {
+    crate::yaml::from_str(&text).map_err(|source| Error::Yaml {
         path: path.to_owned(),
         source,
     })
@@ -961,16 +961,7 @@ pub(crate) fn write_yaml<T: Serialize + ?Sized>(path: &Path, value: &T) -> Resul
 /// `method`. Other YAML files are not requests and give `None`.
 fn peek_request(path: &Path) -> Result<Option<Request>, String> {
     let text = fs::read_to_string(path).map_err(|e| e.to_string())?;
-    let value: serde_yaml_ng::Value = serde_yaml_ng::from_str(&text).map_err(|e| e.to_string())?;
-    let is_request = value
-        .as_mapping()
-        .is_some_and(|map| map.contains_key("url") || map.contains_key("method"));
-    if !is_request {
-        return Ok(None);
-    }
-    serde_yaml_ng::from_value(value)
-        .map(Some)
-        .map_err(|e| e.to_string())
+    crate::yaml::from_str_with_key(&text, &["url", "method"]).map_err(|e| e.to_string())
 }
 
 fn request_stem(file_name: &str) -> Option<&str> {
@@ -1234,6 +1225,40 @@ mod tests {
             ws.write_request("nope.yaml", &request),
             Err(Error::NotFound(_))
         ));
+    }
+
+    #[test]
+    fn numbers_written_by_hand_load_and_save_as_text() {
+        let (dir, ws) = workspace();
+        fs::write(
+            dir.path().join("signed.yaml"),
+            "method: POST\nurl: https://api.example.com\nheaders:\n  - name: X-Version\n    value: 0x10\nbody:\n  type: text\n  content: 42.0\nauth:\n  type: oauth1\n  consumer_key: key\n  version: 1.0\n",
+        )
+        .unwrap();
+        let tree = ws.tree().unwrap();
+        let Node::Request { error, method, .. } = &tree[0] else {
+            panic!("expected a request, got {tree:?}")
+        };
+        assert_eq!(*error, None);
+        assert_eq!(method, "POST");
+        let request = ws.read_request("signed.yaml").unwrap();
+        assert_eq!(request.headers[0].value, "0x10");
+        let crate::model::Body::Text { content, .. } = &request.body else {
+            panic!("expected text, got {:?}", request.body)
+        };
+        assert_eq!(content, "42.0");
+        let crate::model::Auth::Oauth1(oauth) = &request.auth else {
+            panic!("expected oauth1, got {:?}", request.auth)
+        };
+        assert_eq!(oauth.version, "1.0");
+
+        ws.write_request("signed.yaml", &request).unwrap();
+        let saved = fs::read_to_string(dir.path().join("signed.yaml")).unwrap();
+        assert!(saved.contains("version: '1.0'"), "{saved}");
+        assert_eq!(ws.read_request("signed.yaml").unwrap(), request);
+        ws.write_request("signed.yaml", &request).unwrap();
+        let again = fs::read_to_string(dir.path().join("signed.yaml")).unwrap();
+        assert_eq!(again, saved);
     }
 
     #[test]

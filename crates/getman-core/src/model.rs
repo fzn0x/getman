@@ -5,6 +5,8 @@
 //! so the files stay short and diffs stay small.
 
 use indexmap::IndexMap;
+use serde::de::value::MapAccessDeserializer;
+use serde::de::{MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::lenient;
@@ -247,7 +249,11 @@ pub struct KeyValue {
     #[serde(default, deserialize_with = "lenient::string")]
     pub value: String,
     /// Whether the pair is sent.
-    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    #[serde(
+        default = "yes",
+        skip_serializing_if = "is_true",
+        deserialize_with = "lenient::boolean"
+    )]
     pub enabled: bool,
     /// Optional note for people reading the request.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -286,13 +292,22 @@ pub struct FormField {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content_type: Option<String>,
     /// Whether the field is sent.
-    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    #[serde(
+        default = "yes",
+        skip_serializing_if = "is_true",
+        deserialize_with = "lenient::boolean"
+    )]
     pub enabled: bool,
 }
 
 /// The body of a request.
+///
+/// Its scalars keep their text, as text fields elsewhere do. Serde holds
+/// every value of a map tagged with `type` before it knows the variant, so
+/// the fields here that are not text, such as a form field's `enabled`, also
+/// take the text of their value.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(remote = "Self", tag = "type", rename_all = "snake_case")]
 pub enum Body {
     /// No body.
     #[default]
@@ -361,9 +376,31 @@ impl Body {
     }
 }
 
+// `remote = "Self"` turns the derived code into the inherent functions
+// `Body::serialize` and `Body::deserialize`, which these impls wrap.
+impl Serialize for Body {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Body {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        lenient::tagged(deserializer)
+    }
+}
+
+impl<'de> lenient::Tagged<'de> for Body {
+    fn derived<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(deserializer)
+    }
+}
+
 /// How a request authenticates.
+///
+/// Read like [`Body`], so its scalars keep their text.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(remote = "Self", tag = "type", rename_all = "snake_case")]
 pub enum Auth {
     /// Use the enclosing folder's authentication.
     #[default]
@@ -431,6 +468,25 @@ impl Auth {
     /// Whether this is [`Auth::Inherit`].
     pub fn is_inherit(&self) -> bool {
         matches!(self, Self::Inherit)
+    }
+}
+
+// As for `Body`, the impls wrap the derived code.
+impl Serialize for Auth {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Auth {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        lenient::tagged(deserializer)
+    }
+}
+
+impl<'de> lenient::Tagged<'de> for Auth {
+    fn derived<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(deserializer)
     }
 }
 
@@ -594,10 +650,16 @@ pub struct AwsSigV4 {
     #[serde(rename = "in", skip_serializing_if = "is_header")]
     pub location: ApiKeyLocation,
     /// Seconds a presigned URL stays valid. Default 3600.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "lenient::whole_number"
+    )]
     pub expires_in: Option<u64>,
     /// Sign `UNSIGNED-PAYLOAD` instead of the body's hash, as S3 allows.
-    #[serde(skip_serializing_if = "is_false")]
+    #[serde(
+        skip_serializing_if = "is_false",
+        deserialize_with = "lenient::boolean"
+    )]
     pub unsigned_payload: bool,
 }
 
@@ -615,7 +677,10 @@ pub struct Jwt {
     )]
     pub secret: String,
     /// Whether `secret` is base64 text to decode first.
-    #[serde(skip_serializing_if = "is_false")]
+    #[serde(
+        skip_serializing_if = "is_false",
+        deserialize_with = "lenient::boolean"
+    )]
     pub secret_base64: bool,
     /// PEM private key for the RSA and ECDSA algorithms, usually a
     /// `{{variable}}`.
@@ -635,10 +700,16 @@ pub struct Jwt {
     #[serde(skip_serializing_if = "String::is_empty")]
     pub payload: String,
     /// Add an `iat` claim with the current time.
-    #[serde(skip_serializing_if = "is_false")]
+    #[serde(
+        skip_serializing_if = "is_false",
+        deserialize_with = "lenient::boolean"
+    )]
     pub issued_at: bool,
     /// Add an `exp` claim this many seconds from now.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "lenient::whole_number"
+    )]
     pub expires_in: Option<u64>,
     /// Where the token goes: the `Authorization` header or the query.
     #[serde(rename = "in", skip_serializing_if = "is_header")]
@@ -725,7 +796,10 @@ pub struct Asap {
     #[serde(skip_serializing_if = "String::is_empty")]
     pub claims: String,
     /// Seconds the token is valid. Default 3600.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "lenient::whole_number"
+    )]
     pub expires_in: Option<u64>,
 }
 
@@ -795,7 +869,10 @@ pub struct OAuth1 {
     )]
     pub nonce: String,
     /// Sign the body with `oauth_body_hash`, for bodies that are not forms.
-    #[serde(skip_serializing_if = "is_false")]
+    #[serde(
+        skip_serializing_if = "is_false",
+        deserialize_with = "lenient::boolean"
+    )]
     pub body_hash: bool,
     /// Where the parameters go.
     #[serde(rename = "in", skip_serializing_if = "OAuth1Location::is_default")]
@@ -890,7 +967,10 @@ pub struct Hawk {
     )]
     pub dlg: String,
     /// Sign the body too, with a payload `hash`.
-    #[serde(skip_serializing_if = "is_false")]
+    #[serde(
+        skip_serializing_if = "is_false",
+        deserialize_with = "lenient::boolean"
+    )]
     pub payload_hash: bool,
 }
 
@@ -937,7 +1017,10 @@ pub struct EdgeGrid {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub headers_to_sign: Vec<String>,
     /// Most body bytes a POST signature covers. Default 131072.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "lenient::whole_number"
+    )]
     pub max_body: Option<u64>,
 }
 
@@ -1127,31 +1210,44 @@ impl<'de> Deserialize<'de> for Proxy {
             bypass: String,
         }
 
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum Repr {
+        // Read field by field rather than as an untagged enum, which would
+        // hold the map's scalars as numbers before `Full` reads them.
+        struct ProxyVisitor;
+
+        impl<'de> Visitor<'de> for ProxyVisitor {
+            type Value = Proxy;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a proxy URL, off, system, or a map with a url")
+            }
+
             // `proxy: false` reads as `off`, for YAML 1.1 habits.
-            Switch(bool),
-            Url(String),
-            Full(Full),
+            fn visit_bool<E: serde::de::Error>(self, on: bool) -> Result<Proxy, E> {
+                Ok(Proxy {
+                    url: if on { "system" } else { "off" }.to_owned(),
+                    ..Proxy::default()
+                })
+            }
+
+            fn visit_str<E: serde::de::Error>(self, url: &str) -> Result<Proxy, E> {
+                Ok(Proxy {
+                    url: url.to_owned(),
+                    ..Proxy::default()
+                })
+            }
+
+            fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Proxy, A::Error> {
+                let full = Full::deserialize(MapAccessDeserializer::new(map))?;
+                Ok(Proxy {
+                    url: full.url,
+                    username: full.username,
+                    password: full.password,
+                    bypass: full.bypass,
+                })
+            }
         }
 
-        Ok(match Repr::deserialize(deserializer)? {
-            Repr::Switch(on) => Self {
-                url: if on { "system" } else { "off" }.to_owned(),
-                ..Self::default()
-            },
-            Repr::Url(url) => Self {
-                url,
-                ..Self::default()
-            },
-            Repr::Full(full) => Self {
-                url: full.url,
-                username: full.username,
-                password: full.password,
-                bypass: full.bypass,
-            },
-        })
+        deserializer.deserialize_any(ProxyVisitor)
     }
 }
 
@@ -1417,6 +1513,162 @@ mod tests {
         assert_eq!(env.variables["debug"], "true");
         assert_eq!(env.variables["ratio"], "1.5");
         assert_eq!(env.variables["empty"], "");
+    }
+
+    #[test]
+    fn oauth1_versions_keep_their_text() {
+        let request: Request = crate::yaml::from_str(
+            "url: https://api.example.com\nauth:\n  type: oauth1\n  consumer_key: 1234\n  version: 1.0\n  timestamp: 0x10\n",
+        )
+        .unwrap();
+        let Auth::Oauth1(oauth) = &request.auth else {
+            panic!("expected oauth1, got {:?}", request.auth);
+        };
+        assert_eq!(oauth.version, "1.0");
+        assert_eq!(oauth.consumer_key, "1234");
+        assert_eq!(oauth.timestamp, "0x10");
+    }
+
+    #[test]
+    fn body_fields_keep_their_text() {
+        let text: Body = crate::yaml::from_str("type: text\ncontent: 1.50\n").unwrap();
+        assert_eq!(
+            text,
+            Body::Text {
+                content: "1.50".into(),
+                content_type: None
+            }
+        );
+        let json: Body = crate::yaml::from_str("type: json\ncontent: 42\n").unwrap();
+        assert_eq!(
+            json,
+            Body::Json {
+                content: "42".into()
+            }
+        );
+        let form: Body = crate::yaml::from_str(
+            "type: form\nfields:\n  - name: amount\n    value: 1e3\n  - name: off\n    value: 007\n    enabled: false\n",
+        )
+        .unwrap();
+        let Body::Form { fields } = &form else {
+            panic!("expected a form, got {form:?}");
+        };
+        assert_eq!(fields[0].value, "1e3");
+        assert_eq!(fields[1].value, "007");
+        assert!(!fields[1].enabled);
+        let graphql: Body =
+            crate::yaml::from_str("variables: 0x10\ntype: graphql\nquery: 1.0\n").unwrap();
+        assert_eq!(
+            graphql,
+            Body::Graphql {
+                query: "1.0".into(),
+                variables: "0x10".into(),
+                operation_name: String::new(),
+            }
+        );
+    }
+
+    #[test]
+    fn typed_auth_fields_still_read_numbers_and_booleans() {
+        let auth: Auth = crate::yaml::from_str(
+            "type: jwt\nsecret: 1.0\nsecret_base64: True\nissued_at: false\nexpires_in: 0x12C\n",
+        )
+        .unwrap();
+        let Auth::Jwt(jwt) = &auth else {
+            panic!("expected jwt, got {auth:?}");
+        };
+        assert_eq!(jwt.secret, "1.0");
+        assert!(jwt.secret_base64);
+        assert!(!jwt.issued_at);
+        assert_eq!(jwt.expires_in, Some(300));
+
+        let auth: Auth = crate::yaml::from_str(
+            "max_body: 2048\nheaders_to_sign: [X-A, 123]\ntype: edgegrid\nclient_token: 007\n",
+        )
+        .unwrap();
+        let Auth::Edgegrid(grid) = &auth else {
+            panic!("expected edgegrid, got {auth:?}");
+        };
+        assert_eq!(grid.max_body, Some(2048));
+        assert_eq!(grid.headers_to_sign, ["X-A", "123"]);
+        assert_eq!(grid.client_token, "007");
+
+        let auth: Auth = crate::yaml::from_str(
+            "type: oauth2\nclient_id: 1e3\nauth_params:\n  - name: version\n    value: 2.0\n    enabled: FALSE\n",
+        )
+        .unwrap();
+        let Auth::Oauth2(oauth) = &auth else {
+            panic!("expected oauth2, got {auth:?}");
+        };
+        assert_eq!(oauth.client_id, "1e3");
+        assert_eq!(oauth.auth_params[0].value, "2.0");
+        assert!(!oauth.auth_params[0].enabled);
+
+        for bad in ["expires_in: soon", "expires_in: 2.5", "issued_at: yes"] {
+            let error = crate::yaml::from_str::<Auth>(&format!("type: jwt\n{bad}\n")).unwrap_err();
+            assert!(error.to_string().contains("expected a"), "{bad}: {error}");
+        }
+    }
+
+    #[test]
+    fn auth_and_body_round_trip_their_text() {
+        let request = Request {
+            url: "https://api.example.com".into(),
+            body: Body::Form {
+                fields: vec![KeyValue::new("amount", "1.0"), KeyValue::new("hex", "0x10")],
+            },
+            auth: Auth::Oauth1(OAuth1 {
+                consumer_key: "007".into(),
+                version: "1.0".into(),
+                timestamp: "1e3".into(),
+                body_hash: true,
+                ..OAuth1::default()
+            }),
+            ..Request::default()
+        };
+        let yaml = serde_yaml_ng::to_string(&request).unwrap();
+        assert!(yaml.contains("version: '1.0'"), "{yaml}");
+        let back: Request = crate::yaml::from_str(&yaml).unwrap();
+        assert_eq!(back, request);
+        assert_eq!(serde_yaml_ng::to_string(&back).unwrap(), yaml);
+    }
+
+    #[test]
+    fn json_auth_and_body_read_as_before() {
+        let request: Request = serde_json::from_str(
+            r#"{"url": "x", "auth": {"type": "jwt", "secret": 42, "issued_at": true, "expires_in": 60}, "body": {"type": "form", "fields": [{"name": "n", "value": 1.5, "enabled": false}]}}"#,
+        )
+        .unwrap();
+        let Auth::Jwt(jwt) = &request.auth else {
+            panic!("expected jwt, got {:?}", request.auth);
+        };
+        assert_eq!(jwt.secret, "42");
+        assert!(jwt.issued_at);
+        assert_eq!(jwt.expires_in, Some(60));
+        let Body::Form { fields } = &request.body else {
+            panic!("expected a form, got {:?}", request.body);
+        };
+        assert_eq!(fields[0].value, "1.5");
+        assert!(!fields[0].enabled);
+        let json = serde_json::to_value(&request).unwrap();
+        assert_eq!(json["auth"]["type"], "jwt");
+        assert_eq!(serde_json::from_value::<Request>(json).unwrap(), request);
+    }
+
+    #[test]
+    fn proxy_fields_keep_their_text() {
+        let settings: Settings = crate::yaml::from_str(
+            "proxy:\n  url: http://proxy:3128\n  username: 1e3\n  password: 0x10\n",
+        )
+        .unwrap();
+        let proxy = settings.proxy.unwrap();
+        assert_eq!(proxy.username, "1e3");
+        assert_eq!(proxy.password, "0x10");
+        let settings: Settings = crate::yaml::from_str("proxy: false\n").unwrap();
+        assert!(settings.proxy.unwrap().is_off());
+        let settings: Settings = crate::yaml::from_str("proxy: system\n").unwrap();
+        assert!(settings.proxy.unwrap().is_system());
+        assert!(crate::yaml::from_str::<Settings>("proxy: 3128\n").is_err());
     }
 
     #[test]
