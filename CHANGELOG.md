@@ -6,11 +6,33 @@ All notable changes to Getman are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Homebrew and Scoop packages, updated with each release:
+  `brew install fzn0x/tap/getman` on macOS and Linux, or
+  `scoop bucket add fzn0x https://github.com/fzn0x/scoop-bucket` and then
+  `scoop install fzn0x/getman` on Windows.
+- An Indonesian translation of the [README](README-ID.md) and of
+  [Getting started](docs/getting-started-ID.md), by @Urdemonlord.
+- [Other API clients](docs/compare.md) compares Getman with Yaak,
+  Hoppscotch, Bruno and Beam, with a source for every claim.
+
+### Changed
+
+- `getman` and the desktop app are about 1 MB smaller: the browser UI is
+  built in Brotli-compressed, and browsers that take Brotli get it that
+  way. From source, `npm run build` in `web/` now writes Vite's output to
+  `web/build` and the compressed files to `web/dist`.
+- The winget manifests attached to each release use schema 1.28.0.
+
 ### Fixed
 
 - A gRPC call to a server that requires a client certificate could still
   fail with only "channel closed", when the server closed the connection
   before the call started, without the hint to set a certificate.
+- In the browser UI, a WebSocket, Server-Sent Events or Socket.IO
+  connection that had just closed could still be found for a moment, so
+  sending on it then answered "closed" instead of saying it was gone.
 
 ## [0.3.2] - 2026-11-14
 
