@@ -61,6 +61,11 @@ url = "2"
 x509-parser = "0.18"
 zstd = { version = "0.14", default-features = false }
 
+# rquickjs ships QuickJS bindings for desktop targets only. Android and iOS
+# generate theirs at build time, which needs libclang on the build machine.
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+rquickjs = { version = "0.14", features = ["bindgen"] }
+
 [lints]
 workspace = true
 
