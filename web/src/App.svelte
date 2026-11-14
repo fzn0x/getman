@@ -435,6 +435,6 @@
     z-index: 19;
     inset: var(--bar) 0 24px;
     border: 0;
-    background: color-mix(in srgb, var(--ink) 30%, transparent);
+    background: color-mix(in srgb, var(--scrim) 32%, transparent);
   }
 </style>

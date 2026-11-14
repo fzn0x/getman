@@ -41,10 +41,12 @@
     gap: var(--s2);
     max-width: min(440px, calc(100vw - 32px));
     margin: 0;
-    padding: var(--s2) var(--s3);
-    background: var(--ink);
-    color: var(--paper);
-    animation: arrive 180ms steps(3, end);
+    padding: var(--s2) var(--s4);
+    border-radius: var(--r-xs);
+    background: var(--inverse-surface);
+    color: var(--inverse-on-surface);
+    box-shadow: var(--elevation-3);
+    animation: arrive var(--dur-medium) var(--ease-out);
   }
 
   .notice.acts {
@@ -58,34 +60,40 @@
 
   .dot {
     flex: none;
-    width: 6px;
-    height: 6px;
-    background: var(--paper);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--inverse-on-surface);
   }
 
   .notice.ok .dot {
-    background: var(--ok);
+    background: var(--inverse-primary);
   }
 
   .notice.error {
-    background: var(--error);
-    color: var(--paper);
+    background: var(--error-container);
+    color: var(--on-error-container);
   }
 
   .act {
     flex: none;
-    height: 22px;
+    height: 28px;
     margin-left: var(--s2);
-    padding: 0 var(--s2);
-    border: 1px solid var(--paper);
+    padding: 0 var(--s3);
+    border: 0;
+    border-radius: var(--r-full);
     background: transparent;
-    color: var(--paper);
+    color: var(--inverse-primary);
+    font-weight: 500;
+  }
+
+  .notice.error .act {
+    color: var(--on-error-container);
   }
 
   .act:hover,
   .act:focus-visible {
-    background: var(--paper);
-    color: var(--ink);
+    background: color-mix(in srgb, var(--inverse-primary) var(--hover), transparent);
     outline: none;
   }
 

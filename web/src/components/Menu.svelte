@@ -108,18 +108,19 @@
     z-index: 60;
     min-width: 200px;
     padding: 4px 0;
-    border: 1px solid var(--rule);
-    background: var(--field);
-    box-shadow: 0 6px 18px -6px color-mix(in srgb, var(--t10) 35%, transparent);
+    border: 0;
+    border-radius: var(--r-xs);
+    background: var(--surface-container);
+    box-shadow: var(--elevation-2);
   }
 
   button {
     display: grid;
-    grid-template-columns: 14px 1fr auto;
+    grid-template-columns: 18px 1fr auto;
     align-items: center;
     gap: var(--s2);
     width: 100%;
-    height: 28px;
+    height: 32px;
     padding: 0 var(--s3);
     border: 0;
     background: none;
@@ -129,8 +130,8 @@
 
   button:hover:not(:disabled),
   button:focus-visible {
-    background: var(--ink);
-    color: var(--paper);
+    background: color-mix(in srgb, var(--on-surface) var(--hover), transparent);
+    color: var(--on-surface);
     outline: none;
   }
 
@@ -140,8 +141,8 @@
 
   button.danger:hover:not(:disabled),
   button.danger:focus-visible {
-    background: var(--error);
-    color: var(--paper);
+    background: color-mix(in srgb, var(--error) var(--hover), transparent);
+    color: var(--error);
   }
 
   button:disabled {
@@ -157,6 +158,6 @@
   .separator {
     height: 1px;
     margin: 4px 0;
-    background: var(--rule-3);
+    background: var(--outline-variant);
   }
 </style>

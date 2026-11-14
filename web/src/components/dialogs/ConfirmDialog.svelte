@@ -52,11 +52,11 @@
   .destroy {
     background: var(--error);
     border-color: var(--error);
-    color: var(--paper);
+    color: var(--on-error);
   }
 
   .destroy:hover:not(:disabled) {
-    background: var(--ink);
-    border-color: var(--ink);
+    background: var(--error);
+    box-shadow: var(--elevation-1);
   }
 </style>
