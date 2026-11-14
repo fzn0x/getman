@@ -129,7 +129,7 @@ components:
     textColor: "{colors.on-surface}"
     typography: "{typography.body}"
     rounded: "{rounded.xs}"
-    padding: "0 12px"
+    padding: "0 10px"
     height: "30px"
   tab:
     backgroundColor: "transparent"

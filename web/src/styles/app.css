@@ -336,7 +336,7 @@ a {
 .select {
   height: var(--control);
   min-width: 0;
-  padding: 0 var(--s3);
+  padding: 0 10px;
   border: 1px solid var(--outline);
   border-radius: var(--r-xs);
   background: var(--field);

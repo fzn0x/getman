@@ -285,6 +285,7 @@
   /* Material's segmented buttons, at compact height. */
   .modes {
     display: flex;
+    flex: none;
     border: 1px solid var(--outline);
     border-radius: var(--r-full);
     overflow: hidden;
@@ -292,7 +293,7 @@
 
   .modes button {
     height: 26px;
-    padding: 0 12px;
+    padding: 0 10px;
     border: 0;
     border-right: 1px solid var(--outline);
     background: none;
