@@ -78,7 +78,12 @@ fn code(
     language: &str,
     args: &ExportArgs,
 ) -> Result<Exported, String> {
-    let environment = workspaces::environment(&workspace, args.vars.env.as_deref())?;
+    let given = args
+        .vars
+        .env
+        .clone()
+        .or_else(|| std::env::var("GETMAN_ENVIRONMENT").ok());
+    let environment = workspaces::environment(&workspace, given.as_deref())?;
     let request = workspace.read_request(path).map_err(|e| e.to_string())?;
     let executor = Executor::new(workspace);
     let mut context = Context {
