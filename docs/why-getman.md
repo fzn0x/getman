@@ -4,6 +4,8 @@ Getman is for people who want their API requests to live where their code
 lives, work without an account, and run the same way on a laptop, over SSH
 and in CI. This page compares it with Postman, the tool most people come
 from, and says plainly where Postman is still the better choice.
+[Other API clients](compare.md) sets it beside Yaak, Hoppscotch, Bruno and
+Beam.
 
 Facts about Postman below were checked against Postman's own pages on
 14 October 2026; plans and features change, so follow the links before

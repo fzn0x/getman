@@ -291,7 +291,8 @@ to report a vulnerability.
 
 - [Getting started](docs/getting-started.md) ·
   [Desktop app](docs/desktop.md) ·
-  [Why Getman](docs/why-getman.md), and moving over from Postman
+  [Why Getman](docs/why-getman.md), and moving over from Postman ·
+  [Other API clients](docs/compare.md)
 - [Workspaces](docs/workspaces.md) ·
   [Variables and environments](docs/variables.md) ·
   [Authentication](docs/auth.md) ·
