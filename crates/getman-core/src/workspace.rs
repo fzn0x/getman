@@ -44,7 +44,8 @@ const LOCAL_WORKSPACE_FILE: &str = "getman.local.yaml";
 const SKIPPED_DIRS: &[&str] = &["node_modules", "target"];
 const MAX_DEPTH: usize = 32;
 const GITIGNORE_NOTE: &str = "# Values for this machine only, and Getman's local state";
-const GITIGNORE_ENTRIES: &[&str] = &["*.local.yaml", ".getman/"];
+// Local files may end in .yml as well as .yaml.
+const GITIGNORE_ENTRIES: &[&str] = &["*.local.yaml", "*.local.yml", ".getman/"];
 
 /// Makes sure `root/.gitignore` lists the machine-only files. An existing
 /// file keeps its lines and gets only the missing entries appended.
@@ -1130,6 +1131,7 @@ mod tests {
         assert!(ignore.starts_with("node_modules/\n.getman/\n"));
         assert_eq!(ignore.matches(".getman/").count(), 1);
         assert_eq!(ignore.matches("*.local.yaml").count(), 1);
+        assert_eq!(ignore.matches("*.local.yml").count(), 1);
     }
 
     #[test]
