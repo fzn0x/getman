@@ -12,11 +12,13 @@ on:
       - site/**
       - web/public/fonts/**
       - web/public/favicon.svg
+      - web/src/styles/tokens.css
       - .github/workflows/pages.yml
   pull_request:
     paths:
       - docs/**
       - site/**
+      - web/src/styles/tokens.css
       - .github/workflows/pages.yml
   workflow_dispatch:
 

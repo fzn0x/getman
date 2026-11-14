@@ -190,7 +190,15 @@ cpSync(join(here, "static"), out, { recursive: true });
 cpSync(join(here, "..", "web", "public", "fonts"), join(out, "fonts"), { recursive: true });
 cpSync(join(here, "..", "web", "public", "favicon.svg"), join(out, "favicon.svg"));
 cpSync(join(docsDir, "images"), join(out, "images"), { recursive: true });
-cpSync(join(here, "src", "site.css"), join(out, "site.css"));
+// The app's generated color roles come first, so the site and the app
+// share one scheme.
+writeFileSync(
+  join(out, "site.css"),
+  [
+    readFileSync(join(here, "..", "web", "src", "styles", "tokens.css"), "utf8"),
+    readFileSync(join(here, "src", "site.css"), "utf8"),
+  ].join("\n"),
+);
 cpSync(join(here, "src", "site.js"), join(out, "site.js"));
 const assets = {
   css: `site.css?v=${stamp(join(out, "site.css"))}`,
