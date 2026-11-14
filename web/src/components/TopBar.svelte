@@ -214,18 +214,21 @@
     display: block;
     line-height: 26px;
     max-width: 200px;
-    border-color: var(--ink);
-    font-weight: 600;
-    color: var(--ink);
+    border-color: transparent;
+    border-radius: var(--r-sm);
+    background-color: var(--secondary-container);
+    font-weight: 500;
+    color: var(--on-secondary-container);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .current.none {
-    border-color: var(--rule-2);
+    border-color: var(--outline-variant);
+    background-color: transparent;
     font-weight: 400;
-    color: var(--ink-2);
+    color: var(--on-surface-variant);
   }
 
   .overlay {
