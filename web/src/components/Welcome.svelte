@@ -3,6 +3,7 @@
   import { keyLabel } from "../lib/keys";
   import { newRequest, openDialog, openRequest, ws } from "../lib/store.svelte";
   import Icon from "./Icon.svelte";
+  import OrbitMark from "./OrbitMark.svelte";
 
   const recent = $derived.by(() => {
     const seen = new Set<string>();
@@ -13,58 +14,90 @@
 </script>
 
 <section class="welcome">
-  <header class="specimen">
-    <h1 class="bitmap g44">{ws.name}</h1>
-    <p class="lead">Open a request from the sidebar, or start a new one.</p>
-  </header>
+  <div class="layout">
+    <div class="copy">
+      <header class="specimen">
+        <h1 class="bitmap g44">{ws.name}</h1>
+        <p class="lead">Open a request from the sidebar, or start a new one.</p>
+      </header>
 
-  <div class="actions">
-    <button class="btn primary" onclick={() => newRequest()}>
-      <Icon name="plus" /> New request
-      <span class="hint">{keyLabel("alt+n").join(" ")}</span>
-    </button>
-    <button class="btn" onclick={() => openDialog({ kind: "palette" })}>
-      <Icon name="search" /> Find
-      <span class="hint">{keyLabel("mod+k").join(" ")}</span>
-    </button>
-    <button class="btn" onclick={() => openDialog({ kind: "import", folder: "" })}>
-      <Icon name="import" /> Import
-      <span class="hint">{keyLabel("alt+i").join(" ")}</span>
-    </button>
-  </div>
+      <div class="actions">
+        <button class="btn primary" onclick={() => newRequest()}>
+          <Icon name="plus" /> New request
+          <span class="hint">{keyLabel("alt+n").join(" ")}</span>
+        </button>
+        <button class="btn" onclick={() => openDialog({ kind: "palette" })}>
+          <Icon name="search" /> Find
+          <span class="hint">{keyLabel("mod+k").join(" ")}</span>
+        </button>
+        <button class="btn" onclick={() => openDialog({ kind: "import", folder: "" })}>
+          <Icon name="import" /> Import
+          <span class="hint">{keyLabel("alt+i").join(" ")}</span>
+        </button>
+      </div>
 
-  {#if recent.length > 0}
-    <div class="recent">
-      <h2 class="bitmap">Recently sent</h2>
-      <ul>
-        {#each recent as entry (entry.id)}
-          <li>
-            <button onclick={() => entry.path && void openRequest(entry.path)}>
-              <span class="method {methodClass(entry.method)}">{entry.method}</span>
-              <span class="name">{entry.name || entry.url}</span>
-              <span class="when muted">{ago(entry.at)}</span>
-            </button>
-          </li>
-        {/each}
-      </ul>
+      {#if recent.length > 0}
+        <div class="recent">
+          <h2 class="bitmap">Recently sent</h2>
+          <ul>
+            {#each recent as entry (entry.id)}
+              <li>
+                <button onclick={() => entry.path && void openRequest(entry.path)}>
+                  <span class="method {methodClass(entry.method)}">{entry.method}</span>
+                  <span class="name">{entry.name || entry.url}</span>
+                  <span class="when muted">{ago(entry.at)}</span>
+                </button>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
+
+      <p class="note">
+        Requests are YAML files in <code>{ws.root}</code>. Commit them with your code; values that
+        are yours alone go in git-ignored <code>*.local.yaml</code> files.
+      </p>
     </div>
-  {/if}
-
-  <p class="note">
-    Requests are YAML files in <code>{ws.root}</code>. Commit them with your code; values that are
-    yours alone go in git-ignored <code>*.local.yaml</code> files.
-  </p>
+    <div class="art"><OrbitMark /></div>
+  </div>
 </section>
 
 <style>
   .welcome {
+    container-type: inline-size;
+    height: 100%;
+    overflow: auto;
+  }
+
+  /* The text, with the orbiting mark beside it where there is room. */
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: center;
+    gap: var(--s6);
+    min-height: 100%;
+    padding: var(--s6) clamp(var(--s5), 6vw, 96px);
+  }
+
+  .copy {
     display: grid;
     align-content: center;
     justify-items: start;
     gap: var(--s5);
-    height: 100%;
-    padding: var(--s6) clamp(var(--s5), 6vw, 96px);
-    overflow: auto;
+  }
+
+  .art {
+    display: none;
+  }
+
+  @container (min-width: 880px) {
+    .layout {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .art {
+      display: block;
+    }
   }
 
   .specimen {
