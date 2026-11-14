@@ -2100,7 +2100,7 @@ dependencies = [
 
 [[package]]
 name = "getman"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "anstream",
  "anstyle",
@@ -2132,7 +2132,7 @@ dependencies = [
 
 [[package]]
 name = "getman-core"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -2196,7 +2196,7 @@ dependencies = [
 
 [[package]]
 name = "getman-desktop"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "axum",
  "getman",

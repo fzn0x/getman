@@ -1,6 +1,6 @@
 {
   "name": "getman-web",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "private": true,
   "description": "Getman's browser UI, built into the getman binary",
   "license": "MIT OR Apache-2.0",
