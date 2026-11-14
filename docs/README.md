@@ -5,9 +5,9 @@ These pages are also published at <https://fzn0x.github.io/getman/>.
 **Start here**
 
 - [Getting started](getting-started.md): install, first requests, keyboard
+- [Desktop app](desktop.md): install on Windows, macOS and Linux, updates
 - [Why Getman](why-getman.md): how it compares with Postman, and moving over
 - [Other API clients](compare.md): beside Yaak, Hoppscotch, Bruno and Beam
-- [Desktop app](desktop.md): install on Windows, macOS and Linux, updates
 
 **Guides**
 
@@ -29,4 +29,5 @@ These pages are also published at <https://fzn0x.github.io/getman/>.
 **Reference**
 
 - [Command line](cli.md)
+- [Scripting API](scripting-api.md): every member a script can use
 - [Security and privacy](security.md)
