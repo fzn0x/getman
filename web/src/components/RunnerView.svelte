@@ -145,7 +145,7 @@
   <header>
     <div>
       <h2 class="bitmap">{title}</h2>
-      <p class="file mono">
+      <p class="file">
         {ticked === tab.plan.length
           ? tab.target === ""
             ? "Every request in the workspace"
@@ -619,8 +619,9 @@
   .error {
     margin: var(--s3) var(--s4) 0;
     padding: var(--s2) var(--s3);
-    background: var(--accent-wash);
-    color: var(--error);
+    border-radius: var(--r-sm);
+    background: var(--error-container);
+    color: var(--on-error-container);
   }
 
   .matrix-wrap {
@@ -659,14 +660,14 @@
 
   .matrix {
     display: grid;
-    gap: 3px;
+    gap: 4px;
   }
 
   .iteration {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 3px;
+    gap: 4px;
   }
 
   .label {
@@ -674,38 +675,37 @@
     color: var(--ink-3);
   }
 
+  /* One cell per request and iteration: a tonal fill until it runs, then
+     its result's color. The chosen one gets a primary ring. */
   .cell {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     padding: 0;
-    border: 1px solid var(--rule-2);
-    background: transparent;
+    border: 0;
+    border-radius: var(--r-xs);
+    background: var(--surface-container-highest);
+    transition: background-color var(--dur-short) var(--ease);
   }
 
   .cell:disabled {
     cursor: default;
-    background-image: radial-gradient(circle, var(--t3) 0.8px, transparent 1.2px);
-    background-size: 4px 4px;
   }
 
   .cell.pass {
     background: var(--ok);
-    border-color: var(--ok);
   }
 
   .cell.fail {
     background: var(--error);
-    border-color: var(--error);
   }
 
   .cell.skip {
-    background: var(--t4);
-    border-color: var(--t4);
+    background: var(--outline);
   }
 
   .cell.chosen {
-    outline: 2px solid var(--ink);
-    outline-offset: 1px;
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
   }
 
   .results ol {
