@@ -349,7 +349,8 @@ Scripts are turned off for this run, so 2 scripts did not run.
 
 ## Limits
 
-A script may run for 10 seconds (`--script-timeout` changes it for runs)
+A script may run for 10 seconds (`--script-timeout` changes it for
+`getman run` and `getman send`)
 and use 256 MiB of memory. A script that fails is reported with where it
 came from and its line number:
 
