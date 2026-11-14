@@ -338,14 +338,15 @@ Pushing a `v*` tag runs `.github/workflows/release.yml`:
 | Job | Builds or publishes |
 | --- | --- |
 | `web` | The web UI, once, for every other job |
-| `build` | `getman` for Linux x86_64 and ARM64, macOS on Apple silicon and Intel, and Windows x64, each packed with the README, licences and notices as a `.tar.gz` or `.zip` |
+| `build` | `getman` for Linux x86_64 and ARM64, macOS on Apple silicon and Intel, and Windows x64 and ARM64, each packed with the README, licences and notices as a `.tar.gz` or `.zip` |
 | `desktop` | The desktop app: NSIS and MSI installers and a portable zip for Windows x64 and ARM64, one universal `.dmg` for macOS, and an AppImage, `.deb` and `.rpm` for Linux x86_64 and ARM64 |
 | `release` | The release notes from the version's section of `CHANGELOG.md`, `latest.json` for the updater, the package manifests from `packaging/render.mjs` and `SHA256SUMS`, then the GitHub release itself |
 | `publish-packages` | Commits the Homebrew formula to `fzn0x/homebrew-tap` and the Scoop manifest to `fzn0x/scoop-bucket` |
 
-The desktop update files are signed, and `latest.json` written, only
-when the `TAURI_SIGNING_PRIVATE_KEY` secret is set. The Linux desktop
-bundles are built on Ubuntu 22.04, so they run on any distribution
-with that glibc or newer. The secrets and the package managers are
+The Linux command-line builds go through `cargo zigbuild` and link against
+glibc 2.28, whatever the runner has. The desktop update files are signed,
+and `latest.json` written, only when the `TAURI_SIGNING_PRIVATE_KEY`
+secret is set. The Linux desktop bundles are built on Ubuntu 22.04, so
+they run on any distribution with that glibc or newer. The secrets and the package managers are
 described under Releases in
 [CONTRIBUTING.md](https://github.com/fzn0x/getman/blob/main/CONTRIBUTING.md#releases).
