@@ -271,7 +271,6 @@ ${bar({ root, current: "" })}
 
 <section class="hero">
   <div class="hero-copy">
-    <p class="eyebrow">Open source · No account · No cloud</p>
     <h1>Getman, the fast <span class="accent">open-source Postman alternative</span></h1>
     <p class="lead">Send, test and run your API requests from plain YAML files in your repository. On the desktop, in the browser, in the terminal and in CI.</p>
     ${download}

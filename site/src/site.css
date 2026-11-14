@@ -404,16 +404,6 @@ kbd {
   gap: var(--s5);
 }
 
-.eyebrow {
-  margin: 0;
-  padding: 6px 14px;
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--r-sm);
-  color: var(--on-surface-variant);
-  font-size: var(--fs-meta);
-  font-weight: 500;
-}
-
 .hero h1 {
   margin: 0;
   font-size: var(--fs-display);
