@@ -67,6 +67,8 @@ users/
 The file is named after the example, with an extension from its
 `Content-Type`. The `.examples` directory is renamed, moved, copied and
 deleted together with its request, and it never shows up as a folder.
+Deleting a request moves the directory to the [trash](browser-ui.md#the-trash)
+with it, and restoring the request brings it back.
 Commit it with the request.
 
 ## From Postman

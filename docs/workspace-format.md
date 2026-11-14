@@ -1070,7 +1070,7 @@ workspace depends on it: deleting it loses only what is listed here.
 | `.getman/runs/<id>.json` | The Runner, and `getman run --save` | The newest 20 runs: results, timings and checks, without bodies, headers or variable values |
 | `.getman/cookies.json` | The UI | The cookie jar; see [Cookies](http.md#cookies) |
 | `.getman/oauth2-tokens.json` | Signing in with a browser | OAuth 2.0 tokens, which `getman run` and `getman send` use too |
-| `.getman/trash/<id>/` | Deleting in the UI or the terminal UI | `entry.json`, which says where the item was, its name and when it went, beside the deleted file or folder |
+| `.getman/trash/<id>/` | Deleting in the UI or the terminal UI | `entry.json`, which says where the item was, its name and when it went, beside the deleted file or folder, and a request's `.examples` directory |
 | `.getman/header-presets.yaml` | The UI | Named sets of headers |
 
 The header presets are plain YAML you can edit or copy to another
@@ -1084,6 +1084,7 @@ workspace:
       value: "2"
 ```
 
-Deleting a request moves only its file to the trash. Its `.examples`
-directory stays where it is, and is used again if the request is put back
-under the same name.
+Deleting a request moves its file to the trash, and its `.examples`
+directory goes with it, into the same `.getman/trash/<id>/` folder.
+Putting the request back returns the directory beside it, also when the
+request comes back under a new name. Emptying the trash removes both.
