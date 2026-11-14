@@ -1,80 +1,98 @@
 ---
 name: Getman
-description: A local-first API client set like an Emigre bitmap type specimen.
+description: A local-first API client in Material Design 3, at compact density, seeded from the logo's indigo.
 colors:
-  newsprint-paper: "#f2f0eb"
-  field-white: "#fbfaf7"
-  sunken-paper: "#e8e5de"
-  rich-ink: "#0a0a0a"
-  ink-secondary: "#4f4d48"
-  ink-tertiary: "#6b6862"
-  rule-hairline: "#c9c5bb"
-  rule-faint: "#dcd8cf"
-  ramp-mid: "#aeaaa0"
-  signal-red: "#e5011a"
-  signal-red-pressed: "#c00016"
-  signal-red-text: "#c4001a"
-  signal-red-wash: "#fbe3e5"
-  accent-ink: "#ffffff"
-  status-ok: "#0e7a3d"
-  status-redirect: "#1e4fd0"
-  status-error: "#c4001a"
-  status-warn: "#a35a00"
-  method-patch: "#7b3fb3"
-  variable-ink: "#7b3fb3"
-  variable-wash: "#efe6f8"
-  carbon-paper: "#0e0e0d"
-  carbon-field: "#141412"
-  carbon-rule: "#8a877f"
-  carbon-signal-red: "#ff2a3d"
-  carbon-accent-ink: "#0e0e0d"
+  seed: "#3F51B5"
+  primary: "#4355B9"
+  on-primary: "#FFFFFF"
+  primary-container: "#DEE0FF"
+  on-primary-container: "#293CA0"
+  secondary-container: "#E0E1F9"
+  on-secondary-container: "#434659"
+  tertiary: "#72508F"
+  tertiary-container: "#F1DAFF"
+  error: "#BA1A1A"
+  error-container: "#FFDAD6"
+  surface: "#FBF8FE"
+  surface-container-lowest: "#FFFFFF"
+  surface-container-low: "#F5F2F9"
+  surface-container: "#EFEDF3"
+  surface-container-high: "#EAE7ED"
+  surface-container-highest: "#E4E1E7"
+  on-surface: "#1B1B20"
+  on-surface-variant: "#454650"
+  outline: "#767681"
+  outline-variant: "#C6C5D1"
+  inverse-surface: "#303035"
+  ok: "#1A6C31"
+  info: "#006496"
+  warn: "#865300"
+  violet: "#7848A2"
+  dark-primary: "#BAC3FF"
+  dark-on-primary: "#08218A"
+  dark-surface: "#131317"
+  dark-surface-container: "#1F1F24"
+  dark-on-surface: "#E4E1E7"
+  dark-outline-variant: "#454650"
 typography:
   display:
-    fontFamily: "Departure Mono, ui-monospace, monospace"
-    fontSize: "88px"
-    fontWeight: 400
-    lineHeight: 0.82
-    letterSpacing: "0"
-  headline:
-    fontFamily: "Departure Mono, ui-monospace, monospace"
-    fontSize: "33px"
-    fontWeight: 400
-    lineHeight: 1
-    letterSpacing: "0"
-  title-bitmap:
-    fontFamily: "Departure Mono, ui-monospace, monospace"
-    fontSize: "22px"
+    fontFamily: "Google Sans Flex, system-ui, sans-serif"
+    fontSize: "57px"
     fontWeight: 400
     lineHeight: 1.1
-    letterSpacing: "0"
-  label:
-    fontFamily: "Departure Mono, ui-monospace, monospace"
-    fontSize: "11px"
-    fontWeight: 400
+  headline-large:
+    fontFamily: "Google Sans Flex, system-ui, sans-serif"
+    fontSize: "36px"
+    fontWeight: 500
     lineHeight: 1
-    letterSpacing: "0"
+  headline:
+    fontFamily: "Google Sans Flex, system-ui, sans-serif"
+    fontSize: "28px"
+    fontWeight: 400
+    lineHeight: 1.25
+  title-large:
+    fontFamily: "Google Sans Flex, system-ui, sans-serif"
+    fontSize: "22px"
+    fontWeight: 400
+    lineHeight: 1.3
   title:
-    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, sans-serif"
-    fontSize: "15px"
-    fontWeight: 650
-    lineHeight: 1.45
+    fontFamily: "Google Sans Flex, system-ui, sans-serif"
+    fontSize: "16px"
+    fontWeight: 500
+    lineHeight: 1.4
   body:
-    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, sans-serif"
+    fontFamily: "Google Sans Flex, system-ui, sans-serif"
     fontSize: "13px"
     fontWeight: 400
     lineHeight: 1.45
+  label:
+    fontFamily: "Google Sans Flex, system-ui, sans-serif"
+    fontSize: "12px"
+    fontWeight: 500
+    lineHeight: 1.25
+    letterSpacing: "0.01em"
   meta:
-    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, sans-serif"
+    fontFamily: "Google Sans Flex, system-ui, sans-serif"
     fontSize: "12px"
     fontWeight: 400
     lineHeight: 1.45
   code:
-    fontFamily: "ui-monospace, Cascadia Mono, SF Mono, Menlo, Consolas, Liberation Mono, monospace"
+    fontFamily: "Google Sans Code, ui-monospace, monospace"
     fontSize: "13px"
     fontWeight: 400
     lineHeight: 1.45
+  method:
+    fontFamily: "Google Sans Code, ui-monospace, monospace"
+    fontSize: "11px"
+    fontWeight: 700
+    letterSpacing: "0.02em"
 rounded:
-  none: "0px"
+  xs: "4px"
+  sm: "8px"
+  md: "12px"
+  lg: "16px"
+  xl: "28px"
+  full: "999px"
 spacing:
   s1: "4px"
   s2: "8px"
@@ -82,229 +100,232 @@ spacing:
   s4: "16px"
   s5: "24px"
   s6: "32px"
-  control: "28px"
-  bar: "40px"
+  control: "30px"
+  bar: "44px"
 components:
   button:
-    backgroundColor: "{colors.field-white}"
-    textColor: "{colors.rich-ink}"
-    typography: "{typography.label}"
-    rounded: "{rounded.none}"
-    padding: "0 12px"
-    height: "28px"
-  button-hover:
-    backgroundColor: "{colors.rich-ink}"
-    textColor: "{colors.newsprint-paper}"
-  button-primary:
-    backgroundColor: "{colors.signal-red}"
-    textColor: "{colors.accent-ink}"
-    typography: "{typography.label}"
-    rounded: "{rounded.none}"
-    padding: "0 13px"
-    height: "28px"
-  button-primary-hover:
-    backgroundColor: "{colors.signal-red-pressed}"
-    textColor: "{colors.accent-ink}"
-  button-quiet:
     backgroundColor: "transparent"
-    textColor: "{colors.rich-ink}"
+    textColor: "{colors.primary}"
     typography: "{typography.label}"
-    rounded: "{rounded.none}"
+    rounded: "{rounded.full}"
+    padding: "0 16px"
+    height: "30px"
+  button-filled:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.on-primary}"
+    typography: "{typography.label}"
+    rounded: "{rounded.full}"
+    padding: "0 16px"
+    height: "30px"
+  button-text:
+    backgroundColor: "transparent"
+    textColor: "{colors.primary}"
+    typography: "{typography.label}"
+    rounded: "{rounded.full}"
     padding: "0 12px"
-    height: "28px"
-  button-quiet-hover:
-    backgroundColor: "{colors.sunken-paper}"
-  input:
-    backgroundColor: "{colors.field-white}"
-    textColor: "{colors.rich-ink}"
+    height: "30px"
+  text-field:
+    backgroundColor: "{colors.surface-container-lowest}"
+    textColor: "{colors.on-surface}"
     typography: "{typography.body}"
-    rounded: "{rounded.none}"
-    padding: "0 8px"
-    height: "28px"
+    rounded: "{rounded.xs}"
+    padding: "0 12px"
+    height: "30px"
   tab:
     backgroundColor: "transparent"
-    textColor: "{colors.ink-tertiary}"
+    textColor: "{colors.on-surface-variant}"
     typography: "{typography.label}"
-    padding: "0 10px"
-    height: "32px"
-  tab-selected:
-    textColor: "{colors.rich-ink}"
-  menu-item:
-    backgroundColor: "{colors.field-white}"
-    textColor: "{colors.rich-ink}"
-    typography: "{typography.body}"
     padding: "0 12px"
-    height: "28px"
-  menu-item-hover:
-    backgroundColor: "{colors.rich-ink}"
-    textColor: "{colors.newsprint-paper}"
-  kbd:
-    backgroundColor: "{colors.field-white}"
-    textColor: "{colors.ink-secondary}"
-    typography: "{typography.label}"
-    padding: "2px 4px"
-  notice:
-    backgroundColor: "{colors.rich-ink}"
-    textColor: "{colors.newsprint-paper}"
+    height: "36px"
+  tab-selected:
+    textColor: "{colors.on-surface}"
+  list-item-selected:
+    backgroundColor: "{colors.secondary-container}"
+    textColor: "{colors.on-secondary-container}"
+  menu:
+    backgroundColor: "{colors.surface-container}"
+    textColor: "{colors.on-surface}"
     typography: "{typography.body}"
-    padding: "8px 12px"
+    rounded: "{rounded.xs}"
+    padding: "4px 0"
+  menu-item:
+    height: "32px"
+    padding: "0 12px"
+  dialog:
+    backgroundColor: "{colors.surface-container-high}"
+    textColor: "{colors.on-surface}"
+    rounded: "{rounded.lg}"
+  snackbar:
+    backgroundColor: "{colors.inverse-surface}"
+    textColor: "#F2F0F6"
+    rounded: "{rounded.xs}"
+    padding: "8px 16px"
+  segmented-button:
+    textColor: "{colors.on-surface}"
+    rounded: "{rounded.full}"
+    height: "28px"
+  segmented-button-selected:
+    backgroundColor: "{colors.secondary-container}"
+    textColor: "{colors.on-secondary-container}"
+  chip:
+    textColor: "{colors.on-surface-variant}"
+    rounded: "{rounded.sm}"
+  kbd:
+    backgroundColor: "{colors.surface-container-low}"
+    textColor: "{colors.on-surface-variant}"
+    typography: "{typography.code}"
+    rounded: "{rounded.xs}"
+    padding: "2px 5px"
 ---
 
 # Design System: Getman
 
 ## Overview
 
-**Creative North Star: "The Bitmap Specimen Sheet"**
+**Creative North Star: "A calm instrument"**
 
-Getman is an API client set like an Emigre bitmap type specimen. Crisp, smooth working text carries everything people read and type; one coarse bitmap face, Departure Mono, appears only at whole multiples of its 11px pixel grid, and only for what deserves a glance: section heads and controls in small caps, the workspace name, counts, and the response status set as an 88px numeral. The page is newsprint and rich ink, ruled with black lines, with a single synthetic signal red for the primary action, live selection markers and destructive intent.
+Getman is a developer tool people keep open all day beside an editor and a terminal. It follows Material Design 3 at compact density: one color scheme generated from the logo's indigo, tonal surfaces instead of lines and shadows wherever it can, sentence-case labels, rounded controls, and state layers for hover and press. The look is quiet and exact so the request and the response carry the screen.
 
-The shell is dense and flat: square corners everywhere, 1px black structural rules, a 2px ink frame around the one line that matters (method, URL, Send), hover states that invert to solid ink. Depth comes from print materials rather than light: halftone dot fields, dot-matrix scans, a dotted focus outline. The signature is the response specimen, where the status numeral sits on a halftone tile whose dots swell with response time and take the status colour. Motion is pixel-stepped (`steps()`), never eased into smoothness, and collapses under reduced motion.
-
-Light is newsprint (#f2f0eb) with ink (#0a0a0a); dark is carbon (#0e0e0d) with paper-coloured text and a brighter red, chosen from the OS and overridable with a toggle. It refuses the category default of a charcoal three-pane with a lone orange Send button.
+Color carries meaning. The primary indigo marks the one main action of a view (Send, Invoke, Run) and focus; fixed status hues mark methods and response classes; everything else is neutral surface and text. Light and dark come from the same scheme, follow the OS, and can be overridden with the theme toggle.
 
 **Key Characteristics:**
-- Two type systems with a hard border: bitmap face at 11/22/33/44/88px only, smooth system faces for working text and code.
-- Paper-to-ink neutral ramp (11 steps) is the only source of neutrals.
-- One signal red; colour otherwise carries meaning only (methods, status, variables, failures).
-- Zero radius; stepped 4px pixel corners on primary controls only.
-- Hover inverts to solid ink; focus is a 2px dotted ink outline.
-- Halftone and dot-matrix fields are real surfaces, not decoration.
-- Pixel-drawn SVG icons on a 7x7 grid at 7, 14 or 21px.
+- One seed (#3F51B5), Material Color Utilities' Tonal Spot tones with the seed's chroma kept in the primary palette.
+- Google Sans Flex for interface text, Google Sans Code for code, URLs, keys and values, both self-hosted.
+- Compact density: 30px controls, 36px tabs, 28 to 32px rows, 13px body text.
+- Shapes from Material's scale: 4px fields and menus, 8px chips and the request line, 16px dialogs, full rounding on buttons and segmented buttons.
+- Hover and press are state layers (8% and 10% washes of the content color), never inversions.
+- Material Symbols Rounded for every icon.
 
 ## Colors
 
-Newsprint and rich ink with one synthetic red and a small set of functional status inks; every neutral steps along a single paper-to-ink ramp.
+The roles are generated, not picked: `web/src/styles/tokens.css` holds every role for light and dark, made with Material Color Utilities 0.4.0 from the seed. Do not edit it by hand; regenerate it.
 
 ### Primary
-- **Signal Red** (signal-red): the Send button and other primary actions, the 3px marker on the active request tab, the 11px square of the wordmark, drop targets in the tree, the text caret and the editor cursor. Pressed/hover deepens to Signal Red Pressed. On paper, red used as text uses the darker Signal Red Text for contrast; Signal Red Wash fills a drop-into-folder target.
+- **Primary** (primary): the filled main action of each view, focus rings and the focused field's outline, the selected tab's indicator, links and text buttons, the text caret, the logo mark in the top bar.
+- **Primary container** (primary-container / on-primary-container): text selection and highlighted search matches.
 
-### Tertiary (functional inks)
-- **Status Green** (status-ok): 2xx status numeral and halftone tone, passing test counts, GET method marks, JSON strings in the editor.
-- **Redirect Blue** (status-redirect): 3xx status tone, PUT marks, numbers in the editor.
-- **Error Red** (status-error): 4xx/5xx tone, DELETE marks, failing counts, broken tree items, missing variables, error notices.
-- **Warn Amber** (status-warn): POST marks, editor function names, warnings.
-- **Variable Violet** (variable-ink on variable-wash): `{{variables}}` highlighted in the URL and editors; also PATCH marks (method-patch).
+### Secondary
+- **Secondary container** (secondary-container / on-secondary-container): selection in lists and toggles: the current request in the tree, the highlighted palette row, the on segment of a segmented button, the selected environment, filter chips that are on.
+
+### Tertiary
+- **Tertiary** (tertiary on tertiary-container): `{{variables}}` in the URL bar and editors.
+
+### Status and methods
+Fixed hues at Material's custom-color tones (40 on light, 80 on dark, with 90 and 30 containers), so meaning never shifts with the seed.
+- **Ok** (ok): 2xx, passing tests, GET.
+- **Info** (info): 3xx, PUT, sent messages.
+- **Warn** (warn): POST, warnings.
+- **Violet** (violet): PATCH.
+- **Error** (error / error-container): 4xx and 5xx, DELETE, failing counts, missing variables, error notices, destructive actions.
 
 ### Neutral
-- **Newsprint Paper** (newsprint-paper): the page and every panel background.
-- **Field White** (field-white): inputs, editors, menus, secondary buttons; a half-step lighter than paper so fields read as writable.
-- **Sunken Paper** (sunken-paper): the request tab strip, quiet hover fills, list hover rows.
-- **Rich Ink** (rich-ink): text, structural rules, hover inversion fill, selected tree row, notices, text selection.
-- **Ink Secondary / Ink Tertiary** (ink-secondary, ink-tertiary): supporting text, placeholders, inactive tabs, counts.
-- **Hairline / Faint Rule** (rule-hairline, rule-faint): input borders, inner dividers, column separators.
-- **Ramp Mid** (ramp-mid): scrollbar thumbs, the soft halftone, the idle numeral.
-- **Carbon** (carbon-paper, carbon-field, carbon-rule): the dark theme inverts the ramp; structural rules soften to a warm grey so the black-rule grammar survives on carbon. Primary text on Carbon Signal Red is carbon (carbon-accent-ink), not white.
+- **Surface** (surface): the page.
+- **Surface containers** (lowest to highest): fields and editors sit on the lowest; menus on the container; dialogs on high; tab strips and quiet fills step between them.
+- **On surface / on surface variant** (on-surface, on-surface-variant): text and secondary text. **Outline** (outline) draws text-field borders and quiet captions; **outline variant** (outline-variant) draws dividers.
+- **Inverse surface**: snackbars (notices).
 
 ### Named Rules
-**The One Ramp Rule.** Every neutral is a step of the paper-to-ink ramp (`--t0` to `--t10`); never introduce a grey from outside it. The dark theme reverses the ramp rather than inventing new neutrals.
+**The Generated Scheme Rule.** Every color is a role from `tokens.css`. Older names (`--ink`, `--paper`, `--rule`, `--accent` and the `--t0` to `--t10` ramp) are aliases of roles, kept so older components still read; new code uses the role names.
 
-**The Meaning-Only Colour Rule.** Hue appears only where it encodes something: method, status, variable, failure, or the one primary action. Decorative colour is not used.
+**The Meaning-Only Color Rule.** Hue appears only where it encodes something: the main action, selection, a method, a status, a variable, a failure. Decorative color is not used.
 
-**The One Red Rule.** Signal red marks the primary action and live selection. Each view offers one red primary action.
+**The One Primary Rule.** Each view offers one filled primary button.
 
 ## Typography
 
-**Display Font:** Departure Mono (self-hosted woff2, SIL OFL), falling back to ui-monospace
-**Body Font:** system-ui stack (Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans)
-**Label/Mono Font:** Departure Mono for labels; ui-monospace stack (Cascadia Mono, SF Mono, Menlo, Consolas) for code, URLs and values
-
-**Character:** A coarse bitmap face used like specimen captions and display sizes, against invisible, crisp system text for everything read at length. The contrast between the two is the identity.
+**Interface Font:** Google Sans Flex (self-hosted woff2, SIL OFL; Latin, weights 400 to 700, optical size fixed at 16)
+**Code Font:** Google Sans Code (self-hosted woff2, SIL OFL; Latin, weights 400 to 700)
 
 ### Hierarchy
-- **Display** (Departure Mono 400, 88px, line-height 0.82): the response status numeral only. Drops to 44px under 520px.
-- **Headline** (Departure Mono 400, 33px, line-height 1, uppercase): empty-state headings. 44px is reserved for full-screen states.
-- **Title Bitmap** (Departure Mono 400, 22px, uppercase): the wordmark, the workspace name, the response reason phrase.
-- **Label** (Departure Mono 400, 11px, line-height 1, uppercase, no smoothing): buttons, tabs, method marks, section heads ("Query parameters"), column heads, specimen size labels, kbd keys, footer and status bar.
-- **Title** (system 650, 15px): the editable request name.
-- **Body** (system 400, 13px, line-height 1.45): all working text, inputs, menus, tree rows; paragraphs cap at 52ch.
-- **Meta** (system 400, 12px): paths and secondary lines in lists.
-- **Code** (ui-monospace 13px; 14px in the URL line): editors, URLs, keys and values.
+- **Display** (57px, 400): reserved; the status code uses Headline Large.
+- **Headline Large** (36px, 500, tabular figures): the response status code.
+- **Headline** (28px, 400): empty-state headings and folder names.
+- **Title Large** (22px, 400): the workspace name and other view titles.
+- **Title** (16px, 500): the editable request name and the response reason phrase.
+- **Body** (13px, 400, line-height 1.45): all working text, inputs, menus and tree rows; paragraphs cap at 52ch.
+- **Label** (12px, 500, letter-spacing 0.01em): section heads, column heads, counts and captions; set with the `.bitmap` class, a name older than this design. Tabs and buttons use 13px at 500.
+- **Meta** (12px, 400): paths and secondary lines in lists.
+- **Code** (13px; 14px in the URL line): editors, URLs, keys and values.
+- **Method** (Google Sans Code 11px, 700, uppercase): method marks, in the method's color.
 
 ### Named Rules
-**The Whole-Pixel Rule.** Departure Mono is set only at 11, 22, 33, 44 or 88px (`--b1` to `--b8`), uppercase, weight 400, letter-spacing 0, with font smoothing off. No other size, weight or tracking.
-
-**The Two-Faces Rule.** Anything a person reads in sentences or types goes in the smooth faces. The bitmap face is for glances: labels, counts, status, names.
+**The Sentence Case Rule.** Labels, tabs and buttons are set in sentence case as written. Only method marks are uppercase.
 
 ## Layout
 
-A fixed application grid: a 40px top bar, a resizable sidebar (default 280px) separated by a 1px rule, and a 24px status bar. The main column stacks the open-request tab strip (34px), the request title row, the request line (40px, 2px ink frame), then a split of request editors beside the response, resizable and switchable to stacked rows. Below 900px the panes stack; in narrow layouts the sidebar becomes a fixed overlay (min(320px, 86vw)) over a 30% ink scrim, and the top bar hides the palette text and wordmark below 720px.
+A fixed application grid: a 44px top bar, a resizable sidebar (default 280px), and a 24px status bar. The main column stacks the open-request tab strip, the request title row, the request line (40px), then a split of request editors beside the response, resizable and switchable to stacked rows. Below 900px the panes stack; in narrow layouts the sidebar becomes a fixed overlay over a scrim, and the top bar hides the palette text and wordmark below 720px.
 
-Spacing runs on a 4px base: 4, 8, 12, 16, 24, 32px (`--s1` to `--s6`), with 28px controls and 40px bars. Density is high: tables are grid rows with 28px cells, list rows are 28px, tabs 32px. Horizontal edges of content start at 16px; inner gaps are 8 or 12px.
+Spacing runs on a 4px base: 4, 8, 12, 16, 24, 32px (`--s1` to `--s6`), with 30px controls. Content starts 16px from the edges; inner gaps are 8 or 12px.
 
 ## Elevation & Depth
 
-The system is flat. Panels are separated by rules and tonal steps of the ramp (paper, field, sunken), never by shadows. Depth is a print effect: halftone dot fields (radial-gradient dots on a 4px grid) behind the specimen and the modal backdrop, and ink inversion for the hovered or selected thing. Only surfaces that float above the shell carry a soft ambient shadow, and only so they detach from the page.
+In-flow surfaces are flat and separated by tonal steps of the surface containers and by outline-variant dividers. Only what floats above the page has a shadow, at Material's levels:
+- **Level 1** (`--elevation-1`): a filled button on hover.
+- **Level 2** (`--elevation-2`): menus, autocomplete lists, the timing panel.
+- **Level 3** (`--elevation-3`): dialogs and snackbars.
 
-### Shadow Vocabulary
-- **Dialog lift** (`box-shadow: 0 24px 60px -24px color-mix(in srgb, var(--t10) 55%, transparent)`): modal dialogs, together with a 2px ink border and a halftone backdrop.
-- **Menu lift** (`box-shadow: 0 6px 18px -6px color-mix(in srgb, var(--t10) 35%, transparent)`): context and dropdown menus.
-- **Pressed double frame** (`box-shadow: inset 0 0 0 2px var(--fill), inset 0 0 0 3px var(--accent-ink)`): a primary button while pressed.
-
-### Named Rules
-**The Ink Not Light Rule.** In-flow surfaces never cast shadows. Hover and selection invert to solid ink; depth comes from halftone, rules and the paper ramp.
+Dialogs open over a 32% scrim.
 
 ## Shapes
 
-Square everything: 0px radius on every control, panel, dialog, tab and badge. Structure is drawn with 1px black rules (`--rule`), inner divisions with hairline rules, and emphasis with heavier ink: the 2px frame around the request line and dialogs, 3px bars for the active tab (red on request tabs, ink under pane tabs). Primary controls get stepped pixel corners: a 4px three-step stair painted in the colour behind the button (`--corner`), so the shape reads as a bitmap rectangle. Checkboxes are 14px squares filled with a 6px ink square; select chevrons and icons are built from pixels.
+Material's shape scale (`--r-xs` to `--r-full`): text fields, menus, snackbars and keycaps at 4px; chips, the request line field and badges at 8px; dialogs at 16px; buttons, icon buttons and segmented buttons fully rounded. Rows in lists stay square so they run edge to edge. The selected tab's indicator is a 3px bar with rounded top corners.
 
 ## Components
 
 ### Buttons
-Bitmap-labelled, square, and inverting.
-- **Shape:** square (0px), 28px tall, 12px side padding, 11px Departure Mono uppercase.
-- **Default:** field-white fill with a 1px ink rule. Hover inverts to ink fill with paper text; active nudges down 1px; disabled at 45% opacity.
-- **Primary:** signal red fill, white text (carbon text in dark), no border, stepped 4px pixel corners in the surrounding colour. Hover deepens the red; pressing draws the specimen's double frame inside it. In the request line, Send is 104px wide and full height, ruled from the URL by 2px ink; while sending it shows a stepped dot-matrix scan.
-- **Quiet:** transparent with no border; hover fills sunken paper.
-- **Danger:** default at rest; hover fills error red with paper text.
-- **Icon button:** 26px square, transparent, ink-secondary icon; hover inverts to ink.
+- **Outlined** (`.btn`): 30px, full rounding, outline-variant border, primary label, 13px weight 500.
+- **Filled** (`.btn.primary`): primary fill, on-primary label; level 1 shadow on hover. One per view.
+- **Text** (`.btn.quiet`): no border, primary label.
+- **Danger** (`.btn.danger`): error label.
+- **Icon button** (`.icon-btn`): 28px circle, on-surface-variant icon.
+- All show hover and press as a state layer of the label color; disabled at 38% opacity.
 
-### Inputs / Fields
-- **Style:** 28px, field-white, 1px hairline rule, square, 13px system text (code face for `.mono` fields); placeholders in ink-tertiary.
-- **Hover / Focus:** border steps to ramp mid-dark on hover and to full ink on focus. Caret is signal red.
-- **Selects:** native appearance removed; a pixel chevron drawn from two gradients.
-- **Request line:** method select (bitmap, method colour) | URL editor (14px code, variables in violet wash) | Send, inside a 40px 2px-ink frame.
+### Text fields
+- **Style:** 30px, 4px corners, 1px outline border on the lowest surface container, 13px text (code face for `.mono`).
+- **Hover / Focus:** the border steps to on-surface on hover and to a 2px primary outline on focus.
+- **Request line:** method and URL share one outlined field with 8px corners (method in the method's color, URL in 14px code with variables in tertiary); Send, Invoke or Connect is a filled button beside it that shows a circular progress indicator while the request is out.
+
+### Checkboxes
+Material's checkbox at 16px: a 2px on-surface-variant outline that fills with primary and shows a white check.
 
 ### Tabs
-- **Pane tabs:** 11px bitmap labels in ink-tertiary over a hairline-ruled strip; selected goes ink with a 3px ink bar inset 8px from each side; counts follow in tertiary, failing counts in error red.
-- **Request tabs:** a sunken strip of tabs divided by hairlines; the active tab lifts to paper with a 3px signal red bar on top and an open bottom edge. Unsaved titles set italic; the close mark turns red when dirty. Overflowing rows fade at the cut edge (40px mask).
+Material's secondary tabs: 13px labels in on-surface-variant on a strip with an outline-variant divider; the selected one turns on-surface with a 3px primary indicator. Counts follow in tabular figures, failing counts in error.
+
+### Segmented buttons
+Body type and response view modes: fully rounded groups with outline dividers; the on segment fills with secondary container.
 
 ### Navigation (sidebar tree)
-- 28px rows: twisty, right-aligned 11px method mark in its method colour, label. Hover fills sunken paper; the current request inverts to ink with paper text (the method mark turns paper too). Folders set in 600 weight. Drop-into shows red wash with a 1px red inset; drop-between shows a 2px red line.
-- The workspace name heads the sidebar at 22px bitmap; a Requests / History tab switch sits under the filter field.
+28px rows with a twisty, the method mark in its color, and the name. Hover fills the surface container; the current request fills secondary container. Picked rows show a 3px primary bar; drop targets show the primary container.
 
-### Menus and Dialogs
-- **Menu:** field-white, 1px ink rule, menu lift; 28px items with a 14px icon column. Hover/focus inverts to ink; danger items in error red, inverting to red.
-- **Dialog:** paper, 2px ink border, dialog lift, halftone backdrop; footer actions right-aligned over a hairline rule. Opens with a 3-step 160ms rise.
+### Menus and dialogs
+- **Menu:** surface container, 4px corners, level 2 shadow, 32px items with an 18px icon column; hover is a state layer, danger items in error.
+- **Dialog:** surface container high, 16px corners, level 3 shadow, a 32% scrim; footer actions right-aligned. Opens with a short rise on the emphasized decelerate curve.
 
 ### Notices
-Solid ink bars (error notices solid error red) bottom right, with a 6px square status dot; arrive in 3 steps over 180ms.
+Snackbars at the bottom right: inverse surface, 4px corners, level 3 shadow, an 8px status dot and a text action in inverse primary. Errors use the error container.
+
+### Response header
+The head of every response: a faint tint of the status color over the surface, the status code at 36px in that color with the reason phrase beside it, then Time, First byte, Size, Protocol and Tests as label and value pairs. Time opens the timing panel. While a request is out, an indeterminate linear progress bar runs along the top.
 
 ### Keys
-`kbd` is an 11px bitmap keycap: field-white, hairline border with a 2px bottom edge.
-
-### Response Specimen (signature)
-The head of every response. An SVG halftone tile of dots on a 6px grid fills the block; dot radius grows with response time on a log scale from 1ms (pale screen) to 10s (near solid), densest under the numeral and thinning to the right. Dots take the status tone (green 2xx, blue 3xx, red 4xx/5xx, ink-tertiary idle or sending) at `--dot-strength` (46% light, 30% dark). The status code sits on it as the 88px numeral in the same tone; a network failure sets "ERR" reversed out of a red block. The reason phrase follows at 22px on a paper chip; Time, First byte, Size, Protocol and Tests sit beneath as specimen size labels (11px bitmap caption over 650-weight tabular figures) on paper chips divided by hairlines. Sending pulses the dots in a 4-step scan and types out a dot row in place of the numeral; idle shows "---" and the send shortcut.
+`kbd` is an 11px code-face keycap: lowest-container fill, outline-variant border with a 2px bottom edge, 4px corners.
 
 ### Motion
-All motion is stepped: dialogs and notices arrive in 3 steps, scans and type-ons run in 4 steps, the cursor blinks in 2. Reduced motion collapses every animation and transition to 0.01ms.
+Material's easing and durations: standard `cubic-bezier(0.2, 0, 0, 1)`, emphasized decelerate `cubic-bezier(0.05, 0.7, 0.1, 1)` for things arriving, 150ms for state changes, 250ms for dialogs and snackbars. Reduced motion collapses every animation and transition.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** set Departure Mono only at 11, 22, 33, 44 or 88px, uppercase, weight 400, smoothing off.
-- **Do** take every neutral from the paper-to-ink ramp and every space from the 4px scale (4, 8, 12, 16, 24, 32px).
-- **Do** draw structure with 1px ink rules and emphasis with 2px ink frames or 3px active bars.
-- **Do** invert to solid ink on hover for buttons, menu items and the current list row.
-- **Do** give primary controls the stepped 4px pixel corner, painting `--corner` with the colour behind them.
-- **Do** draw icons as pixel SVG on the 7x7 grid with `shape-rendering: crispEdges`, at 7, 14 or 21px.
-- **Do** animate with `steps()` and let reduced motion collapse it.
-- **Do** keep focus visible as a 2px dotted ink outline.
+- **Do** take every color from a role in `tokens.css`, and regenerate the file to change the scheme.
+- **Do** show hover and press as state layers (`--hover`, `--press`) of the content color.
+- **Do** use the secondary container for selection and the primary for the one main action.
+- **Do** keep labels in sentence case and use Google Sans Code for anything a person types or copies.
+- **Do** use Material Symbols Rounded from `icons.ts`, at 18px (16px inside rows and tabs).
+- **Do** keep focus visible as a 2px primary outline.
 
 ### Don't:
-- **Don't** round corners; the radius is 0px everywhere.
-- **Don't** put more than one signal-red control in one view, or use red for decoration.
-- **Don't** set sentences, inputs or code in the bitmap face, or the bitmap face at fractional sizes.
-- **Don't** add shadows to in-flow surfaces; only dialogs and menus float.
-- **Don't** use smooth eased motion for reveals or ambient animation.
+- **Don't** invert a control to solid ink on hover or selection.
+- **Don't** put more than one filled primary button in a view, or use color for decoration.
+- **Don't** add shadows to in-flow surfaces; only menus, dialogs and snackbars float.
 - **Don't** load fonts, icons or images from the network; everything is self-hosted.
-- **Don't** fall back to the category's charcoal three-pane with an orange Send button.
+- **Don't** set text in uppercase except method marks.
