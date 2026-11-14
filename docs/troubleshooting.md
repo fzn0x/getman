@@ -234,6 +234,9 @@ and Linux, `getman desktop ./api` opens the app on a given folder.
 | Development builds don't update themselves. | It was built from source. Build the new version, or install a release |
 | Getman was installed from its .deb package, so your package manager updates it | Install the newer .deb from the releases page |
 | Getman was installed from its .rpm package, so your package manager updates it | Install the newer .rpm from the releases page |
+| Getman was installed as a Flatpak, which doesn't replace itself | Install the newer .flatpak from the releases page |
+| Getman was installed from the AUR, so your package manager updates it | Update `getman-bin` with your AUR helper, such as `yay -Syu` |
+| Getman was built by Nix, so Nix updates it. | Upgrade it with Nix, such as `nix profile upgrade getman-desktop` |
 | This is the portable copy, which doesn't replace itself | Download the new zip from the releases page |
 | This copy wasn't installed by a Getman installer, so it doesn't replace itself. | It was copied by hand. Install it with a desktop installer to get updates |
 
