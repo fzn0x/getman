@@ -92,6 +92,17 @@ irm https://fzn0x.github.io/getman/install.ps1 | iex
 
 Script tersebut mengunduh rilis terbaru untuk sistem kamu, memverifikasi checksum SHA-256-nya, dan meng-install `getman` hanya untuk user kamu. Kamu juga bisa mengunduh archive dari [halaman rilis](https://github.com/fzn0x/getman/releases), atau [build dari source](#build-dari-source).
 
+Dengan Homebrew di macOS dan Linux, atau Scoop di Windows:
+
+```sh
+brew install fzn0x/tap/getman
+```
+
+```powershell
+scoop bucket add fzn0x https://github.com/fzn0x/scoop-bucket
+scoop install fzn0x/getman
+```
+
 ## Request adalah file
 
 ```text

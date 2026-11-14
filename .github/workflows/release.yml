@@ -323,38 +323,53 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/* \
             --verify-tag --notes-file notes.md --title "$GITHUB_REF_NAME"
 
-  # Publishing the manifests is switched off: it needs repositories and a
-  # token that do not exist yet. "Packages" in CONTRIBUTING.md lists what to
-  # create first. Then remove the comment marks, set `if` to true, and add
-  # the secret PACKAGES_TOKEN: a fine-grained personal access token with
-  # read and write access to the contents of fzn0x/homebrew-tap and
-  # fzn0x/scoop-bucket, and a fork of microsoft/winget-pkgs.
-  #
-  # publish-packages:
-  #   name: Publish the package manifests
-  #   needs: release
-  #   if: false
-  #   runs-on: ubuntu-latest
-  #   env:
-  #     GH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
-  #   steps:
-  #     - name: Download the manifests from the release
-  #       run: |
-  #         gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir manifests \
-  #           --pattern getman.rb --pattern getman.json --pattern 'fzn0x.Getman*.yaml'
-  #     - name: Update the Homebrew tap
-  #       run: |
-  #         gh repo clone fzn0x/homebrew-tap tap
-  #         mkdir -p tap/Formula && cp manifests/getman.rb tap/Formula/getman.rb
-  #         git -C tap add Formula/getman.rb
-  #         git -C tap -c user.name=fzn0x -c user.email=noreply@github.com \
-  #           commit -m "getman $GITHUB_REF_NAME" && git -C tap push
-  #     - name: Update the Scoop bucket
-  #       run: |
-  #         gh repo clone fzn0x/scoop-bucket bucket
-  #         mkdir -p bucket/bucket && cp manifests/getman.json bucket/bucket/getman.json
-  #         git -C bucket add bucket/getman.json
-  #         git -C bucket -c user.name=fzn0x -c user.email=noreply@github.com \
-  #           commit -m "getman $GITHUB_REF_NAME" && git -C bucket push
-  #     # winget takes a pull request to microsoft/winget-pkgs, from a fork,
-  #     # with the three files under manifests/f/fzn0x/Getman/<version>/.
+  # Puts the release's Homebrew formula in the tap fzn0x/homebrew-tap and
+  # its Scoop manifest in the bucket fzn0x/scoop-bucket. The secret
+  # PACKAGES_TOKEN is a fine-grained personal access token with read and
+  # write access to the contents of those two repositories. winget takes a
+  # pull request to microsoft/winget-pkgs from a fork, with the three files
+  # under manifests/f/fzn0x/Getman/<version>/; that is done by hand.
+  publish-packages:
+    name: Publish the package manifests
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the manifests from the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir manifests \
+            --pattern getman.rb --pattern getman.json
+      # gh clones with the token; this lets git push with it too.
+      - name: Let git use the token
+        env:
+          GH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+        run: gh auth setup-git
+      - name: Update the Homebrew tap
+        env:
+          GH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+        run: |
+          gh repo clone fzn0x/homebrew-tap tap
+          mkdir -p tap/Formula && cp manifests/getman.rb tap/Formula/getman.rb
+          git -C tap add Formula/getman.rb
+          if git -C tap diff --cached --quiet; then
+            echo "The tap already has this formula."
+          else
+            git -C tap -c user.name=fzn0x -c user.email=fncolon@pm.me \
+              commit -m "getman $GITHUB_REF_NAME"
+            git -C tap push
+          fi
+      - name: Update the Scoop bucket
+        env:
+          GH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+        run: |
+          gh repo clone fzn0x/scoop-bucket bucket
+          mkdir -p bucket/bucket && cp manifests/getman.json bucket/bucket/getman.json
+          git -C bucket add bucket/getman.json
+          if git -C bucket diff --cached --quiet; then
+            echo "The bucket already has this manifest."
+          else
+            git -C bucket -c user.name=fzn0x -c user.email=fncolon@pm.me \
+              commit -m "getman $GITHUB_REF_NAME"
+            git -C bucket push
+          fi

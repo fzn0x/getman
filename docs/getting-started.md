@@ -26,6 +26,21 @@ which the script adds to your user `PATH`.
 Set `GETMAN_VERSION` (such as `v0.1.0`) to install a given release, or
 `GETMAN_INSTALL_DIR` to choose the directory.
 
+**With Homebrew** (macOS and Linux):
+
+```sh
+brew install fzn0x/tap/getman
+```
+
+**With Scoop** (Windows):
+
+```powershell
+scoop bucket add fzn0x https://github.com/fzn0x/scoop-bucket
+scoop install fzn0x/getman
+```
+
+They update it with `brew upgrade getman` and `scoop update getman`.
+
 **By hand:** download the archive for your system from the
 [releases page](https://github.com/fzn0x/getman/releases), unpack it and
 put `getman` (or `getman.exe`) somewhere on your `PATH`.

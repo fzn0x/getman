@@ -129,6 +129,17 @@ SHA-256 checksum and install `getman` for your user only. You can also
 download an archive from the [releases page](https://github.com/fzn0x/getman/releases),
 or [build from source](#building-from-source).
 
+With Homebrew on macOS and Linux, or Scoop on Windows:
+
+```sh
+brew install fzn0x/tap/getman
+```
+
+```powershell
+scoop bucket add fzn0x https://github.com/fzn0x/scoop-bucket
+scoop install fzn0x/getman
+```
+
 ## Requests are files
 
 ```text

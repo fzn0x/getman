@@ -21,6 +21,21 @@ Kedua script mengunduh rilis terbaru untuk sistem kamu dari GitHub, memeriksa ch
 
 Atur `GETMAN_VERSION` (misalnya `v0.1.0`) untuk meng-install rilis tertentu, atau `GETMAN_INSTALL_DIR` untuk memilih direktorinya.
 
+**Dengan Homebrew** (macOS dan Linux):
+
+```sh
+brew install fzn0x/tap/getman
+```
+
+**Dengan Scoop** (Windows):
+
+```powershell
+scoop bucket add fzn0x https://github.com/fzn0x/scoop-bucket
+scoop install fzn0x/getman
+```
+
+Perbarui dengan `brew upgrade getman` atau `scoop update getman`.
+
 **Secara manual:** unduh archive untuk sistem kamu dari [halaman rilis](https://github.com/fzn0x/getman/releases), ekstrak, dan taruh `getman` (atau `getman.exe`) di tempat yang ada di `PATH` kamu.
 
 **Dari source:** kamu butuh [Rust](https://rustup.rs) 1.88 atau lebih baru dan [Node.js](https://nodejs.org) 22.12 atau lebih baru.
