@@ -14,7 +14,7 @@ dir="${RUNNER_TEMP:-/tmp}/kotlin"
 mkdir -p "$dir"
 
 fetch() { # url sha256 file
-  curl --fail --silent --show-error --location --output "$dir/$3" "$1"
+  curl --fail --silent --show-error --location --retry 3 --retry-delay 5 --retry-all-errors --output "$dir/$3" "$1"
   echo "$2  $dir/$3" | sha256sum --check --status || {
     echo "::error::$3 does not match its pinned SHA-256"
     exit 1
