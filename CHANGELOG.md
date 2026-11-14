@@ -6,6 +6,8 @@ All notable changes to Getman are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-15
+
 ### Added
 
 - Getman for Android and iOS. Each app runs Getman's engine and shows the
@@ -384,7 +386,8 @@ browser UI on `127.0.0.1`, in a terminal UI or run in CI with
 files; checks and captures; JavaScript scripts with the `gm` API (and a
 `pm` alias); import from Postman and cURL, and export as code.
 
-[Unreleased]: https://github.com/fzn0x/getman/compare/v0.3.4...HEAD
+[Unreleased]: https://github.com/fzn0x/getman/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/fzn0x/getman/compare/v0.3.4...v0.4.0
 [0.3.4]: https://github.com/fzn0x/getman/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/fzn0x/getman/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/fzn0x/getman/compare/v0.3.1...v0.3.2
