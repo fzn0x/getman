@@ -283,7 +283,7 @@ function downloadsSection({ repo, released }) {
 export function landing({ root, assets, site, repo, pages, released = null }) {
   const title = "Getman: fast, open-source Postman alternative in Rust";
   const description =
-    "Getman is an open-source Postman alternative, written in Rust. Requests are YAML files in your repository, sent from a desktop app, a browser, a terminal or CI, over HTTP/1.1, HTTP/2, HTTP/3, gRPC, WebSocket, SSE and Socket.IO.";
+    "Getman is an open-source Postman alternative, written in Rust. Requests are YAML files in your repository, sent from a mobile phone, desktop app, a browser, a terminal or CI, over HTTP/1.1, HTTP/2, HTTP/3, gRPC, WebSocket, SSE and Socket.IO.";
   const app = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -335,7 +335,7 @@ ${bar({ root, current: "" })}
 <section class="hero">
   <div class="hero-copy">
     <h1>Getman, the fast <span class="accent">open-source Postman alternative</span></h1>
-    <p class="lead">An open-source Postman alternative, written in Rust. Requests are YAML files in your repository, sent from a desktop app, a browser, a terminal or CI.</p>
+    <p class="lead">An open-source Postman alternative, written in Rust. Requests are YAML files in your repository, sent from a mobile phone, desktop app, a browser, a terminal or CI.</p>
     ${download}
     <div class="cli">
       <div class="command" role="group" aria-label="Install the command-line tool">
