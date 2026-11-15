@@ -54,14 +54,14 @@ getman tui                                    # atau UI terminal
 | --- | --- | --- |
 | Windows | [Setup, x64](https://github.com/fzn0x/getman/releases/latest/download/Getman-windows-x64-setup.exe) · [Setup, ARM64](https://github.com/fzn0x/getman/releases/latest/download/Getman-windows-arm64-setup.exe) | MSI, zip portabel, `scoop install fzn0x/getman` |
 | macOS | [Disk image](https://github.com/fzn0x/getman/releases/latest/download/Getman-macos-universal.dmg), Apple silicon dan Intel | `brew install --cask fzn0x/tap/getman-desktop` (lihat di bawah) |
-| Linux | [AppImage, x86_64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-x86_64.AppImage) · [AppImage, aarch64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-aarch64.AppImage) | .deb, .rpm, Flatpak, AUR, Nix (lihat di bawah) |
+| Linux | [AppImage, x86_64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-x86_64.AppImage) · [AppImage, aarch64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-aarch64.AppImage) | .deb, .rpm, Flatpak, Nix (lihat di bawah) |
 | Android | `Getman-android-universal.apk` di [halaman rilis](https://github.com/fzn0x/getman/releases) | APK bertanda tangan, dipasang langsung |
 | iOS | `Getman-ios.ipa` di [halaman rilis](https://github.com/fzn0x/getman/releases) | Di-sideload dengan AltStore, SideStore atau Sideloadly |
 
-Android, iOS, Flatpak, AUR dan cask Homebrew mulai ada di rilis setelah
-0.3.4. File lainnya ada di setiap rilis, dan tautan ini selalu mengambil
-yang terbaru. Nix membangun flake repositori, jadi selalu menjalankan kode
-terbaru di `main`.
+Android, iOS, Flatpak dan cask Homebrew mulai ada di 0.4.0. File lainnya
+ada di setiap rilis, dan tautan ini selalu mengambil yang terbaru. Nix
+membangun flake repositori, jadi selalu menjalankan kode terbaru di
+`main`. Paket AUR `getman-bin` belum diterbitkan.
 
 - **Android:** buka APK di ponsel dan izinkan pemasangan dari sumber itu
   saat Android bertanya.
@@ -73,7 +73,6 @@ terbaru di `main`.
 
   ```sh
   flatpak install --user Getman-linux-x86_64.flatpak   # atau file aarch64
-  yay -S getman-bin                                    # Arch Linux, dari AUR
   nix run github:fzn0x/getman                          # Nix, tanpa memasang
   ```
 
@@ -114,7 +113,7 @@ curl -fsSL https://fzn0x.github.io/getman/install.sh | sh
 irm https://fzn0x.github.io/getman/install.ps1 | iex
 ```
 
-Script tersebut mengunduh rilis terbaru untuk sistem kamu, mencocokkannya dengan `SHA256SUMS` milik rilis itu, lalu meng-install `getman` untuk user kamu: di `~/.local/bin` pada Linux dan macOS, dan di `%LOCALAPPDATA%\Programs\getman` pada Windows. Atur `GETMAN_VERSION` (misalnya `v0.3.4`) untuk meng-install rilis tertentu, atau `GETMAN_INSTALL_DIR` untuk memilih direktorinya.
+Script tersebut mengunduh rilis terbaru untuk sistem kamu, mencocokkannya dengan `SHA256SUMS` milik rilis itu, lalu meng-install `getman` untuk user kamu: di `~/.local/bin` pada Linux dan macOS, dan di `%LOCALAPPDATA%\Programs\getman` pada Windows. Atur `GETMAN_VERSION` (misalnya `v0.4.0`) untuk meng-install rilis tertentu, atau `GETMAN_INSTALL_DIR` untuk memilih direktorinya.
 
 Dengan package manager:
 
@@ -306,18 +305,23 @@ Lihat [Contoh dan mock](docs/examples-and-mocks.md) dan [AI agent](docs/mcp.md).
 
 ## Performa
 
-Diukur di Windows 11 x64 dengan file rilis 0.3.0, pada 28 Oktober 2026:
+Diukur di Windows 11 x64 dengan file rilis 0.4.0, pada 15 November 2026.
+Waktu launch dan memori aplikasi desktop berasal dari 0.3.0, pada 28
+Oktober 2026.
 
 | | |
 | --- | --- |
-| Perintah `getman`, UI browser termasuk di dalamnya | 9,5 MiB untuk diunduh, 25,6 MiB di disk |
-| Waktu start-up `getman` | 7 ms |
+| Perintah `getman`, UI browser termasuk di dalamnya | 9,7 MiB untuk diunduh, 25,3 MiB di disk |
+| Waktu start-up `getman` | 9 ms |
 | Server UI browser, saat idle | 2 MiB memori |
-| Setup aplikasi desktop, perintah `getman` termasuk | 15,2 MiB |
+| Setup aplikasi desktop, perintah `getman` termasuk | 15,5 MiB |
 | Aplikasi desktop, dari launch sampai jendela termuat | 0,45 detik, 0,8 detik untuk pertama kali |
 | Aplikasi desktop, saat idle | 94 MiB memori: 5 MiB adalah Getman, sisanya WebView2 milik sistem |
+| Aplikasi ponsel | APK Android 30,9 MiB untuk semua perangkat, IPA iOS 9,5 MiB |
 
-Memori adalah private working set, yang ditampilkan Task Manager. Angkanya berbeda-beda tergantung sistem dan workspace.
+Start-up adalah median dari 40 kali `getman --version`, diukur dari
+PowerShell termasuk saat proses dimulai; 0.3.4 butuh waktu yang sama
+dengan cara ini. Memori adalah private working set, yang ditampilkan Task Manager. Angkanya berbeda-beda tergantung sistem dan workspace.
 
 ## Keamanan
 

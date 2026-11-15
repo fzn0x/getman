@@ -60,14 +60,14 @@ a free test API. See [Getting started](docs/getting-started.md).
 | --- | --- | --- |
 | Windows | [Setup, x64](https://github.com/fzn0x/getman/releases/latest/download/Getman-windows-x64-setup.exe) · [Setup, ARM64](https://github.com/fzn0x/getman/releases/latest/download/Getman-windows-arm64-setup.exe) | MSI, portable zip, `scoop install fzn0x/getman` |
 | macOS | [Disk image](https://github.com/fzn0x/getman/releases/latest/download/Getman-macos-universal.dmg), Apple silicon and Intel | `brew install --cask fzn0x/tap/getman-desktop` (see below) |
-| Linux | [AppImage, x86_64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-x86_64.AppImage) · [AppImage, aarch64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-aarch64.AppImage) | .deb, .rpm, Flatpak, AUR, Nix (see below) |
+| Linux | [AppImage, x86_64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-x86_64.AppImage) · [AppImage, aarch64](https://github.com/fzn0x/getman/releases/latest/download/Getman-linux-aarch64.AppImage) | .deb, .rpm, Flatpak, Nix (see below) |
 | Android | `Getman-android-universal.apk` on the [releases page](https://github.com/fzn0x/getman/releases) | Signed APK, installed directly |
 | iOS | `Getman-ios.ipa` on the [releases page](https://github.com/fzn0x/getman/releases) | Sideloaded with AltStore, SideStore or Sideloadly |
 
-Android, iOS, Flatpak, AUR and the Homebrew cask start with the release
-after 0.3.4. The other files are on every release, and these links always
-fetch the newest one. Nix builds the repository's flake, so it runs the
-newest code on `main`.
+Android, iOS, Flatpak and the Homebrew cask start with 0.4.0. The other
+files are on every release, and these links always fetch the newest one.
+Nix builds the repository's flake, so it runs the newest code on `main`.
+The AUR package `getman-bin` is not published yet.
 
 - **Android:** open the APK on the phone and allow installs from that
   source when Android asks.
@@ -78,7 +78,6 @@ newest code on `main`.
 
   ```sh
   flatpak install --user Getman-linux-x86_64.flatpak   # or the aarch64 file
-  yay -S getman-bin                                    # Arch Linux, from the AUR
   nix run github:fzn0x/getman                          # Nix, without installing
   ```
 
@@ -133,7 +132,7 @@ The scripts download the latest release for your system, check it
 against the release's `SHA256SUMS` and install `getman` for your user:
 in `~/.local/bin` on Linux and macOS, and in
 `%LOCALAPPDATA%\Programs\getman` on Windows. Set `GETMAN_VERSION` (such
-as `v0.3.4`) to install a given release, or `GETMAN_INSTALL_DIR` to
+as `v0.4.0`) to install a given release, or `GETMAN_INSTALL_DIR` to
 choose the directory.
 
 With a package manager:
@@ -397,19 +396,24 @@ Getman with Yaak, Hoppscotch, Bruno and Beam.
 
 ## Performance
 
-Measured on Windows 11 x64 with the 0.3.0 release files, on 28 October 2026:
+Measured on Windows 11 x64 with the 0.4.0 release files, on 15 November
+2026. The desktop app's launch time and memory are from 0.3.0, on 28
+October 2026.
 
 | | |
 | --- | --- |
-| `getman` command, browser UI included | 9.5 MiB to download, 25.6 MiB on disk |
-| `getman` start-up | 7 ms |
+| `getman` command, browser UI included | 9.7 MiB to download, 25.3 MiB on disk |
+| `getman` start-up | 9 ms |
 | Browser UI server, idle | 2 MiB of memory |
-| Desktop app setup, `getman` command included | 15.2 MiB |
+| Desktop app setup, `getman` command included | 15.5 MiB |
 | Desktop app, launch to a loaded window | 0.45 s, 0.8 s the first time |
 | Desktop app, idle | 94 MiB of memory: 5 MiB is Getman, the rest the system's WebView2 |
+| Phone apps | 30.9 MiB Android APK for every device, 9.5 MiB iOS IPA |
 
-Memory is the private working set, which Task Manager shows. Numbers vary
-with the system and the workspace.
+Start-up is the median of 40 runs of `getman --version`, timed from
+PowerShell with the process start included; 0.3.4 takes the same time
+measured this way. Memory is the private working set, which Task Manager
+shows. Numbers vary with the system and the workspace.
 
 ## Security
 

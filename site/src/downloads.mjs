@@ -1,7 +1,8 @@
 // Every download of the landing page, in one place. Each platform lists its
 // main download, its other files and its package-manager commands.
 //
-// The entries marked `soon: true` ship with the release after 0.3.4.
+// Entries marked `soon: true` wait for a release that has their file, and
+// a command with `pending` says why it does not work yet.
 // Change downloads here and nowhere else on the landing page. The build
 // reads the latest release's file names from the GitHub API: a file the
 // release lacks is shown as "Coming with the next release" instead of a
@@ -73,7 +74,9 @@ export const platforms = [
         text: "flatpak install --user Getman-linux-x86_64.flatpak",
         soon: true,
       },
-      { label: "AUR", text: "yay -S getman-bin", soon: true },
+      // The release workflow publishes it once the repository has an AUR
+      // key; until then the command says so instead of failing.
+      { label: "AUR", text: "yay -S getman-bin", pending: "Not on the AUR yet" },
       // The flake builds from the repository, so it needs no release.
       { label: "Nix", text: "nix run github:fzn0x/getman" },
       { label: "CLI", text: "curl -fsSL https://fzn0x.github.io/getman/install.sh | sh" },
@@ -122,6 +125,7 @@ export function available(entry, released) {
 
 /** Whether a command that ships with the new release works yet. */
 export function commandReady(command, released) {
+  if (command.pending) return false;
   if (!command.soon) return true;
   return released ? released.has(marker) : false;
 }
