@@ -210,13 +210,13 @@ const features = [
   },
 ];
 
-// The start time and sizes were measured on Windows 11 x64 with the 0.3.0
+// The start time and sizes were measured on Windows 11 x64 with the 0.4.0
 // release files (README, "Performance"). The languages are those of
 // `getman export --to`.
 const facts = [
-  { value: 7, unit: "ms", label: "to start the command" },
-  { value: 9.5, unit: "MiB", label: "download, browser UI included" },
-  { value: 15.2, unit: "MiB", label: "desktop app setup" },
+  { value: 9, unit: "ms", label: "to start the command" },
+  { value: 9.7, unit: "MiB", label: "download, browser UI included" },
+  { value: 15.5, unit: "MiB", label: "desktop app setup" },
   { value: 18, unit: "languages", label: "to export a request as code" },
 ];
 
@@ -382,7 +382,7 @@ ${downloadsSection({ repo, released })}
         `<div><dt>${f.label}</dt><dd><span class="count" data-to="${f.value}">${f.value}</span> <span class="unit">${f.unit}</span></dd></div>`,
     )
     .join("")}</dl>
-  <p class="facts-note">Start time and sizes measured on Windows 11 x64 with the 0.3.0 release files. <a href="${repo}#fast">How it was measured</a></p>
+  <p class="facts-note">Start time and sizes measured on Windows 11 x64 with the 0.4.0 release files. <a href="${repo}#performance">How it was measured</a></p>
   <div class="closing-get">
     ${download}
     <p class="licence">Free and open source under MIT or GPL-3.0-or-later.</p>
